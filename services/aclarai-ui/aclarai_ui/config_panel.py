@@ -9,6 +9,7 @@ Follows the design specification from docs/arch/design_config_panel.md
 
 import copy
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -212,12 +213,35 @@ def validate_window_param(
         return False, "Invalid window parameter value"
 
 
+def validate_cron_expression(cron: str) -> Tuple[bool, str]:
+    """Validate cron expression format."""
+    if not cron or not cron.strip():
+        return False, "Cron expression cannot be empty"
+
+    cron = cron.strip()
+    # Basic cron validation: 5 fields separated by spaces
+    fields = cron.split()
+    if len(fields) != 5:
+        return False, "Cron expression must have exactly 5 fields (minute hour day month weekday)"
+
+    # Validate each field has valid characters
+    valid_chars_pattern = r'^[0-9\*\-,/]+$'
+    field_names = ["minute", "hour", "day", "month", "weekday"]
+
+    for i, field in enumerate(fields):
+        if not re.match(valid_chars_pattern, field):
+            return False, f"Invalid characters in {field_names[i]} field: {field}"
+
+    return True, ""
+
+
 def create_configuration_panel() -> gr.Blocks:
     """Create the configuration panel interface."""
     config_manager = ConfigurationManager()
 
     def load_current_config() -> Tuple[
-        str, str, str, str, str, str, str, str, str, str, str, float, float, int, int
+        str, str, str, str, str, str, str, str, str, str, str, float, float, int, int,
+        bool, bool, str, bool, bool, str
     ]:
         """Load current configuration values for UI display."""
         try:
@@ -257,6 +281,23 @@ def create_configuration_panel() -> gr.Blocks:
             claimify_window = window_config.get("claimify", {})
             window_p = claimify_window.get("p", 3)
             window_f = claimify_window.get("f", 1)
+
+            # Extract scheduler configurations
+            scheduler_config = config.get("scheduler", {})
+            jobs_config = scheduler_config.get("jobs", {})
+
+            # concept_embedding_refresh job
+            concept_refresh_config = jobs_config.get("concept_embedding_refresh", {})
+            concept_refresh_enabled = concept_refresh_config.get("enabled", True)
+            concept_refresh_manual_only = concept_refresh_config.get("manual_only", False)
+            concept_refresh_cron = concept_refresh_config.get("cron", "0 3 * * *")
+
+            # vault_sync job
+            vault_sync_config = jobs_config.get("vault_sync", {})
+            vault_sync_enabled = vault_sync_config.get("enabled", True)
+            vault_sync_manual_only = vault_sync_config.get("manual_only", False)
+            vault_sync_cron = vault_sync_config.get("cron", "*/30 * * * *")
+
             return (
                 claimify_default,
                 claimify_selection,
@@ -273,6 +314,12 @@ def create_configuration_panel() -> gr.Blocks:
                 claim_link_strength,
                 window_p,
                 window_f,
+                concept_refresh_enabled,
+                concept_refresh_manual_only,
+                concept_refresh_cron,
+                vault_sync_enabled,
+                vault_sync_manual_only,
+                vault_sync_cron,
             )
         except Exception as e:
             logger.error(
@@ -302,6 +349,12 @@ def create_configuration_panel() -> gr.Blocks:
                 0.60,
                 3,
                 1,
+                True,
+                False,
+                "0 3 * * *",
+                True,
+                False,
+                "*/30 * * * *",
             )
 
     def save_configuration(
@@ -320,6 +373,12 @@ def create_configuration_panel() -> gr.Blocks:
         claim_link_strength: float,
         window_p: int,
         window_f: int,
+        concept_refresh_enabled: bool,
+        concept_refresh_manual_only: bool,
+        concept_refresh_cron: str,
+        vault_sync_enabled: bool,
+        vault_sync_manual_only: bool,
+        vault_sync_cron: str,
     ) -> str:
         """Save configuration changes to YAML file."""
         try:
@@ -357,6 +416,13 @@ def create_configuration_panel() -> gr.Blocks:
             is_valid, error = validate_window_param(window_f)
             if not is_valid:
                 validation_errors.append(f"Window Following (f): {error}")
+            # Validate cron expressions
+            is_valid, error = validate_cron_expression(concept_refresh_cron)
+            if not is_valid:
+                validation_errors.append(f"Concept Refresh Cron: {error}")
+            is_valid, error = validate_cron_expression(vault_sync_cron)
+            if not is_valid:
+                validation_errors.append(f"Vault Sync Cron: {error}")
             if validation_errors:
                 error_msg = "❌ **Validation Errors:**\n" + "\n".join(
                     f"- {error}" for error in validation_errors
@@ -409,6 +475,27 @@ def create_configuration_panel() -> gr.Blocks:
                 current_config["window"]["claimify"] = {}
             current_config["window"]["claimify"]["p"] = window_p
             current_config["window"]["claimify"]["f"] = window_f
+
+            # Update scheduler configuration
+            if "scheduler" not in current_config:
+                current_config["scheduler"] = {}
+            if "jobs" not in current_config["scheduler"]:
+                current_config["scheduler"]["jobs"] = {}
+
+            # concept_embedding_refresh job
+            if "concept_embedding_refresh" not in current_config["scheduler"]["jobs"]:
+                current_config["scheduler"]["jobs"]["concept_embedding_refresh"] = {}
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["enabled"] = concept_refresh_enabled
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["manual_only"] = concept_refresh_manual_only
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["cron"] = concept_refresh_cron.strip()
+
+            # vault_sync job
+            if "vault_sync" not in current_config["scheduler"]["jobs"]:
+                current_config["scheduler"]["jobs"]["vault_sync"] = {}
+            current_config["scheduler"]["jobs"]["vault_sync"]["enabled"] = vault_sync_enabled
+            current_config["scheduler"]["jobs"]["vault_sync"]["manual_only"] = vault_sync_manual_only
+            current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = vault_sync_cron.strip()
+
             # Save to file
             success = config_manager.save_config(current_config)
             if success:
@@ -567,6 +654,54 @@ def create_configuration_panel() -> gr.Blocks:
                         step=1,
                         info="Number of following sentences to include in context",
                     )
+
+        # Scheduler Job Controls Section
+        with gr.Group():
+            gr.Markdown("## ⏰ Scheduler Job Controls")
+            gr.Markdown("Configure scheduled job execution settings. Jobs can be enabled/disabled, set to manual-only mode, or scheduled with custom cron expressions.")
+
+            with gr.Group():
+                gr.Markdown("### 🔄 Concept Embedding Refresh")
+                gr.Markdown("Refreshes concept embeddings from Tier 3 pages")
+                with gr.Row():
+                    concept_refresh_enabled_input = gr.Checkbox(
+                        label="Enabled",
+                        value=initial_values[15],
+                        info="Enable or disable this job completely",
+                    )
+                    concept_refresh_manual_only_input = gr.Checkbox(
+                        label="Manual Only",
+                        value=initial_values[16],
+                        info="Job can only be triggered manually (not automatically scheduled)",
+                    )
+                concept_refresh_cron_input = gr.Textbox(
+                    label="Cron Schedule",
+                    value=initial_values[17],
+                    placeholder="0 3 * * *",
+                    info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
+                )
+
+            with gr.Group():
+                gr.Markdown("### 📁 Vault Sync")
+                gr.Markdown("Synchronizes vault files with knowledge graph")
+                with gr.Row():
+                    vault_sync_enabled_input = gr.Checkbox(
+                        label="Enabled",
+                        value=initial_values[18],
+                        info="Enable or disable this job completely",
+                    )
+                    vault_sync_manual_only_input = gr.Checkbox(
+                        label="Manual Only",
+                        value=initial_values[19],
+                        info="Job can only be triggered manually (not automatically scheduled)",
+                    )
+                vault_sync_cron_input = gr.Textbox(
+                    label="Cron Schedule",
+                    value=initial_values[20],
+                    placeholder="*/30 * * * *",
+                    info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
+                )
+
         # Save Section
         with gr.Group():
             gr.Markdown("## 💾 Save Configuration")
@@ -618,6 +753,12 @@ def create_configuration_panel() -> gr.Blocks:
                 claim_link_strength_input,
                 window_p_input,
                 window_f_input,
+                concept_refresh_enabled_input,
+                concept_refresh_manual_only_input,
+                concept_refresh_cron_input,
+                vault_sync_enabled_input,
+                vault_sync_manual_only_input,
+                vault_sync_cron_input,
             ],
             outputs=[save_status],
         )
@@ -640,6 +781,12 @@ def create_configuration_panel() -> gr.Blocks:
                 claim_link_strength_input,
                 window_p_input,
                 window_f_input,
+                concept_refresh_enabled_input,
+                concept_refresh_manual_only_input,
+                concept_refresh_cron_input,
+                vault_sync_enabled_input,
+                vault_sync_manual_only_input,
+                vault_sync_cron_input,
                 save_status,
             ],
         )
