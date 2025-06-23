@@ -93,6 +93,7 @@ class PathsConfig:
     tier2: str = "summaries"
     tier3: str = "concepts"
     settings: str = "/settings"
+    logs: str = ".aclarai/import_logs"
 
 
 @dataclass
@@ -167,18 +168,6 @@ class SchedulerConfig:
 
 
 @dataclass
-class VaultPaths:
-    """Vault directory structure configuration."""
-
-    vault: str = "/vault"
-    settings: str = "/settings"
-    tier1: str = "tier1"
-    summaries: str = "."
-    concepts: str = "."
-    logs: str = ".aclarai/import_logs"
-
-
-@dataclass
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
 
@@ -210,7 +199,7 @@ class aclaraiConfig:
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     # Vault structure configuration
-    paths: VaultPaths = field(default_factory=VaultPaths)
+    paths: PathsConfig = field(default_factory=PathsConfig)
     # Feature flags
     features: Dict[str, Any] = field(default_factory=dict)
 
@@ -341,17 +330,15 @@ class aclaraiConfig:
         settings_path = os.getenv(
             "SETTINGS_PATH", paths_config.get("settings", "/settings")
         )
-        # Vault paths configuration (from main branch)
-        paths = VaultPaths(
+        # Vault paths configuration
+        paths = PathsConfig(
             vault=vault_path,
             settings=settings_path,
-            tier1=os.getenv("VAULT_TIER1_PATH", paths_config.get("tier1", "tier1")),
-            summaries=os.getenv(
-                "VAULT_SUMMARIES_PATH", paths_config.get("summaries", ".")
+            tier1=os.getenv(
+                "VAULT_TIER1_PATH", paths_config.get("tier1", "conversations")
             ),
-            concepts=os.getenv(
-                "VAULT_CONCEPTS_PATH", paths_config.get("concepts", ".")
-            ),
+            tier2=os.getenv("VAULT_TIER2_PATH", paths_config.get("tier2", "summaries")),
+            tier3=os.getenv("VAULT_TIER3_PATH", paths_config.get("tier3", "concepts")),
             logs=os.getenv(
                 "VAULT_LOGS_PATH", paths_config.get("logs", ".aclarai/import_logs")
             ),
