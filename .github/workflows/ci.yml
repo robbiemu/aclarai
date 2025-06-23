@@ -28,10 +28,11 @@ jobs:
         # The action handles it automatically via the GitHub API.
         filters: |
           python:
-            - '**/*.py'
+            - 'shared/**/*.py'
+            - 'services/**/*.py'
+            - 'tests/**/*.py'
             - '**/pyproject.toml'
             - '**/uv.lock'
-            - 'shared/**'
           docker:
             - '**/Dockerfile*'
             - '**/.dockerignore'
@@ -129,7 +130,7 @@ jobs:
       run: |
         # Set PYTHONPATH to include the project root for pytest discovery
         export PYTHONPATH=$(pwd)
-        .venv/bin/pytest -v --tb=short tests/ shared/tests/ services/
+        .venv/bin/pytest -v --tb=short
 
   docker-build:
     name: Docker Build Validation
