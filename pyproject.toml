@@ -97,7 +97,7 @@ exclude = [
 # Pytest configuration
 [tool.pytest.ini_options]
 pythonpath = ["."]
-testpaths = ["tests", "shared/tests"]
+testpaths = ["tests", "shared/tests", "services/*/tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "--cov=aclarai_shared --cov-report=term-missing --cov-report=xml --cov-config=pyproject.toml --import-mode=importlib"
 markers = [

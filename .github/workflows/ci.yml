@@ -31,7 +31,6 @@ jobs:
             - '**/*.py'
             - '**/pyproject.toml'
             - '**/uv.lock'
-            - 'shared/**'
           docker:
             - '**/Dockerfile*'
             - '**/.dockerignore'
@@ -129,7 +128,7 @@ jobs:
       run: |
         # Set PYTHONPATH to include the project root for pytest discovery
         export PYTHONPATH=$(pwd)
-        .venv/bin/pytest -v --tb=short tests/ shared/tests/ services/
+        .venv/bin/pytest -v --tb=short
 
   docker-build:
     name: Docker Build Validation
@@ -150,7 +149,7 @@ jobs:
       # This simplified build command is sufficient for validation.
       # It doesn't need complex caching logic for a simple build check.
       run: >
-        docker build --tag aclarai-${{ matrix.service }}:test ./services/${{ matrix.service }}
+        docker build --tag aclarai-${{ matrix.service }}:test -f ./services/${{ matrix.service }}/Dockerfile .
 
   docker-compose-validation:
     name: Docker Compose Validation

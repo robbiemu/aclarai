@@ -23,11 +23,6 @@ RUN pip install uv
 # This makes the root pyproject.toml and all shared/service code available.
 COPY . .
 
-# Install all workspace dependencies using the root pyproject.toml.
-RUN uv pip install . --system
-# Install the base dependencies from the root project
-RUN uv pip install . --system
-
 # Install the UI-specific dependencies from its own pyproject.toml
 RUN uv pip install --system -e ./services/vault-watcher
 

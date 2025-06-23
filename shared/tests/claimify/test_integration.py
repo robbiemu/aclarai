@@ -113,13 +113,102 @@ class TestClaimifyGraphIntegration:
         assert claim.self_contained
         assert claim.context_complete
 
+    @pytest.fixture(scope="class")
+    def integration_graph_manager(self):
+        """Fixture to set up a connection to a real Neo4j database for testing."""
+        if not os.getenv("NEO4J_PASSWORD"):
+            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
+
+        from aclarai_shared import load_config
+        from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
+
+        config = load_config(validate=True)
+        manager = Neo4jGraphManager(config=config)
+        manager.setup_schema()
+        # Clean up any existing test data
+        with manager.session() as session:
+            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+        yield manager
+        # Clean up after tests
+        with manager.session() as session:
+            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+        manager.close()
+
+    @pytest.fixture
+    def integration_instance(self, integration_graph_manager):
+        """Create integration instance with real graph manager."""
+        from aclarai_shared.claimify.integration import ClaimifyGraphIntegration
+
+        return ClaimifyGraphIntegration(integration_graph_manager)
+
     @pytest.mark.integration
     def test_convert_successful_claim_result_integration(
-        self, _integration, _test_chunk
+        self, integration_instance, integration_graph_manager
     ):
         """Integration test for successful claim result conversion."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_001'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="The system failed at startup due to configuration error.",
+            source_id="test_blk_001",
+            chunk_id="test_chunk_001",
+            sentence_index=0,
+        )
+
+        # Create a valid claim candidate
+        valid_claim = ClaimCandidate(
+            text="The system failed at startup due to configuration error.",
+            is_atomic=True,
+            is_self_contained=True,
+            is_verifiable=True,
+            confidence=0.95,
+        )
+
+        # Create decomposition result with valid claim
+        decomposition_result = DecompositionResult(
+            original_text="The system failed at startup due to configuration error.",
+            claim_candidates=[valid_claim],
+        )
+
+        # Create a successful claimify result
+        result = ClaimifyResult(
+            original_chunk=test_chunk,
+            context=ClaimifyContext(current_sentence=test_chunk),
+            selection_result=SelectionResult(
+                sentence_chunk=test_chunk, is_selected=True
+            ),
+            decomposition_result=decomposition_result,
+        )
+
+        # Persist to real Neo4j database
+        claims_created, sentences_created, errors = (
+            integration_instance.persist_claimify_results([result])
+        )
+
+        # Verify results
+        assert claims_created == 1
+        assert sentences_created == 0
+        assert len(errors) == 0
+
+        # Query Neo4j to verify the claim was actually created
+        with integration_graph_manager.session() as session:
+            claim_result = session.run(
+                "MATCH (c:Claim)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_001'}) RETURN c"
+            )
+            claims = list(claim_result)
+            assert len(claims) == 1
+            claim_record = claims[0]["c"]
+            assert (
+                claim_record["text"]
+                == "The system failed at startup due to configuration error."
+            )
+            assert claim_record["version"] == 1
+            assert claim_record.get("entailed_score") is None  # Not set by pipeline
+            assert claim_record.get("coverage_score") is None
+            assert claim_record.get("decontextualization_score") is None
 
     def test_convert_failed_claim_result(self, integration, test_chunk):
         """Test conversion of result with claims that failed criteria."""
@@ -158,10 +247,66 @@ class TestClaimifyGraphIntegration:
         assert not sentence.failed_decomposition  # Was atomic
 
     @pytest.mark.integration
-    def test_convert_failed_claim_result_integration(self, _integration, _test_chunk):
+    def test_convert_failed_claim_result_integration(
+        self, integration_instance, integration_graph_manager
+    ):
         """Integration test for failed claim result conversion."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_002'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="It failed again.",
+            source_id="test_blk_002",
+            chunk_id="test_chunk_002",
+            sentence_index=0,
+        )
+
+        # Create a claim candidate that fails some criteria
+        failed_candidate = ClaimCandidate(
+            text="It failed again.",
+            is_atomic=True,
+            is_self_contained=False,  # Fails self-containment
+            is_verifiable=True,
+            confidence=0.3,
+        )
+
+        decomposition_result = DecompositionResult(
+            original_text="It failed again.", claim_candidates=[failed_candidate]
+        )
+
+        result = ClaimifyResult(
+            original_chunk=test_chunk,
+            context=ClaimifyContext(current_sentence=test_chunk),
+            selection_result=SelectionResult(
+                sentence_chunk=test_chunk, is_selected=True
+            ),
+            decomposition_result=decomposition_result,
+        )
+
+        # Persist to real Neo4j database
+        claims_created, sentences_created, errors = (
+            integration_instance.persist_claimify_results([result])
+        )
+
+        # Verify results
+        assert claims_created == 0
+        assert sentences_created == 1
+        assert len(errors) == 0
+
+        # Query Neo4j to verify the sentence was actually created
+        with integration_graph_manager.session() as session:
+            sentence_result = session.run(
+                "MATCH (s:Sentence)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_002'}) RETURN s"
+            )
+            sentences = list(sentence_result)
+            assert len(sentences) == 1
+            sentence_record = sentences[0]["s"]
+            assert sentence_record["text"] == "It failed again."
+            assert sentence_record["ambiguous"]  # Because not self-contained
+            assert sentence_record["verifiable"]
+            assert not sentence_record["failed_decomposition"]  # Was atomic
 
     def test_convert_unprocessed_result(self, integration, test_chunk):
         """Test conversion of result that wasn't selected for processing."""
@@ -191,10 +336,56 @@ class TestClaimifyGraphIntegration:
         assert sentence.rejection_reason == "Not selected by Selection agent"
 
     @pytest.mark.integration
-    def test_convert_unprocessed_result_integration(self, _integration, _test_chunk):
+    def test_convert_unprocessed_result_integration(
+        self, integration_instance, integration_graph_manager
+    ):
         """Integration test for unprocessed result conversion."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_003'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="This was not selected for processing.",
+            source_id="test_blk_003",
+            chunk_id="test_chunk_003",
+            sentence_index=0,
+        )
+
+        # Create result where selection failed
+        result = ClaimifyResult(
+            original_chunk=test_chunk,
+            context=ClaimifyContext(current_sentence=test_chunk),
+            selection_result=SelectionResult(
+                sentence_chunk=test_chunk, is_selected=False
+            ),
+            # No decomposition result since it wasn't selected
+        )
+
+        # Persist to real Neo4j database
+        claims_created, sentences_created, errors = (
+            integration_instance.persist_claimify_results([result])
+        )
+
+        # Verify results
+        assert claims_created == 0
+        assert sentences_created == 1
+        assert len(errors) == 0
+
+        # Query Neo4j to verify the sentence was actually created
+        with integration_graph_manager.session() as session:
+            sentence_result = session.run(
+                "MATCH (s:Sentence)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_003'}) RETURN s"
+            )
+            sentences = list(sentence_result)
+            assert len(sentences) == 1
+            sentence_record = sentences[0]["s"]
+            assert sentence_record["text"] == "This was not selected for processing."
+            assert sentence_record["ambiguous"]  # Because not selected
+            assert not sentence_record["verifiable"]  # Because not selected
+            assert (
+                sentence_record["rejection_reason"] == "Not selected by Selection agent"
+            )
 
     def test_create_claim_input(self, integration, test_chunk):
         """Test creation of ClaimInput from ClaimCandidate."""
