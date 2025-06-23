@@ -28,9 +28,7 @@ jobs:
         # The action handles it automatically via the GitHub API.
         filters: |
           python:
-            - 'shared/**/*.py'
-            - 'services/**/*.py'
-            - 'tests/**/*.py'
+            - '**/*.py'
             - '**/pyproject.toml'
             - '**/uv.lock'
           docker:
