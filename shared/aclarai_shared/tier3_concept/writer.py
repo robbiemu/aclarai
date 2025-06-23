@@ -27,10 +27,10 @@ class ConceptFileWriter:
         """Initialize the concept file writer."""
         self.config = config or aclaraiConfig()
         # Get the concepts directory from configuration
-        vault_path = Path(self.config.vault_path)
+        vault_path = Path(self.config.paths.vault) # Use paths.vault
         concepts_path = (
-            self.config.paths.concepts or "concepts"
-        )  # Default to "concepts" if not set
+            self.config.paths.tier3 or "concepts"
+        )  # Default to "concepts" if not set, using tier3
         self.concepts_dir = vault_path / concepts_path
         logger.debug(
             f"Initialized ConceptFileWriter with concepts directory: {self.concepts_dir}",

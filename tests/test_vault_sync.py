@@ -33,10 +33,10 @@ except ImportError:
 def _create_mock_config():
     """Create a mock configuration for testing."""
     mock_config = MagicMock()
-    mock_config.vault_path = "/test/vault"
-    mock_config.paths.tier1 = "tier1"
-    mock_config.paths.tier2 = "tier2"
-    mock_config.paths.tier3 = "tier3"
+    mock_config.paths.vault = "/test/vault"  # Changed from mock_config.vault_path
+    mock_config.paths.tier1 = "conversations" # Using new default
+    mock_config.paths.tier2 = "summaries"     # Using new default
+    mock_config.paths.tier3 = "concepts"      # Using new default
     return mock_config
 
 
@@ -99,8 +99,8 @@ def test_extract_file_level_block(mock_neo4j, mock_load_config):
     assert "aclarai:id" not in block["semantic_text"]
 
 
-@patch("aclarai_scheduler.vault_sync.load_config")
-@patch("aclarai_scheduler.vault_sync.Neo4jGraphManager")
+@patch("services.scheduler.aclarai_scheduler.vault_sync.load_config")
+@patch("services.scheduler.aclarai_scheduler.vault_sync.Neo4jGraphManager")
 def test_calculate_content_hash(mock_neo4j, mock_load_config):
     """Test content hash calculation."""
     # Setup mocks to avoid database connection
@@ -140,14 +140,15 @@ Alice: I'm doing well, thanks! <!-- aclarai:id=blk_followup ver=1 -->
         test_file.write_text(test_content)
         # Mock the graph manager and config
         with (
-            patch("aclarai_scheduler.vault_sync.load_config") as mock_config,
-            patch("aclarai_scheduler.vault_sync.Neo4jGraphManager") as mock_graph,
+            patch("services.scheduler.aclarai_scheduler.vault_sync.load_config") as mock_load_config_patch, # Renamed for clarity
+            patch("services.scheduler.aclarai_scheduler.vault_sync.Neo4jGraphManager") as mock_graph,
         ):
             # Configure mocks
-            mock_config.return_value.vault_path = temp_dir
-            mock_config.return_value.paths.tier1 = "."
-            mock_config.return_value.paths.tier2 = "summaries"
-            mock_config.return_value.paths.tier3 = "concepts"
+            mock_config_instance = _create_mock_config() # Use the helper
+            mock_config_instance.paths.vault = temp_dir # Override vault path for temp_dir
+            mock_config_instance.paths.tier1 = "." # Specific for this test case
+            mock_load_config_patch.return_value = mock_config_instance
+
             mock_graph_instance = Mock()
             mock_graph.return_value = mock_graph_instance
             # Mock graph responses (no existing blocks)
@@ -162,8 +163,8 @@ Alice: I'm doing well, thanks! <!-- aclarai:id=blk_followup ver=1 -->
             assert stats["errors"] == 0
 
 
-@patch("aclarai_scheduler.vault_sync.load_config")
-@patch("aclarai_scheduler.vault_sync.Neo4jGraphManager")
+@patch("services.scheduler.aclarai_scheduler.vault_sync.load_config")
+@patch("services.scheduler.aclarai_scheduler.vault_sync.Neo4jGraphManager")
 def test_vault_sync_job_stats_merging(mock_neo4j, mock_load_config):
     """Test that statistics are properly merged across files and tiers."""
     # Setup mocks to avoid database connection

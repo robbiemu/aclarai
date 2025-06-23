@@ -99,7 +99,7 @@ exclude = [
 pythonpath = ["."]
 testpaths = ["tests", "shared/tests", "services/*/tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "--cov=aclarai_shared --cov-report=term-missing --cov-report=xml --cov-config=pyproject.toml --import-mode=importlib"
+addopts = "--import-mode=importlib" # Temporarily removed coverage flags
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]

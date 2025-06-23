@@ -85,17 +85,6 @@ class ThresholdConfig:
 
 
 @dataclass
-class PathsConfig:
-    """Configuration for vault and file paths."""
-
-    vault: str = "/vault"
-    tier1: str = "conversations"
-    tier2: str = "summaries"
-    tier3: str = "concepts"
-    settings: str = "/settings"
-
-
-@dataclass
 class DatabaseConfig:
     """Database connection configuration with fallback support."""
 
@@ -128,15 +117,15 @@ class VaultWatcherConfig:
 
 
 @dataclass
-class VaultPaths:
+class PathsConfig:
     """Vault directory structure configuration."""
 
     vault: str = "/vault"
     settings: str = "/settings"
-    tier1: str = "tier1"
-    summaries: str = "."
-    concepts: str = "."
-    logs: str = ".aclarai/import_logs"
+    tier1: str = "conversations"  # Default user-facing folder name
+    tier2: str = "summaries"  # Default user-facing folder name
+    tier3: str = "concepts"  # Default user-facing folder name
+    logs: str = ".aclarai/logs"  # Default logs path, updated from import_logs
 
 
 @dataclass
@@ -170,7 +159,7 @@ class aclaraiConfig:
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     # Vault structure configuration
-    paths: VaultPaths = field(default_factory=VaultPaths)
+    paths: "PathsConfig" = field(default_factory=lambda: PathsConfig())
     # Feature flags
     features: Dict[str, Any] = field(default_factory=dict)
 
@@ -297,25 +286,19 @@ class aclaraiConfig:
         )
         # Load paths configuration from YAML
         paths_config = yaml_config.get("paths", {})
-        vault_path = os.getenv("VAULT_PATH", paths_config.get("vault", "/vault"))
-        settings_path = os.getenv(
-            "SETTINGS_PATH", paths_config.get("settings", "/settings")
+        # Use PathsConfig dataclass to handle defaults and environment variable overrides
+        paths = PathsConfig(
+            vault=os.getenv("VAULT_PATH", paths_config_data.get("vault", PathsConfig.vault)),
+            settings=os.getenv("SETTINGS_PATH", paths_config_data.get("settings", PathsConfig.settings)),
+            tier1=os.getenv("VAULT_TIER1_PATH", paths_config_data.get("tier1", PathsConfig.tier1)),
+            tier2=os.getenv("VAULT_TIER2_PATH", paths_config_data.get("tier2", PathsConfig.tier2)), # Added tier2
+            tier3=os.getenv("VAULT_TIER3_PATH", paths_config_data.get("tier3", PathsConfig.tier3)), # Added tier3
+            logs=os.getenv("VAULT_LOGS_PATH", paths_config_data.get("logs", PathsConfig.logs)),
         )
-        # Vault paths configuration (from main branch)
-        paths = VaultPaths(
-            vault=vault_path,
-            settings=settings_path,
-            tier1=os.getenv("VAULT_TIER1_PATH", paths_config.get("tier1", "tier1")),
-            summaries=os.getenv(
-                "VAULT_SUMMARIES_PATH", paths_config.get("summaries", ".")
-            ),
-            concepts=os.getenv(
-                "VAULT_CONCEPTS_PATH", paths_config.get("concepts", ".")
-            ),
-            logs=os.getenv(
-                "VAULT_LOGS_PATH", paths_config.get("logs", ".aclarai/import_logs")
-            ),
-        )
+        # For backward compatibility, set vault_path and settings_path
+        vault_path = paths.vault
+        settings_path = paths.settings
+
         # Load features configuration from YAML
         features_config = yaml_config.get("features", {})
         # Load vault watcher configuration from YAML

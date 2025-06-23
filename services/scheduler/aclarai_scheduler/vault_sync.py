@@ -31,10 +31,10 @@ class VaultSyncJob:
         self.graph_manager = Neo4jGraphManager(self.config)
         self.block_parser = BlockParser()
         # Vault paths from config
-        self.vault_path = Path(self.config.vault_path)
+        self.vault_path = Path(self.config.paths.vault) # Use paths.vault
         self.tier1_path = self.vault_path / self.config.paths.tier1
-        self.tier2_path = self.vault_path / self.config.paths.tier2
-        self.tier3_path = self.vault_path / self.config.paths.tier3
+        self.tier2_path = self.vault_path / self.config.paths.tier2 # Already correct
+        self.tier3_path = self.vault_path / self.config.paths.tier3 # Already correct
 
     def run_sync(self) -> Dict[str, Any]:
         """
