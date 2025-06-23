@@ -91,7 +91,7 @@ class SchedulerService:
             return
         # Register vault sync job
         vault_sync_config = self.config.scheduler.jobs.vault_sync
-        if vault_sync_config.enabled:
+        if vault_sync_config.enabled and not vault_sync_config.manual_only:
             self.scheduler.add_job(
                 func=self._run_vault_sync_job,
                 trigger=CronTrigger.from_crontab(vault_sync_config.cron),
@@ -109,9 +109,20 @@ class SchedulerService:
                     "description": vault_sync_config.description,
                 },
             )
+        elif vault_sync_config.enabled and vault_sync_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Vault sync job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "vault_sync",
+                    "manual_only": True,
+                    "description": vault_sync_config.description,
+                },
+            )
         # Register concept embedding refresh job (placeholder for future implementation)
         concept_refresh_config = self.config.scheduler.jobs.concept_embedding_refresh
-        if concept_refresh_config.enabled:
+        if concept_refresh_config.enabled and not concept_refresh_config.manual_only:
             # Environment variable override
             concept_refresh_enabled = (
                 os.getenv("CONCEPT_EMBEDDING_REFRESH_ENABLED", "true").lower() == "true"
@@ -137,6 +148,17 @@ class SchedulerService:
                         "description": concept_refresh_config.description,
                     },
                 )
+        elif concept_refresh_config.enabled and concept_refresh_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Concept refresh job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "concept_embedding_refresh",
+                    "manual_only": True,
+                    "description": concept_refresh_config.description,
+                },
+            )
 
     def _run_vault_sync_job(self):
         """Execute the vault synchronization job."""

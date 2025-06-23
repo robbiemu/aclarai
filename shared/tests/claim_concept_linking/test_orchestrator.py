@@ -117,7 +117,7 @@ class TestClaimConceptLinkerOrchestrator:
         # Test claim similar to seeded concepts
         claim = {
             "id": "test_claim_1",
-            "text": "CUDA runtime error occurred during model training",
+            "text": "An error related to CUDA occurred",
         }
         candidates = linker._find_candidate_concepts_vector(claim, threshold=0.1)
         assert isinstance(candidates, list)
