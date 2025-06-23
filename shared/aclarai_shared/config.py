@@ -128,6 +128,45 @@ class VaultWatcherConfig:
 
 
 @dataclass
+class JobConfig:
+    """Configuration for a scheduled job."""
+
+    enabled: bool = True
+    manual_only: bool = False
+    cron: str = "0 3 * * *"
+    description: str = ""
+
+
+@dataclass
+class SchedulerJobsConfig:
+    """Configuration for all scheduled jobs."""
+
+    concept_embedding_refresh: JobConfig = field(
+        default_factory=lambda: JobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 3 * * *",
+            description="Refresh concept embeddings from Tier 3 pages",
+        )
+    )
+    vault_sync: JobConfig = field(
+        default_factory=lambda: JobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="*/30 * * * *",
+            description="Sync vault files with knowledge graph",
+        )
+    )
+
+
+@dataclass
+class SchedulerConfig:
+    """Configuration for scheduler service."""
+
+    jobs: SchedulerJobsConfig = field(default_factory=SchedulerJobsConfig)
+
+
+@dataclass
 class VaultPaths:
     """Vault directory structure configuration."""
 
@@ -156,6 +195,7 @@ class aclaraiConfig:
     )
     threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
     vault_watcher: VaultWatcherConfig = field(default_factory=VaultWatcherConfig)
+    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
     # Message broker configuration
     rabbitmq_host: str = "rabbitmq"
     rabbitmq_port: int = 5672
@@ -331,6 +371,38 @@ class aclaraiConfig:
                 "routing_key", "aclarai_dirty_blocks"
             ),
         )
+        # Load scheduler configuration from YAML
+        scheduler_config = yaml_config.get("scheduler", {})
+        jobs_config = scheduler_config.get("jobs", {})
+
+        # Load concept embedding refresh job config
+        concept_refresh_config = jobs_config.get("concept_embedding_refresh", {})
+        concept_embedding_refresh = JobConfig(
+            enabled=concept_refresh_config.get("enabled", True),
+            manual_only=concept_refresh_config.get("manual_only", False),
+            cron=concept_refresh_config.get("cron", "0 3 * * *"),
+            description=concept_refresh_config.get(
+                "description", "Refresh concept embeddings from Tier 3 pages"
+            ),
+        )
+
+        # Load vault sync job config
+        vault_sync_config = jobs_config.get("vault_sync", {})
+        vault_sync = JobConfig(
+            enabled=vault_sync_config.get("enabled", True),
+            manual_only=vault_sync_config.get("manual_only", False),
+            cron=vault_sync_config.get("cron", "*/30 * * * *"),
+            description=vault_sync_config.get(
+                "description", "Sync vault files with knowledge graph"
+            ),
+        )
+
+        scheduler = SchedulerConfig(
+            jobs=SchedulerJobsConfig(
+                concept_embedding_refresh=concept_embedding_refresh,
+                vault_sync=vault_sync,
+            )
+        )
         return cls(
             postgres=postgres,
             neo4j=neo4j,
@@ -339,6 +411,7 @@ class aclaraiConfig:
             noun_phrase_extraction=noun_phrase_extraction,
             threshold=threshold,
             vault_watcher=vault_watcher,
+            scheduler=scheduler,
             rabbitmq_host=os.getenv("RABBITMQ_HOST", "rabbitmq"),
             rabbitmq_port=int(os.getenv("RABBITMQ_PORT", "5672")),
             rabbitmq_user=os.getenv("RABBITMQ_USER", "user"),
