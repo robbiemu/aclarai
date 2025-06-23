@@ -45,6 +45,7 @@ class PathsConfig:
     tier2: str = "summaries"
     tier3: str = "concepts"
     settings: str = "/settings"
+    logs: str = ".aclarai/import_logs"
 
 
 @dataclass
@@ -69,18 +70,6 @@ class DatabaseConfig:
 
 
 @dataclass
-class VaultPaths:
-    """Vault directory structure configuration."""
-
-    vault: str = "/vault"
-    settings: str = "/settings"
-    tier1: str = "tier1"
-    summaries: str = "."
-    concepts: str = "."
-    logs: str = ".aclarai/import_logs"
-
-
-@dataclass
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
 
@@ -100,7 +89,7 @@ class aclaraiConfig:
     debug: bool = False
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
-    paths: VaultPaths = field(default_factory=VaultPaths)
+    paths: PathsConfig = field(default_factory=PathsConfig)
 
 
 class TestEmbeddingConfig:
@@ -172,6 +161,7 @@ class TestPathsConfig:
         assert config.tier2 == "summaries"
         assert config.tier3 == "concepts"
         assert config.settings == "/settings"
+        assert config.logs == ".aclarai/import_logs"
 
     def test_paths_config_custom_values(self):
         """Test PathsConfig with custom values."""
@@ -250,37 +240,6 @@ class TestDatabaseConfig:
         assert url == expected
 
 
-class TestVaultPaths:
-    """Test cases for VaultPaths dataclass."""
-
-    def test_vault_paths_defaults(self):
-        """Test VaultPaths default values."""
-        paths = VaultPaths()
-        assert paths.vault == "/vault"
-        assert paths.settings == "/settings"
-        assert paths.tier1 == "tier1"
-        assert paths.summaries == "."
-        assert paths.concepts == "."
-        assert paths.logs == ".aclarai/import_logs"
-
-    def test_vault_paths_custom_values(self):
-        """Test VaultPaths with custom values."""
-        paths = VaultPaths(
-            vault="/custom/vault",
-            settings="/custom/settings",
-            tier1="conversations",
-            summaries="summaries",
-            concepts="concepts",
-            logs="logs",
-        )
-        assert paths.vault == "/custom/vault"
-        assert paths.settings == "/custom/settings"
-        assert paths.tier1 == "conversations"
-        assert paths.summaries == "summaries"
-        assert paths.concepts == "concepts"
-        assert paths.logs == "logs"
-
-
 class TestaclaraiConfig:
     """Test cases for aclaraiConfig dataclass."""
 
@@ -292,7 +251,7 @@ class TestaclaraiConfig:
         assert isinstance(config.neo4j, DatabaseConfig)
         assert isinstance(config.embedding, EmbeddingConfig)
         assert isinstance(config.concepts, ConceptsConfig)
-        assert isinstance(config.paths, VaultPaths)
+        assert isinstance(config.paths, PathsConfig)
         # Check simple defaults
         assert config.rabbitmq_host == "rabbitmq"
         assert config.rabbitmq_port == 5672

@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aclarai_shared.config import VaultPaths, aclaraiConfig
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.graph.models import Concept
 from aclarai_shared.tier3_concept.writer import ConceptFileWriter
 
@@ -24,7 +24,7 @@ class TestConceptFileWriter:
         """Test ConceptFileWriter initialization with custom config."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="custom_concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="custom_concepts")
             )
             writer = ConceptFileWriter(config)
             expected_path = Path(temp_dir) / "custom_concepts"
@@ -78,7 +78,7 @@ class TestConceptFileWriter:
         """Test successful concept file writing."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             writer = ConceptFileWriter(config)
             concept = Concept(
@@ -107,7 +107,7 @@ class TestConceptFileWriter:
         """Test that concepts directory is created if it doesn't exist."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="new_concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="new_concepts")
             )
             writer = ConceptFileWriter(config)
             # Concepts directory shouldn't exist yet
@@ -137,7 +137,7 @@ class TestConceptFileWriter:
         """Test that atomic write is used correctly."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             writer = ConceptFileWriter(config)
             concept = Concept(

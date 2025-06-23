@@ -7,14 +7,14 @@ This tutorial shows how to use the aclarai Tier 1 import system to convert conve
 ### Setting Up the Import System
 
 ```python
-from aclarai_shared import aclaraiConfig, Tier1ImportSystem, VaultPaths
+from aclarai_shared import aclaraiConfig, Tier1ImportSystem, PathsConfig
 
 # Configure with your vault path
 config = aclaraiConfig(
     vault_path="/path/to/your/vault",
-    paths=VaultPaths(
-        tier1="conversations",  # Where Tier 1 files go
-        logs="import_logs"      # Where import logs are stored
+    paths=PathsConfig(
+        tier1="conversations",  
+        logs="import_logs"
     )
 )
 
@@ -139,7 +139,7 @@ Here's a complete example that creates sample files and imports them:
 ```python
 import tempfile
 from pathlib import Path
-from aclarai_shared import aclaraiConfig, Tier1ImportSystem, VaultPaths
+from aclarai_shared import aclaraiConfig, Tier1ImportSystem, PathsConfig
 
 # Create a temporary demo environment
 with tempfile.TemporaryDirectory() as temp_dir:
@@ -157,7 +157,7 @@ alice: Perfect, let's review it together.""")
     vault_dir = temp_path / "vault"
     config = aclaraiConfig(
         vault_path=str(vault_dir),
-        paths=VaultPaths(tier1="conversations")
+        paths=PathsConfig(tier1="conversations")
     )
     system = Tier1ImportSystem(config)
     

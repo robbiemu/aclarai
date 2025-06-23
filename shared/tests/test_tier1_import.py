@@ -5,7 +5,7 @@ Test suite for the Tier 1 import system.
 import tempfile
 from pathlib import Path
 
-from aclarai_shared.config import VaultPaths, aclaraiConfig
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.import_system import (
     Tier1ImportSystem,
     calculate_file_hash,
@@ -120,7 +120,7 @@ class TestTier1ImportSystem:
         """Test import system initialization."""
         config = aclaraiConfig(
             vault_path="/test/vault",
-            paths=VaultPaths(tier1="conversations", logs="logs"),
+            paths=PathsConfig(tier1="conversations", logs="logs"),
         )
         system = Tier1ImportSystem(config)
         assert system.vault_path == Path("/test/vault")
@@ -134,7 +134,7 @@ def test_integration_simple_conversation():
         # Setup
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Create test input file

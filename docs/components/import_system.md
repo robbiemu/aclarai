@@ -19,7 +19,7 @@ For complete usage examples and step-by-step tutorials, see:
 
 ## Configuration
 
-The import system uses the central `aclaraiConfig` system with vault path configuration. See `shared/aclarai_shared/config.py` for the `VaultPaths` dataclass implementation and `docs/ENVIRONMENT_CONFIGURATION.md` for environment variable details.
+The import system uses the central `aclaraiConfig` system with vault path configuration. See `shared/aclarai_shared/config.py` for the `PathsConfig` dataclass implementation and `docs/ENVIRONMENT_CONFIGURATION.md` for environment variable details.
 
 ## Generated Format
 
