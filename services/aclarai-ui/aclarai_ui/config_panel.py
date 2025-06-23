@@ -222,10 +222,13 @@ def validate_cron_expression(cron: str) -> Tuple[bool, str]:
     # Basic cron validation: 5 fields separated by spaces
     fields = cron.split()
     if len(fields) != 5:
-        return False, "Cron expression must have exactly 5 fields (minute hour day month weekday)"
+        return (
+            False,
+            "Cron expression must have exactly 5 fields (minute hour day month weekday)",
+        )
 
     # Validate each field has valid characters
-    valid_chars_pattern = r'^[0-9\*\-,/]+$'
+    valid_chars_pattern = r"^[0-9\*\-,/]+$"
     field_names = ["minute", "hour", "day", "month", "weekday"]
 
     for i, field in enumerate(fields):
@@ -240,8 +243,27 @@ def create_configuration_panel() -> gr.Blocks:
     config_manager = ConfigurationManager()
 
     def load_current_config() -> Tuple[
-        str, str, str, str, str, str, str, str, str, str, str, float, float, int, int,
-        bool, bool, str, bool, bool, str
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        float,
+        float,
+        int,
+        int,
+        bool,
+        bool,
+        str,
+        bool,
+        bool,
+        str,
     ]:
         """Load current configuration values for UI display."""
         try:
@@ -289,7 +311,9 @@ def create_configuration_panel() -> gr.Blocks:
             # concept_embedding_refresh job
             concept_refresh_config = jobs_config.get("concept_embedding_refresh", {})
             concept_refresh_enabled = concept_refresh_config.get("enabled", True)
-            concept_refresh_manual_only = concept_refresh_config.get("manual_only", False)
+            concept_refresh_manual_only = concept_refresh_config.get(
+                "manual_only", False
+            )
             concept_refresh_cron = concept_refresh_config.get("cron", "0 3 * * *")
 
             # vault_sync job
@@ -485,16 +509,28 @@ def create_configuration_panel() -> gr.Blocks:
             # concept_embedding_refresh job
             if "concept_embedding_refresh" not in current_config["scheduler"]["jobs"]:
                 current_config["scheduler"]["jobs"]["concept_embedding_refresh"] = {}
-            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["enabled"] = concept_refresh_enabled
-            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["manual_only"] = concept_refresh_manual_only
-            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["cron"] = concept_refresh_cron.strip()
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"][
+                "enabled"
+            ] = concept_refresh_enabled
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"][
+                "manual_only"
+            ] = concept_refresh_manual_only
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["cron"] = (
+                concept_refresh_cron.strip()
+            )
 
             # vault_sync job
             if "vault_sync" not in current_config["scheduler"]["jobs"]:
                 current_config["scheduler"]["jobs"]["vault_sync"] = {}
-            current_config["scheduler"]["jobs"]["vault_sync"]["enabled"] = vault_sync_enabled
-            current_config["scheduler"]["jobs"]["vault_sync"]["manual_only"] = vault_sync_manual_only
-            current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = vault_sync_cron.strip()
+            current_config["scheduler"]["jobs"]["vault_sync"]["enabled"] = (
+                vault_sync_enabled
+            )
+            current_config["scheduler"]["jobs"]["vault_sync"]["manual_only"] = (
+                vault_sync_manual_only
+            )
+            current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = (
+                vault_sync_cron.strip()
+            )
 
             # Save to file
             success = config_manager.save_config(current_config)
@@ -658,7 +694,9 @@ def create_configuration_panel() -> gr.Blocks:
         # Scheduler Job Controls Section
         with gr.Group():
             gr.Markdown("## ⏰ Scheduler Job Controls")
-            gr.Markdown("Configure scheduled job execution settings. Jobs can be enabled/disabled, set to manual-only mode, or scheduled with custom cron expressions.")
+            gr.Markdown(
+                "Configure scheduled job execution settings. Jobs can be enabled/disabled, set to manual-only mode, or scheduled with custom cron expressions."
+            )
 
             with gr.Group():
                 gr.Markdown("### 🔄 Concept Embedding Refresh")
