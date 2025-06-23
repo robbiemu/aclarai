@@ -24,7 +24,6 @@ RUN pip install uv
 COPY . .
 
 # Install all workspace dependencies using the root pyproject.toml, and the UI-specific dependencies from its own pyproject.toml
-RUN uv pip install . --system
 RUN uv pip install --system -e ./services/aclarai-ui
 
 # Create a non-root user for security

@@ -22,8 +22,6 @@ RUN pip install uv
 # This makes the root pyproject.toml and all shared/service code available.
 COPY . .
 
-# Install all workspace dependencies using the root pyproject.toml.
-RUN uv pip install . --system
 # Install the specific dependencies from this subproject's pyproject.toml
 RUN uv pip install --system -e ./services/aclarai-core
 
