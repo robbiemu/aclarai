@@ -331,16 +331,12 @@ class aclaraiConfig:
             "SETTINGS_PATH", paths_config.get("settings", "/settings")
         )
         # Vault paths configuration (from main branch)
-        paths = VaultPaths(
+        paths = PathsConfig(
             vault=vault_path,
             settings=settings_path,
             tier1=os.getenv("VAULT_TIER1_PATH", paths_config.get("tier1", "tier1")),
-            summaries=os.getenv(
-                "VAULT_SUMMARIES_PATH", paths_config.get("summaries", ".")
-            ),
-            concepts=os.getenv(
-                "VAULT_CONCEPTS_PATH", paths_config.get("concepts", ".")
-            ),
+            tier2=os.getenv("VAULT_SUMMARIES_PATH", paths_config.get("summaries", ".")),
+            tier3=os.getenv("VAULT_CONCEPTS_PATH", paths_config.get("concepts", ".")),
             logs=os.getenv(
                 "VAULT_LOGS_PATH", paths_config.get("logs", ".aclarai/import_logs")
             ),
