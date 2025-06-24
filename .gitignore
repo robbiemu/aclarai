@@ -1,4 +1,3 @@
-combined.md
 
 # General
 .DS_Store
@@ -228,3 +227,5 @@ cython_debug/
 # Demo files - for development and testing only
 demo_*.py
 project_bundle.zip
+pr-*-summary.md
+combined.md

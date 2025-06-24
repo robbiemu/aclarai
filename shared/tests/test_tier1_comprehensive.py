@@ -7,7 +7,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from aclarai_shared.config import VaultPaths, aclaraiConfig
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.import_system import Tier1ImportSystem
 
 
@@ -45,7 +45,7 @@ alice: Excellent! Let's schedule a board presentation""",
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         for i, (content, expected_convs) in enumerate(test_cases):
@@ -86,7 +86,7 @@ def test_atomic_write_safety():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Create a conversation file
@@ -114,7 +114,7 @@ def test_filename_generation():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Test with special characters in source filename
@@ -139,7 +139,7 @@ def test_multiple_conversations_from_single_file():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Create a longer conversation that might be split in the future
@@ -172,7 +172,7 @@ def test_import_log_functionality():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Import first file
@@ -257,7 +257,7 @@ def test_golden_file_format_compliance():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         # Test simple case first
@@ -315,7 +315,7 @@ def test_golden_file_metadata_consistency():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_dir = Path(temp_dir) / "vault"
         config = aclaraiConfig(
-            vault_path=str(vault_dir), paths=VaultPaths(tier1="tier1", logs="logs")
+            vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
         )
         system = Tier1ImportSystem(config)
         print("Testing metadata consistency with simple format...")

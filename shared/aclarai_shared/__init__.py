@@ -2,7 +2,7 @@
 Shared utilities and configuration for aclarai services.
 """
 
-from .config import DatabaseConfig, VaultPaths, aclaraiConfig, load_config
+from .config import DatabaseConfig, PathsConfig, aclaraiConfig, load_config
 from .plugin_interface import MarkdownOutput, Plugin, UnknownFormatError
 
 try:
@@ -16,7 +16,7 @@ try:
     __all__ = [
         "aclaraiConfig",
         "DatabaseConfig",
-        "VaultPaths",
+        "PathsConfig",
         "load_config",
         "Plugin",
         "MarkdownOutput",
@@ -33,7 +33,7 @@ except ImportError:
     __all__ = [
         "aclaraiConfig",
         "DatabaseConfig",
-        "VaultPaths",
+        "PathsConfig",
         "load_config",
         "Plugin",
         "MarkdownOutput",

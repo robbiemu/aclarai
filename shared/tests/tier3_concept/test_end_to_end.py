@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aclarai_shared.config import VaultPaths, aclaraiConfig
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.graph.models import Concept
 from aclarai_shared.tier3_concept.writer import ConceptFileWriter
 
@@ -15,9 +15,7 @@ def test_end_to_end_concept_creation():
     """Test the complete flow from concept creation to file writing."""
     with tempfile.TemporaryDirectory() as temp_dir:
         # Setup configuration
-        config = aclaraiConfig(
-            vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
-        )
+        config = aclaraiConfig(vault_path=temp_dir, paths=PathsConfig(tier3="concepts"))
         # Create the concept file writer
         writer = ConceptFileWriter(config)
         # Create a sample concept (as would be done by ConceptProcessor)
@@ -58,9 +56,7 @@ def test_end_to_end_concept_creation():
 def test_multiple_concepts_creation():
     """Test creating multiple concept files."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        config = aclaraiConfig(
-            vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
-        )
+        config = aclaraiConfig(vault_path=temp_dir, paths=PathsConfig(tier3="concepts"))
         writer = ConceptFileWriter(config)
         # Create multiple concepts
         concepts = [

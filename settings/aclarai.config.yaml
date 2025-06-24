@@ -107,10 +107,12 @@ scheduler:
   jobs:
     concept_embedding_refresh:
       enabled: true
+      manual_only: false
       cron: 0 3 * * *
       description: Refresh concept embeddings from Tier 3 pages
     vault_sync:
       enabled: true
+      manual_only: false
       cron: '*/30 * * * *'
       description: Sync vault files with knowledge graph
 features:

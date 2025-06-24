@@ -13,7 +13,7 @@ from aclarai_shared.concept_detection.models import (
     ConceptDetectionBatch,
     ConceptDetectionResult,
 )
-from aclarai_shared.config import VaultPaths, aclaraiConfig
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.graph.models import Concept
 from aclarai_shared.tier3_concept import ConceptFileWriter
 
@@ -55,7 +55,7 @@ class TestConceptProcessorTier3Integration:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Setup config with temp directory
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             # Setup mocks
             mock_store_instance = Mock()
@@ -146,7 +146,7 @@ class TestConceptProcessorTier3Integration:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Setup config with temp directory
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             # Setup mocks
             mock_store_instance = Mock()
@@ -228,7 +228,7 @@ class TestConceptFileWriterIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Setup config with temp directory
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             # Initialize ConceptFileWriter
             writer = ConceptFileWriter(config)
@@ -263,7 +263,7 @@ class TestConceptFileWriterIntegration:
         """Test that ConceptFileWriter handles errors gracefully."""
         # Use a non-existent directory to simulate write errors
         config = aclaraiConfig(
-            vault_path="/nonexistent/path", paths=VaultPaths(concepts="concepts")
+            vault_path="/nonexistent/path", paths=PathsConfig(tier3="concepts")
         )
         writer = ConceptFileWriter(config)
         concept = Concept(
@@ -284,7 +284,7 @@ class TestConceptFileWriterIntegration:
         """Test writing multiple concept files in sequence."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = aclaraiConfig(
-                vault_path=temp_dir, paths=VaultPaths(concepts="concepts")
+                vault_path=temp_dir, paths=PathsConfig(tier3="concepts")
             )
             writer = ConceptFileWriter(config)
             # Create multiple test concepts
