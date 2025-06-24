@@ -128,7 +128,8 @@ jobs:
       run: |
         # Set PYTHONPATH to include the project root for pytest discovery
         export PYTHONPATH=$(pwd)
-        .venv/bin/pytest -v --tb=short
+        # explicit per directory testing for good logs
+        .venv/bin/pytest -v --tb=short tests/ shared/tests/ services/aclarai-core/tests/ services/aclarai-ui/tests/ services/scheduler/tests/ services/vault-watcher/tests/
 
   docker-build:
     name: Docker Build Validation
