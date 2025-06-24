@@ -300,7 +300,7 @@ class TestaclaraiConfig:
         assert config.concepts.merge_threshold == 0.95
         # Check paths defaults
         assert config.paths.vault == "/vault"
-        assert config.paths.tier1 == "tier1"
+        assert config.paths.tier1 == "conversations"
 
     def test_aclarai_config_separate_instances(self):
         """Test that different aclaraiConfig instances have separate nested objects."""
