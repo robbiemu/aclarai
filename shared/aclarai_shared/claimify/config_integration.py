@@ -131,17 +131,19 @@ def get_model_config_for_stage(config_data: Dict[str, Any], stage: str) -> str:
     Returns:
         Model name for the stage
     """
-    # Get model config following design_config_panel.md structure
     model_config = config_data.get("model", {})
     claimify_models = model_config.get("claimify", {})
-    # Get stage-specific model or fall back to default
+
     stage_model = claimify_models.get(stage)
-    if stage_model:
+    if isinstance(stage_model, str):
         return stage_model
-    # Fall back to claimify default
+
     claimify_default = claimify_models.get("default")
-    if claimify_default:
+    if isinstance(claimify_default, str):
         return claimify_default
-    # Use global fallback_plugin model if no claimify-specific config
+
     fallback_plugin = model_config.get("fallback_plugin")
-    return fallback_plugin
+    if isinstance(fallback_plugin, str):
+        return fallback_plugin
+
+    raise ValueError(f"No valid model configuration found for stage '{stage}'")

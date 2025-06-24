@@ -8,13 +8,23 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, IO, Optional, Union
+
+StrPath = Union[str, "os.PathLike[str]"]
+
 
 try:
     from dotenv import load_dotenv
 except ImportError:
     # Fallback if python-dotenv is not available
-    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
+    def load_dotenv(
+        dotenv_path: Optional[StrPath] = None,
+        stream: Optional[IO[str]] = None,
+        verbose: bool = False,
+        override: bool = False,
+        interpolate: bool = True,
+        encoding: Optional[str] = "utf-8",
+    ) -> bool:
         return False
 
 

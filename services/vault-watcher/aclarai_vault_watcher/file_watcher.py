@@ -8,7 +8,10 @@ in sprint_4-Vault_file_watcher.md.
 import logging
 from pathlib import Path
 from threading import Lock, Timer
-from typing import Callable, Optional, Set
+from typing import Callable, Optional, Set, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from watchdog.observers.api import BaseObserver
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -49,7 +52,7 @@ class BatchedFileWatcher:
         self._batch_timer: Optional[Timer] = None
         self._lock = Lock()
         # Watchdog components
-        self._observer: Optional[Observer] = None
+        self._observer: Optional["BaseObserver"] = None
         self._event_handler = VaultFileEventHandler(self)
         logger.info(
             "vault_watcher.BatchedFileWatcher: Initialized file watcher",
