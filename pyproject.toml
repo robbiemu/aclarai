@@ -24,7 +24,8 @@ dependencies = [
 optional-dependencies = { dev = [
     "bandit>=1.8.0",
     "black>=25.1.0",
-    "mypy>=1.16.0",
+    "mypy>=1.16.1",
+    "tomli>=2.2.1",
     "pre-commit>=3.7.0",
     "pytest>=8.4.0",
     "pytest-cov>=6.1.1",
@@ -37,8 +38,12 @@ optional-dependencies = { dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+check-annotations = "tools.check_return_annotations:main"
+
 [tool.hatch.build.targets.wheel]
 packages = [
+  "tools",
   "shared/aclarai_shared",
   "services/aclarai-core/aclarai_core",
   "services/aclarai-ui/aclarai_ui",
@@ -47,8 +52,6 @@ packages = [
 ]
 
 [tool.uv.sources]
-# This tells uv: "Any time any package asks for `aclarai-shared`,
-# don't go to PyPI. Instead, use the package from the local workspace."
 aclarai-shared = { workspace = true }
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
@@ -82,7 +85,8 @@ target-version = ["py311"]
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
 namespace_packages = true
 explicit_package_bases = true
 exclude = [
@@ -93,6 +97,19 @@ exclude = [
     "services/scheduler/tests/",
     "services/vault-watcher/tests/"
 ]
+mypy_path = "shared:services"
+
+[[tool.mypy.overrides]]
+module = [
+    "gradio",
+    "watchdog",
+    "watchdog.*",
+    "apscheduler.*",
+    "hnswlib",
+    "pika",
+    "pika.*"
+]
+ignore_missing_imports = true
 
 # Pytest configuration
 [tool.pytest.ini_options]

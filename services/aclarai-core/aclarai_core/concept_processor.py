@@ -6,21 +6,22 @@ candidate management.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from aclarai_shared import load_config
-from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.concept_detection import ConceptDetector
-from aclarai_shared.noun_phrase_extraction import NounPhraseExtractor
-from aclarai_shared.noun_phrase_extraction.concept_candidates_store import (
-    ConceptCandidatesVectorStore,
-)
 from aclarai_shared.concept_detection.models import (
     ConceptAction,
     ConceptDetectionBatch,
 )
-from aclarai_shared.graph.models import ConceptInput
+from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph import Neo4jGraphManager
+from aclarai_shared.graph.models import ConceptInput
+from aclarai_shared.noun_phrase_extraction import NounPhraseExtractor
+from aclarai_shared.noun_phrase_extraction.concept_candidates_store import (
+    ConceptCandidatesVectorStore,
+)
 from aclarai_shared.tier3_concept import ConceptFileWriter
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ class ConceptProcessor:
         )
         try:
             # Step 1: Extract noun phrases from the block
-            extraction_result = self.noun_phrase_extractor.extract_from_text(
+            extraction_result = self.noun_phrase_extractor._extract_from_node(
                 text=semantic_text,
                 source_node_id=aclarai_id,
                 source_node_type=block_type,
@@ -167,8 +168,9 @@ class ConceptProcessor:
                 }
                 if result.best_match:
                     action_info["best_match"] = {
-                        "text": result.best_match.matched_text,
-                        "similarity": result.best_match.similarity_score,
+                        "matched_text": result.best_match.matched_text,
+                        "similarity_score": result.best_match.similarity_score,
+                        "matched_candidate_id": result.best_match.matched_candidate_id,
                     }
                 results["concept_actions"].append(action_info)
             logger.info(
@@ -233,7 +235,7 @@ class ConceptProcessor:
                 "updated_at": datetime.now().isoformat(),
             }
             if result.action == ConceptAction.MERGED and result.best_match:
-                update["merged_with"] = {
+                update["merged_with_info"] = {
                     "matched_id": result.best_match.matched_candidate_id,
                     "matched_text": result.best_match.matched_text,
                     "similarity_score": result.best_match.similarity_score,

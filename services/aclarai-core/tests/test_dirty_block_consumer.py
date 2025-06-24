@@ -4,9 +4,10 @@ These tests validate the reactive sync loop implementation including
 version checking, conflict detection, and proper graph updates.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
 
 

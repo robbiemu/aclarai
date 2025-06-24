@@ -55,7 +55,7 @@ class ConceptDetector:
             },
         )
 
-    def _initialize_index(self, max_elements: int = 10000) -> None:
+    def _initialize_index(self, max_elements: int = 10000):
         """Initialize the HNSW index."""
         try:
             self.index = hnswlib.Index(space="cosine", dim=self.embedding_dim)
@@ -140,7 +140,17 @@ class ConceptDetector:
             # Add all embeddings to index
             if embeddings:
                 embeddings_array = np.array(embeddings, dtype=np.float32)
-                self.index.add_items(embeddings_array, ids)
+                if self.index is not None:
+                    self.index.add_items(embeddings_array, ids)
+                else:
+                    logger.error(
+                        "HNSW index is not initialized before adding items.",
+                        extra={
+                            "service": "aclarai",
+                            "filename.function_name": "concept_detection.detector.ConceptDetector.build_index_from_candidates",
+                        },
+                    )
+                    raise RuntimeError("HNSW index is not initialized.")
             logger.info(
                 f"Built HNSW index with {len(embeddings)} concept candidates",
                 extra={
@@ -184,11 +194,13 @@ class ConceptDetector:
             if embedding is None:
                 logger.warning(f"Candidate has no embedding: {candidate.text}")
                 return []
-            if isinstance(embedding, list):
+            # Ensure embedding is a numpy array
+            if not isinstance(embedding, np.ndarray):
                 embedding = np.array(embedding, dtype=np.float32)
             # Search for similar items
             labels, distances = self.index.knn_query(
-                embedding.reshape(1, -1), k=min(top_k, len(self.id_to_metadata))
+                np.array(embedding, dtype=np.float32).reshape(1, -1),
+                k=min(top_k, len(self.id_to_metadata)),
             )
             # Convert distances to similarities (cosine distance -> cosine similarity)
             similarities = 1.0 - distances[0]

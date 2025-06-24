@@ -48,7 +48,7 @@ class RabbitMQManager:
             },
         )
 
-    def connect(self) -> None:
+    def connect(self):
         """Establish connection to RabbitMQ."""
         try:
             # Set up connection parameters
@@ -99,7 +99,7 @@ class RabbitMQManager:
             self.connect()
         return self._channel
 
-    def ensure_queue(self, queue_name: str, durable: bool = True) -> None:
+    def ensure_queue(self, queue_name: str, durable: bool = True):
         """
         Ensure a queue exists by declaring it.
         Args:
@@ -118,7 +118,7 @@ class RabbitMQManager:
             },
         )
 
-    def close(self) -> None:
+    def close(self):
         """Close the RabbitMQ connection."""
         if self._connection and not self._connection.is_closed:
             self._connection.close()

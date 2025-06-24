@@ -14,8 +14,8 @@ try:
     from dotenv import load_dotenv
 except ImportError:
     # Fallback if python-dotenv is not available
-    def load_dotenv(*args, **kwargs):
-        pass
+    def load_dotenv(*args: Any, **kwargs: Any) -> bool:
+        return False
 
 
 import yaml
@@ -426,7 +426,7 @@ class aclaraiConfig:
         if user_config_file is None:
             user_config_file = cls._find_user_config_file()
         # Load user configuration if it exists
-        user_config = {}
+        user_config: Dict[str, Any] = {}
         if user_config_file and Path(user_config_file).exists():
             logger.info(f"Loading YAML configuration from {user_config_file}")
             try:
@@ -503,9 +503,7 @@ class aclaraiConfig:
 
         result = copy.deepcopy(default)
 
-        def _merge_recursive(
-            base_dict: Dict[str, Any], override_dict: Dict[str, Any]
-        ) -> None:
+        def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
             for key, value in override_dict.items():
                 if (
                     key in base_dict

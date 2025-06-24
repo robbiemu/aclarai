@@ -18,6 +18,7 @@ from ..embedding.storage import aclaraiVectorStore
 from ..graph.neo4j_manager import Neo4jGraphManager
 from ..import_system import write_file_atomically
 from .data_models import SummaryBlock, SummaryInput, SummaryResult, generate_summary_id
+from llama_index.core.base.llms.types import CompletionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class Tier2SummaryAgent:
         """
         return self.config.features.get("tier2_generation", False)
 
-    def _retry_with_backoff(self, func, *args, **kwargs):
+    def _retry_with_backoff(self, func, *args, **kwargs) -> Any:
         """
         Execute function with retry logic and exponential backoff.
         Following guidelines from docs/arch/on-error-handling-and-resilience.md
@@ -527,7 +528,7 @@ class Tier2SummaryAgent:
             )
 
             # Generate summary using LLM with retry logic
-            def _generate_llm_response():
+            def _generate_llm_response() -> CompletionResponse:
                 return self.llm.complete(prompt)
 
             response = self._retry_with_backoff(_generate_llm_response)

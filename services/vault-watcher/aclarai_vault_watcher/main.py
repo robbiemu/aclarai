@@ -21,7 +21,7 @@ from .rabbitmq_publisher import DirtyBlockPublisher
 class VaultWatcherService:
     """Main service class that orchestrates file watching and block processing."""
 
-    def __init__(self, config: aclaraiConfig) -> None:
+    def __init__(self, config: aclaraiConfig):
         """
         Initialize the vault watcher service.
         Args:
@@ -57,7 +57,7 @@ class VaultWatcherService:
             },
         )
 
-    def start(self) -> None:
+    def start(self):
         """Start the vault watcher service."""
         try:
             # Connect to RabbitMQ
@@ -84,7 +84,7 @@ class VaultWatcherService:
             )
             raise
 
-    def stop(self) -> None:
+    def stop(self):
         """Stop the vault watcher service."""
         try:
             # Stop file watcher
@@ -108,7 +108,7 @@ class VaultWatcherService:
                 },
             )
 
-    def _perform_initial_scan(self) -> None:
+    def _perform_initial_scan(self):
         """Scan existing files to build initial state."""
         vault_path = Path(self.config.paths.vault)
         if not vault_path.exists():
@@ -160,7 +160,7 @@ class VaultWatcherService:
 
     def _handle_file_changes(
         self, created: Set[Path], modified: Set[Path], deleted: Set[Path]
-    ) -> None:
+    ):
         """
         Handle batched file change events.
         Args:
@@ -186,7 +186,7 @@ class VaultWatcherService:
         for file_path in deleted:
             self._handle_file_deleted(file_path)
 
-    def _handle_file_created(self, file_path: Path) -> None:
+    def _handle_file_created(self, file_path: Path):
         """Handle a newly created file."""
         try:
             blocks = self.block_parser.parse_file(file_path)
@@ -228,7 +228,7 @@ class VaultWatcherService:
                 },
             )
 
-    def _handle_file_modified(self, file_path: Path) -> None:
+    def _handle_file_modified(self, file_path: Path):
         """Handle a modified file."""
         try:
             new_blocks = self.block_parser.parse_file(file_path)
@@ -265,7 +265,7 @@ class VaultWatcherService:
                 },
             )
 
-    def _handle_file_deleted(self, file_path: Path) -> None:
+    def _handle_file_deleted(self, file_path: Path):
         """Handle a deleted file."""
         try:
             with self._lock:

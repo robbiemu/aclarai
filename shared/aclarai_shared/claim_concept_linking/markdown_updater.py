@@ -298,7 +298,7 @@ class Tier2MarkdownUpdater:
         # Pattern to match aclarai:id=... ver=N
         version_pattern = r"(aclarai:id=[^\s]+)\s+ver=(\d+)"
 
-        def increment_match(match):
+        def increment_match(match: re.Match) -> str:
             aclarai_part = match.group(1)
             current_version = int(match.group(2))
             new_version = current_version + 1

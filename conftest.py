@@ -6,14 +6,14 @@ import sys
 import pytest
 
 
-def pytest_configure(config):
+def pytest_configure(config: pytest.Config):
     """Configure pytest markers."""
     config.addinivalue_line(
         "markers", "integration: mark test as integration test requiring real services"
     )
 
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(config: pytest.Config, items: list):
     """Skip integration tests unless -m integration is specified."""
     if config.getoption("-m") == "integration":
         # Integration mode - run only integration tests
@@ -48,7 +48,7 @@ if PLAYWRIGHT_AVAILABLE:
             browser.close()
 
     @pytest.fixture
-    def page(browser):
+    def page(browser: None):
         """Provide a page instance for testing."""
         if browser is None:
             pytest.skip("Browser not available")

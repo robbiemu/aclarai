@@ -9,7 +9,9 @@ This service handles:
 """
 
 import logging
+
 from aclarai_shared import load_config
+
 from .dirty_block_consumer import DirtyBlockConsumer
 
 

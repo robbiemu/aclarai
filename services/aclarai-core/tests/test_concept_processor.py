@@ -4,19 +4,20 @@ This module tests the concept processing functionality integrated
 into the aclarai-core service.
 """
 
-import pytest
 import logging
 from unittest.mock import Mock
+
+import pytest
 from aclarai_core.concept_processor import ConceptProcessor
+from aclarai_shared.concept_detection.models import (
+    ConceptAction,
+    ConceptDetectionBatch,
+    ConceptDetectionResult,
+)
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.noun_phrase_extraction.models import (
-    NounPhraseCandidate,
     ExtractionResult,
-)
-from aclarai_shared.concept_detection.models import (
-    ConceptDetectionResult,
-    ConceptDetectionBatch,
-    ConceptAction,
+    NounPhraseCandidate,
 )
 
 logger = logging.getLogger(__name__)
@@ -365,13 +366,13 @@ class TestConceptProcessorIntegration:
     @pytest.mark.integration
     def test_status_persistence_integration(self):
         """Test that candidate status updates are properly persisted."""
+        from aclarai_shared.concept_detection.models import (
+            ConceptAction,
+            ConceptDetectionBatch,
+            ConceptDetectionResult,
+        )
         from aclarai_shared.config import load_config
         from aclarai_shared.noun_phrase_extraction.models import NounPhraseCandidate
-        from aclarai_shared.concept_detection.models import (
-            ConceptDetectionResult,
-            ConceptDetectionBatch,
-            ConceptAction,
-        )
 
         # Load real configuration
         config = load_config(validate=False)

@@ -8,7 +8,7 @@ from docs/arch/idea-neo4J-ineteraction.md.
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable, TransientError
@@ -17,6 +17,9 @@ from ..config import aclaraiConfig
 from .models import Claim, ClaimInput, Concept, ConceptInput, Sentence, SentenceInput
 
 logger = logging.getLogger(__name__)
+
+# Type variable for generic retry function
+T = TypeVar("T")
 
 
 class Neo4jGraphManager:
@@ -96,7 +99,9 @@ class Neo4jGraphManager:
         finally:
             session.close()
 
-    def _retry_with_backoff(self, func, *args, **kwargs):
+    def _retry_with_backoff(
+        self, func: Callable[..., T], *args: Any, **kwargs: Any
+    ) -> T:
         """
         Execute function with retry logic and exponential backoff.
         Following guidelines from docs/arch/on-error-handling-and-resilience.md
@@ -157,6 +162,9 @@ class Neo4jGraphManager:
                     },
                 )
                 raise
+        # This part is unreachable due to the raise in the loop, but mypy requires it
+        # for functions with a return type.
+        raise RuntimeError("Retry logic failed unexpectedly.")
 
     def setup_schema(self):
         """
@@ -259,7 +267,7 @@ class Neo4jGraphManager:
         RETURN c.id as claim_id
         """
 
-        def _execute_claim_creation():
+        def _execute_claim_creation() -> List[str]:
             with self.session() as session:
                 result = session.run(cypher_query, claims_data=claims_data)
                 created_ids = [record["claim_id"] for record in result]
@@ -340,7 +348,7 @@ class Neo4jGraphManager:
         RETURN s.id as sentence_id
         """
 
-        def _execute_sentence_creation():
+        def _execute_sentence_creation() -> List[str]:
             with self.session() as session:
                 result = session.run(cypher_query, sentences_data=sentences_data)
                 created_ids = [record["sentence_id"] for record in result]
@@ -384,7 +392,7 @@ class Neo4jGraphManager:
                c.version as version, c.timestamp as timestamp
         """
 
-        def _execute_get_claim():
+        def _execute_get_claim() -> Optional[Dict[str, Any]]:
             with self.session() as session:
                 result = session.run(cypher_query, claim_id=claim_id)
                 record = result.single()
@@ -438,7 +446,7 @@ class Neo4jGraphManager:
                s.rejection_reason as rejection_reason, s.version as version, s.timestamp as timestamp
         """
 
-        def _execute_get_sentence():
+        def _execute_get_sentence() -> Optional[Dict[str, Any]]:
             with self.session() as session:
                 result = session.run(cypher_query, sentence_id=sentence_id)
                 record = result.single()
@@ -490,7 +498,7 @@ class Neo4jGraphManager:
         RETURN claim_count, sentence_count, block_count
         """
 
-        def _execute_count_nodes():
+        def _execute_count_nodes() -> Dict[str, int]:
             with self.session() as session:
                 result = session.run(cypher_query)
                 record = result.single()
@@ -555,7 +563,7 @@ class Neo4jGraphManager:
             },
         )
 
-        def _execute_concept_creation():
+        def _execute_concept_creation() -> List[Concept]:
             with self.session() as session:
                 concepts = []
                 for concept_input in concept_inputs:

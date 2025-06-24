@@ -32,7 +32,7 @@ class ImportStatus:
             },
         )
 
-    def add_file(self, filename: str, file_path: str) -> None:
+    def add_file(self, filename: str, file_path: str):
         """Add a file to the import queue."""
         try:
             self.import_queue.append(
@@ -68,7 +68,7 @@ class ImportStatus:
             )
             raise
 
-    def update_file_status(self, filename: str, status: str, detector: str) -> None:
+    def update_file_status(self, filename: str, status: str, detector: str):
         """Update the status of a file in the queue."""
         try:
             for item in self.import_queue:
@@ -402,7 +402,7 @@ def clear_import_queue(import_status: ImportStatus) -> Tuple[str, str, ImportSta
         return "Error clearing queue. Please refresh the page.", "", import_status
 
 
-def create_import_interface():
+def create_import_interface() -> gr.Blocks:
     """Create the complete import interface following the documented design."""
     try:
         logger.info(
@@ -452,7 +452,9 @@ def create_import_interface():
                 )
 
             # Event handlers with error handling and state management
-            def safe_simulate_plugin_orchestrator(file_input_value, import_status):
+            def safe_simulate_plugin_orchestrator(
+                file_input_value, import_status
+            ) -> Tuple[str, str, ImportStatus]:
                 try:
                     queue_display, summary_display, updated_status = (
                         simulate_plugin_orchestrator(file_input_value, import_status)
@@ -475,7 +477,9 @@ def create_import_interface():
                         import_status,
                     )
 
-            def safe_clear_import_queue(import_status):
+            def safe_clear_import_queue(
+                import_status,
+            ) -> Tuple[str, str, ImportStatus]:
                 try:
                     queue_display, summary_display, new_status = clear_import_queue(
                         import_status
@@ -538,7 +542,7 @@ def create_import_interface():
         raise
 
 
-def create_complete_interface():
+def create_complete_interface() -> gr.Blocks:
     """Create the complete aclarai interface with multiple panels."""
     try:
         logger.info(
@@ -596,7 +600,7 @@ def create_complete_interface():
                     # Event handlers with error handling and state management
                     def safe_simulate_plugin_orchestrator(
                         file_input_value, import_status
-                    ):
+                    ) -> Tuple[str, str, ImportStatus]:
                         try:
                             queue_display, summary_display, updated_status = (
                                 simulate_plugin_orchestrator(
@@ -621,7 +625,9 @@ def create_complete_interface():
                                 import_status,
                             )
 
-                    def safe_clear_import_queue(import_status):
+                    def safe_clear_import_queue(
+                        import_status,
+                    ) -> Tuple[str, str, ImportStatus]:
                         try:
                             queue_display, summary_display, new_status = (
                                 clear_import_queue(import_status)
@@ -870,7 +876,7 @@ def create_complete_interface():
                     # Status Display
                     save_status = gr.Markdown("Ready to configure settings.")
 
-                    def save_configuration(*args):
+                    def save_configuration(*args) -> str:
                         """Save the configuration with validation."""
                         try:
                             # Unpack arguments in the same order as inputs
@@ -1009,7 +1015,26 @@ def create_complete_interface():
                             )
                             return f"❌ **Error saving configuration:** {str(e)}"
 
-                    def reload_configuration():
+                    def reload_configuration() -> Tuple[
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        str,
+                        float,
+                        float,
+                        int,
+                        int,
+                        str,
+                    ]:
                         """Reload configuration from file."""
                         try:
                             current_config = config_manager.load_config()

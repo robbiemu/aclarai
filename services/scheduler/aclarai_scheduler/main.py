@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 import time
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from aclarai_shared import load_config
 from apscheduler.executors.pool import ThreadPoolExecutor
@@ -203,7 +203,7 @@ class SchedulerService:
             # Re-raise to let APScheduler handle the error
             raise
 
-    def _run_concept_refresh_job(self):
+    def _run_concept_refresh_job(self) -> Dict[str, Any]:
         """Execute the concept embedding refresh job."""
         job_start_time = time.time()
         job_id = f"concept_refresh_{int(job_start_time)}"

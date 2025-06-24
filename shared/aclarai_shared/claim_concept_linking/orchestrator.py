@@ -14,6 +14,7 @@ from .models import (
     ClaimConceptLinkResult,
     ClaimConceptPair,
     ConceptCandidate,
+    RelationshipType,
 )
 from .neo4j_operations import ClaimConceptNeo4jManager
 
@@ -162,7 +163,9 @@ class ClaimConceptLinker:
                                 self.strength = 0.8
                                 self.reasoning = "Mock classification for testing"
 
-                            def to_relationship_type(self):
+                            def to_relationship_type(
+                                self,
+                            ) -> Optional[RelationshipType]:
                                 return RelationshipType.SUPPORTS_CONCEPT
 
                         classification = MockClassification()

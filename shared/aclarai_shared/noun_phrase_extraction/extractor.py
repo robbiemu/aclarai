@@ -52,7 +52,7 @@ class NounPhraseExtractor:
         self.neo4j_manager = Neo4jGraphManager(config)
         self.embedding_generator = EmbeddingGenerator(config)
         # Initialize spaCy model
-        self._nlp = None
+        self._nlp: Optional[spacy.language.Language] = None
         self._initialize_spacy()
         # Initialize concept candidates vector store
         self.concept_candidates_store = ConceptCandidatesVectorStore(config)
@@ -149,7 +149,7 @@ class NounPhraseExtractor:
             MATCH (c:Claim)
             RETURN c.id as id, c.text as text, 'claim' as node_type
             """
-            result = self.neo4j_manager.execute_query(query)
+            result = self.neo4j_manager.run_query(query)
             claims = []
             for record in result:
                 claims.append(
@@ -186,7 +186,7 @@ class NounPhraseExtractor:
             MATCH (s:Summary)
             RETURN s.id as id, s.text as text, 'summary' as node_type
             """
-            result = self.neo4j_manager.execute_query(query)
+            result = self.neo4j_manager.run_query(query)
             summaries = []
             for record in result:
                 summaries.append(
@@ -350,7 +350,7 @@ class NounPhraseExtractor:
             # Fallback: basic lowercase and punctuation removal
             return re.sub(r"[^\w\s]", "", phrase.lower()).strip()
 
-    def _store_candidates(self, candidates: List[NounPhraseCandidate]) -> None:
+    def _store_candidates(self, candidates: List[NounPhraseCandidate]):
         """
         Store noun phrase candidates in the concept_candidates vector table.
         Args:
@@ -392,7 +392,7 @@ class NounPhraseExtractor:
             )
             raise
 
-    def _initialize_spacy(self) -> None:
+    def _initialize_spacy(self):
         """Initialize the spaCy model."""
         if spacy is None:
             raise ImportError(

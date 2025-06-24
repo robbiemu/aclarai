@@ -8,6 +8,7 @@ for service integration.
 import logging
 from pathlib import Path
 from typing import List, Optional
+
 from aclarai_shared.config import aclaraiConfig, load_config
 from aclarai_shared.tier2_summary import Tier2SummaryAgent
 

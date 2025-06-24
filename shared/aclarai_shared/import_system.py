@@ -83,7 +83,7 @@ def is_duplicate_import(
 
 def record_import(
     file_path: Path, hash_value: str, import_log_dir: Path, output_files: List[Path]
-) -> None:
+):
     """
     Record a successful import in the import log.
     Args:
@@ -125,7 +125,7 @@ def record_import(
         # Don't raise - import succeeded even if logging failed
 
 
-def write_file_atomically(target_path: Path, content: str) -> None:
+def write_file_atomically(target_path: Path, content: str):
     """
     Write file content atomically using .tmp -> fsync -> rename pattern.
     This follows the atomic write pattern specified in the architecture docs
@@ -310,7 +310,7 @@ class Tier1ImportSystem:
         ]
         logger.info(f"Initialized Tier1ImportSystem with vault: {self.vault_path}")
 
-    def add_plugin(self, plugin: Plugin) -> None:
+    def add_plugin(self, plugin: Plugin):
         """
         Add a plugin to the registry.
         Args:

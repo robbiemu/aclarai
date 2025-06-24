@@ -316,7 +316,7 @@ class ConceptEmbeddingRefreshJob:
             # Return None to force update on error
             return None
 
-    def _update_vector_store(self, concept_name: str, embedding: List[float]) -> None:
+    def _update_vector_store(self, concept_name: str, embedding: List[float]):
         """
         Update the vector store with the new embedding for a concept.
         This is achieved by deleting existing entries and inserting the new one.
@@ -402,7 +402,7 @@ class ConceptEmbeddingRefreshJob:
             )
             raise
 
-    def _update_neo4j_metadata(self, concept_name: str, embedding_hash: str) -> None:
+    def _update_neo4j_metadata(self, concept_name: str, embedding_hash: str):
         """
         Update Neo4j concept metadata with new embedding hash and timestamp.
         Args:

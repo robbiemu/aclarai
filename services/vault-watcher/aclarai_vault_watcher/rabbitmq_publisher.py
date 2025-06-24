@@ -48,8 +48,8 @@ class DirtyBlockPublisher:
         config = aclaraiConfig()
         config.rabbitmq_host = rabbitmq_host
         config.rabbitmq_port = rabbitmq_port
-        config.rabbitmq_user = rabbitmq_user
-        config.rabbitmq_password = rabbitmq_password
+        config.rabbitmq_user = rabbitmq_user or ""
+        config.rabbitmq_password = rabbitmq_password or ""
         self.rabbitmq_manager = RabbitMQManager(config, "vault-watcher")
         logger.info(
             "vault_watcher.DirtyBlockPublisher: Initialized RabbitMQ publisher",
@@ -62,18 +62,16 @@ class DirtyBlockPublisher:
             },
         )
 
-    def connect(self) -> None:
+    def connect(self):
         """Establish connection to RabbitMQ."""
         self.rabbitmq_manager.connect()
         self.rabbitmq_manager.ensure_queue(self.queue_name, durable=True)
 
-    def disconnect(self) -> None:
+    def disconnect(self):
         """Close the RabbitMQ connection."""
         self.rabbitmq_manager.close()
 
-    def publish_dirty_blocks(
-        self, file_path: Path, dirty_blocks: Dict[str, Any]
-    ) -> None:
+    def publish_dirty_blocks(self, file_path: Path, dirty_blocks: Dict[str, Any]):
         """
         Publish dirty block notifications.
         Args:
@@ -137,7 +135,7 @@ class DirtyBlockPublisher:
             message["content_hash"] = block["content_hash"]
         return message
 
-    def _publish_message(self, message: Dict[str, Any]) -> None:
+    def _publish_message(self, message: Dict[str, Any]):
         """
         Publish a single message to RabbitMQ.
         Args:

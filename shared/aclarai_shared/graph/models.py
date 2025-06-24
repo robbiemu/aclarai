@@ -50,6 +50,8 @@ class ClaimInput:
     @property
     def id(self) -> str:
         """Alias for claim_id for backward compatibility."""
+        assert self.claim_id is not None
+
         return self.claim_id
 
 
@@ -74,6 +76,8 @@ class SentenceInput:
     @property
     def id(self) -> str:
         """Alias for sentence_id for backward compatibility."""
+        assert self.sentence_id is not None
+
         return self.sentence_id
 
 
@@ -136,6 +140,8 @@ class Claim:
     @classmethod
     def from_input(cls, claim_input: ClaimInput, version: int = 1) -> "Claim":
         """Create a Claim from ClaimInput."""
+        assert claim_input.claim_id is not None
+
         return cls(
             claim_id=claim_input.claim_id,
             text=claim_input.text,
@@ -175,6 +181,8 @@ class Sentence:
     @classmethod
     def from_input(cls, sentence_input: SentenceInput, version: int = 1) -> "Sentence":
         """Create a Sentence from SentenceInput."""
+        assert sentence_input.sentence_id is not None
+
         return cls(
             sentence_id=sentence_input.sentence_id,
             text=sentence_input.text,
@@ -219,6 +227,8 @@ class ConceptInput:
     @property
     def id(self) -> str:
         """Alias for concept_id for backward compatibility."""
+        assert self.concept_id is not None
+
         return self.concept_id
 
 
@@ -238,6 +248,8 @@ class Concept:
     @classmethod
     def from_input(cls, concept_input: ConceptInput, version: int = 1) -> "Concept":
         """Create a Concept from ConceptInput."""
+        assert concept_input.concept_id is not None
+
         return cls(
             concept_id=concept_input.concept_id,
             text=concept_input.text,

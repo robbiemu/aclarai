@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import Lock, Timer
 from typing import Callable, Optional, Set
 
-from watchdog.events import FileSystemEventHandler
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class BatchedFileWatcher:
             },
         )
 
-    def start(self) -> None:
+    def start(self):
         """Start monitoring the vault directory."""
         if self._observer is not None:
             logger.warning(
@@ -88,7 +88,7 @@ class BatchedFileWatcher:
             },
         )
 
-    def stop(self) -> None:
+    def stop(self):
         """Stop monitoring and clean up resources."""
         if self._observer is not None:
             self._observer.stop()
@@ -109,7 +109,7 @@ class BatchedFileWatcher:
             },
         )
 
-    def _add_event(self, event_type: str, file_path: Path) -> None:
+    def _add_event(self, event_type: str, file_path: Path):
         """Add an event to the pending batch."""
         with self._lock:
             # Remove from other event types (file can only have one final state)
@@ -154,19 +154,19 @@ class BatchedFileWatcher:
         if should_process:
             self._process_batch()
 
-    def _reset_timer(self) -> None:
+    def _reset_timer(self):
         """Reset the batch processing timer."""
         self._cancel_timer()
         self._batch_timer = Timer(self.batch_interval, self._process_batch)
         self._batch_timer.start()
 
-    def _cancel_timer(self) -> None:
+    def _cancel_timer(self):
         """Cancel the current batch timer if it exists."""
         if self._batch_timer is not None:
             self._batch_timer.cancel()
             self._batch_timer = None
 
-    def _process_batch(self) -> None:
+    def _process_batch(self):
         """Process the current batch of events."""
         with self._lock:
             # Capture current events and clear the pending sets
@@ -218,22 +218,22 @@ class VaultFileEventHandler(FileSystemEventHandler):
         self.watcher = watcher
         super().__init__()
 
-    def on_created(self, event) -> None:
+    def on_created(self, event: FileSystemEvent):
         """Handle file creation events."""
         if self._should_process_event(event):
-            self.watcher._add_event("created", Path(event.src_path))
+            self.watcher._add_event("created", Path(str(event.src_path)))
 
-    def on_modified(self, event) -> None:
+    def on_modified(self, event: FileSystemEvent):
         """Handle file modification events."""
         if self._should_process_event(event):
-            self.watcher._add_event("modified", Path(event.src_path))
+            self.watcher._add_event("modified", Path(str(event.src_path)))
 
-    def on_deleted(self, event) -> None:
+    def on_deleted(self, event: FileSystemEvent):
         """Handle file deletion events."""
         if self._should_process_event(event):
-            self.watcher._add_event("deleted", Path(event.src_path))
+            self.watcher._add_event("deleted", Path(str(event.src_path)))
 
-    def _should_process_event(self, event) -> bool:
+    def _should_process_event(self, event: FileSystemEvent) -> bool:
         """
         Determine if an event should be processed.
         Args:
@@ -245,7 +245,7 @@ class VaultFileEventHandler(FileSystemEventHandler):
         if event.is_directory:
             return False
         # Only process Markdown files
-        path = Path(event.src_path)
+        path = Path(str(event.src_path))
         if path.suffix.lower() != ".md":
             return False
         # Ignore temporary files and hidden files
