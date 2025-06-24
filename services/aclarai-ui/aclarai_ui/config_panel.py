@@ -254,6 +254,8 @@ def create_configuration_panel() -> gr.Blocks:
         str,
         str,
         str,
+        str,  # summary_embedding
+        str,  # fallback_embedding
         float,
         float,
         int,
@@ -293,6 +295,12 @@ def create_configuration_panel() -> gr.Blocks:
             )
             concept_embedding = embedding_config.get(
                 "concept", "text-embedding-3-small"
+            )
+            summary_embedding = embedding_config.get(
+                "summary", "sentence-transformers/all-MiniLM-L6-v2"
+            )
+            fallback_embedding = embedding_config.get(
+                "fallback", "sentence-transformers/all-mpnet-base-v2"
             )
             # Extract threshold configurations
             threshold_config = config.get("threshold", {})
@@ -334,6 +342,8 @@ def create_configuration_panel() -> gr.Blocks:
                 fallback_plugin,
                 utterance_embedding,
                 concept_embedding,
+                summary_embedding,
+                fallback_embedding,
                 concept_merge,
                 claim_link_strength,
                 window_p,
@@ -369,6 +379,8 @@ def create_configuration_panel() -> gr.Blocks:
                 "gpt-3.5-turbo",
                 "sentence-transformers/all-MiniLM-L6-v2",
                 "text-embedding-3-small",
+                "sentence-transformers/all-MiniLM-L6-v2",
+                "sentence-transformers/all-mpnet-base-v2",
                 0.90,
                 0.60,
                 3,
@@ -393,6 +405,8 @@ def create_configuration_panel() -> gr.Blocks:
         fallback_plugin: str,
         utterance_embedding: str,
         concept_embedding: str,
+        summary_embedding: str,
+        fallback_embedding: str,
         concept_merge: float,
         claim_link_strength: float,
         window_p: int,
@@ -421,6 +435,8 @@ def create_configuration_panel() -> gr.Blocks:
                 ("Fallback Plugin", fallback_plugin),
                 ("Utterance Embedding", utterance_embedding),
                 ("Concept Embedding", concept_embedding),
+                ("Summary Embedding", summary_embedding),
+                ("Fallback Embedding", fallback_embedding),
             ]
             for name, model in models_to_validate:
                 is_valid, error = validate_model_name(model)
@@ -489,6 +505,8 @@ def create_configuration_panel() -> gr.Blocks:
                 current_config["embedding"] = {}
             current_config["embedding"]["utterance"] = utterance_embedding.strip()
             current_config["embedding"]["concept"] = concept_embedding.strip()
+            current_config["embedding"]["summary"] = summary_embedding.strip()
+            current_config["embedding"]["fallback"] = fallback_embedding.strip()
             if "threshold" not in current_config:
                 current_config["threshold"] = {}
             current_config["threshold"]["concept_merge"] = concept_merge
@@ -650,13 +668,26 @@ def create_configuration_panel() -> gr.Blocks:
                         placeholder="text-embedding-3-small",
                         info="Embeddings for Tier 3 concept files",
                     )
+                with gr.Row():
+                    summary_embedding_input = gr.Textbox(
+                        label="Summary Embeddings",
+                        value=initial_values[11],
+                        placeholder="sentence-transformers/all-MiniLM-L6-v2",
+                        info="Embeddings for Tier 2 summaries",
+                    )
+                    fallback_embedding_input = gr.Textbox(
+                        label="Fallback Embeddings",
+                        value=initial_values[12],
+                        placeholder="sentence-transformers/all-mpnet-base-v2",
+                        info="Used if other embedding configs fail or for general purpose",
+                    )
         # Thresholds & Parameters Section
         with gr.Group():
             gr.Markdown("## 📏 Thresholds & Parameters")
             with gr.Row():
                 concept_merge_input = gr.Number(
                     label="Concept Merge Threshold",
-                    value=initial_values[11],
+                    value=initial_values[13],
                     minimum=0.0,
                     maximum=1.0,
                     step=0.01,
@@ -664,7 +695,7 @@ def create_configuration_panel() -> gr.Blocks:
                 )
                 claim_link_strength_input = gr.Number(
                     label="Claim Link Strength",
-                    value=initial_values[12],
+                    value=initial_values[14],
                     minimum=0.0,
                     maximum=1.0,
                     step=0.01,
@@ -676,7 +707,7 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     window_p_input = gr.Number(
                         label="Previous Sentences (p)",
-                        value=initial_values[13],
+                        value=initial_values[15],
                         minimum=0,
                         maximum=10,
                         step=1,
@@ -684,7 +715,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                     window_f_input = gr.Number(
                         label="Following Sentences (f)",
-                        value=initial_values[14],
+                        value=initial_values[16],
                         minimum=0,
                         maximum=10,
                         step=1,
@@ -704,17 +735,17 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     concept_refresh_enabled_input = gr.Checkbox(
                         label="Enabled",
-                        value=initial_values[15],
+                        value=initial_values[17],
                         info="Enable or disable this job completely",
                     )
                     concept_refresh_manual_only_input = gr.Checkbox(
                         label="Manual Only",
-                        value=initial_values[16],
+                        value=initial_values[18],
                         info="Job can only be triggered manually (not automatically scheduled)",
                     )
                 concept_refresh_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_values[17],
+                    value=initial_values[19],
                     placeholder="0 3 * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -725,17 +756,17 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     vault_sync_enabled_input = gr.Checkbox(
                         label="Enabled",
-                        value=initial_values[18],
+                        value=initial_values[20],
                         info="Enable or disable this job completely",
                     )
                     vault_sync_manual_only_input = gr.Checkbox(
                         label="Manual Only",
-                        value=initial_values[19],
+                        value=initial_values[21],
                         info="Job can only be triggered manually (not automatically scheduled)",
                     )
                 vault_sync_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_values[20],
+                    value=initial_values[22],
                     placeholder="*/30 * * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -787,6 +818,8 @@ def create_configuration_panel() -> gr.Blocks:
                 fallback_plugin_input,
                 utterance_embedding_input,
                 concept_embedding_input,
+                summary_embedding_input,
+                fallback_embedding_input,
                 concept_merge_input,
                 claim_link_strength_input,
                 window_p_input,
@@ -815,6 +848,8 @@ def create_configuration_panel() -> gr.Blocks:
                 fallback_plugin_input,
                 utterance_embedding_input,
                 concept_embedding_input,
+                summary_embedding_input,
+                fallback_embedding_input,
                 concept_merge_input,
                 claim_link_strength_input,
                 window_p_input,
