@@ -32,8 +32,8 @@ optional-dependencies = { dev = [
     "playwright>=1.48.0",
     "pytest-playwright>=0.5.2",
     "ruff>=0.11.13",
-], types-pyyaml = [
-    "types-pika>=1.2.0b1",
+    "types-pika~=1.2",
+    "types-pyyaml~=6.0.12"
 ] }
 
 [build-system]
@@ -158,3 +158,9 @@ exclude_dirs = ["tests", "*/tests", ".venv", "*/.*", "vault", "docs"]
 # Focus on medium and high severity issues
 severity = "medium"
 confidence = "medium"
+
+[dependency-groups]
+dev = [
+    "types-pika>=1.2.0b1",
+    "types-pyyaml>=6.0.12.20250516",
+]
