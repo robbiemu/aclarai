@@ -8,7 +8,9 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, IO, Optional, Union
+from typing import IO, Any, Dict, List, Optional, Union
+
+import yaml
 
 StrPath = Union[str, "os.PathLike[str]"]
 
@@ -18,17 +20,15 @@ try:
 except ImportError:
     # Fallback if python-dotenv is not available
     def load_dotenv(
-        dotenv_path: Optional[StrPath] = None,
-        stream: Optional[IO[str]] = None,
-        verbose: bool = False,
-        override: bool = False,
-        interpolate: bool = True,
-        encoding: Optional[str] = "utf-8",
-    ) -> bool:
+        dotenv_path: Optional[StrPath] = None,  # noqa: ARG001
+        stream: Optional[IO[str]] = None,  # noqa: ARG001
+        verbose: bool = False,  # noqa: ARG001
+        override: bool = False,  # noqa: ARG001
+        interpolate: bool = True,  # noqa: ARG001
+        encoding: Optional[str] = "utf-8",  # noqa: ARG001
+    ) -> bool:  # noqa: F841
         return False
 
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -178,8 +178,20 @@ class SchedulerConfig:
 
 
 @dataclass
+class LLMConfig:
+    """Configuration for LLM providers and models."""
+
+    provider: str = "openai"
+    model: str = "gpt-3.5-turbo"
+    api_key: Optional[str] = None
+
+
+@dataclass
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
+
+    # LLM configuration
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
     # Database configurations
     postgres: DatabaseConfig = field(

@@ -160,7 +160,7 @@ class VaultSyncJob:
             try:
                 file_stats = self._process_markdown_file(md_file, tier_name)
                 self._merge_stats(stats, file_stats)
-                stats["files_processed"] += 1
+                stats["files_processed"] = (stats["files_processed"] or 0) + 1
             except Exception as e:
                 logger.error(
                     f"vault_sync._process_tier_files: Error processing file {md_file}: {e}",
@@ -172,7 +172,7 @@ class VaultSyncJob:
                         "error": str(e),
                     },
                 )
-                stats["errors"] += 1
+                stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
     def _process_markdown_file(
@@ -217,7 +217,7 @@ class VaultSyncJob:
                 try:
                     block_stats = self._sync_block_with_graph(block, file_path)
                     self._merge_stats(stats, block_stats)
-                    stats["blocks_processed"] += 1
+                    stats["blocks_processed"] = (stats["blocks_processed"] or 0) + 1
                 except Exception as e:
                     logger.error(
                         f"vault_sync._process_markdown_file: Error processing block {block.get('aclarai_id', 'unknown')}: {e}",
@@ -229,7 +229,7 @@ class VaultSyncJob:
                             "error": str(e),
                         },
                     )
-                    stats["errors"] += 1
+                    stats["errors"] = (stats["errors"] or 0) + 1
         except Exception as e:
             logger.error(
                 f"vault_sync._process_markdown_file: Error reading file {file_path}: {e}",
@@ -240,7 +240,7 @@ class VaultSyncJob:
                     "error": str(e),
                 },
             )
-            stats["errors"] += 1
+            stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
     def _sync_block_with_graph(
@@ -263,7 +263,7 @@ class VaultSyncJob:
             if existing_block is None:
                 # New block - create in graph
                 self._create_block_in_graph(block, file_path)
-                stats["blocks_new"] += 1
+                stats["blocks_new"] = (stats["blocks_new"] or 0) + 1
                 logger.info(
                     "vault_sync._sync_block_with_graph: Created new block in graph",
                     extra={
@@ -281,7 +281,7 @@ class VaultSyncJob:
                 if existing_hash != new_hash:
                     # Content changed - update block
                     self._update_block_in_graph(block, existing_block, file_path)
-                    stats["blocks_updated"] += 1
+                    stats["blocks_updated"] = (stats["blocks_updated"] or 0) + 1
                     logger.info(
                         "vault_sync._sync_block_with_graph: Updated changed block in graph",
                         extra={
@@ -298,7 +298,7 @@ class VaultSyncJob:
                     )
                 else:
                     # No change
-                    stats["blocks_unchanged"] += 1
+                    stats["blocks_unchanged"] = (stats["blocks_unchanged"] or 0) + 1
                     logger.debug(
                         "vault_sync._sync_block_with_graph: Block unchanged",
                         extra={
@@ -319,7 +319,7 @@ class VaultSyncJob:
                     "error": str(e),
                 },
             )
-            stats["errors"] += 1
+            stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
     def _get_block_from_graph(self, aclarai_id: str) -> Optional[Dict[str, Any]]:
@@ -414,7 +414,7 @@ class VaultSyncJob:
             "errors",
         ]:
             if key in source:
-                target[key] = (target[key] or 0) + (source[key] or 0)
+                target[key] = (target.get(key) or 0) + (source.get(key) or 0)
 
     def close(self):
         """Clean up resources."""

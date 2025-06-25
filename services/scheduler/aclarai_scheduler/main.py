@@ -11,14 +11,14 @@ import os
 import signal
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from aclarai_shared import load_config
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from .concept_refresh import ConceptEmbeddingRefreshJob
+from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
 from .vault_sync import VaultSyncJob
 
 
@@ -92,6 +92,7 @@ class SchedulerService:
         # Register vault sync job
         vault_sync_config = self.config.scheduler.jobs.vault_sync
         if vault_sync_config.enabled and not vault_sync_config.manual_only:
+            assert self.scheduler is not None
             self.scheduler.add_job(
                 func=self._run_vault_sync_job,
                 trigger=CronTrigger.from_crontab(vault_sync_config.cron),
@@ -131,6 +132,7 @@ class SchedulerService:
                 "CONCEPT_EMBEDDING_REFRESH_CRON", concept_refresh_config.cron
             )
             if concept_refresh_enabled:
+                assert self.scheduler is not None
                 self.scheduler.add_job(
                     func=self._run_concept_refresh_job,
                     trigger=CronTrigger.from_crontab(concept_refresh_cron),
@@ -203,7 +205,7 @@ class SchedulerService:
             # Re-raise to let APScheduler handle the error
             raise
 
-    def _run_concept_refresh_job(self) -> Dict[str, Any]:
+    def _run_concept_refresh_job(self) -> JobStatsTypedDict:
         """Execute the concept embedding refresh job."""
         job_start_time = time.time()
         job_id = f"concept_refresh_{int(job_start_time)}"
@@ -246,7 +248,11 @@ class SchedulerService:
             )
             return {
                 "success": False,
-                "error": str(e),
+                "concepts_processed": 0,
+                "concepts_updated": 0,
+                "concepts_skipped": 0,
+                "errors": 1,
+                "error_details": [str(e)],
                 "duration": time.time() - job_start_time,
             }
 
@@ -272,6 +278,7 @@ class SchedulerService:
             # Set up and start scheduler
             self._setup_scheduler()
             self._register_jobs()
+            assert self.scheduler is not None
             # Check if any jobs were registered
             job_count = len(self.scheduler.get_jobs())
             if job_count == 0:

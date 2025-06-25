@@ -304,13 +304,15 @@ class aclaraiVectorStore:
                     FROM {table_name}
                 """)  # nosec B608
                 result = conn.execute(count_query)
-                total_vectors = result.fetchone()[0]
+                count_row = result.fetchone()
+                total_vectors = count_row[0] if count_row else 0
                 # Get table size
                 size_query = text("""
                     SELECT pg_size_pretty(pg_total_relation_size(:table_name))
                 """)
                 size_result = conn.execute(size_query, {"table_name": table_name})
-                size_str = size_result.fetchone()[0]
+                size_row = size_result.fetchone()
+                size_str = size_row[0] if size_row else None
                 return VectorStoreMetrics(
                     total_vectors=total_vectors,
                     successful_inserts=total_vectors,  # Approximate
@@ -337,7 +339,7 @@ class aclaraiVectorStore:
                 database=self.config.postgres.database,
                 host=self.config.postgres.host,
                 password=self.config.postgres.password,
-                port=self.config.postgres.port,
+                port=str(self.config.postgres.port),
                 user=self.config.postgres.user,
                 table_name=self.config.embedding.collection_name,
                 embed_dim=self.config.embedding.embed_dim,
@@ -409,7 +411,7 @@ class aclaraiVectorStore:
             return True
         return all(metadata.get(key) == value for key, value in filter_metadata.items())
 
-    def _parse_size_to_mb(self, size_str: str) -> Optional[float]:
+    def _parse_size_to_mb(self, size_str: Optional[str]) -> Optional[float]:
         """
         Parse PostgreSQL size string to MB.
         Args:
@@ -417,21 +419,23 @@ class aclaraiVectorStore:
         Returns:
             Size in MB or None if parsing fails
         """
+        if not size_str:
+            return None
         try:
             parts = size_str.strip().split()
             if len(parts) != 2:
                 return None
-            value, unit = parts
-            value = float(value)
+            value_str, unit = parts
+            value_float = float(value_str)
             unit = unit.upper()
             if unit == "BYTES":
-                return value / (1024 * 1024)
+                return value_float / (1024 * 1024)
             elif unit == "KB":
-                return value / 1024
+                return value_float / 1024
             elif unit == "MB":
-                return value
+                return value_float
             elif unit == "GB":
-                return value * 1024
+                return value_float * 1024
             else:
                 return None
         except (ValueError, IndexError):

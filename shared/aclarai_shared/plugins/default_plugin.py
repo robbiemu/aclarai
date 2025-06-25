@@ -18,7 +18,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from llama_index.core.llms import LLM
 from llama_index.llms.openai import OpenAI
@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 class ConversationExtractorAgent:
     """LLM-powered agent for extracting conversations from unstructured text."""
+
+    llm: Optional[LLM]
 
     def __init__(self, llm: Optional[LLM] = None):
         """Initialize the agent with an LLM instance."""
@@ -81,15 +83,28 @@ class ConversationExtractorAgent:
             yaml_config = aclaraiConfig._load_yaml_config()
             # Get model.fallback_plugin configuration following design_config_panel.md
             model_config = yaml_config.get("model", {})
+            if not isinstance(model_config, dict):
+                logger.warning("Model configuration in YAML is not a dictionary.")
+                return None
+
             fallback_model = model_config.get("fallback_plugin")
-            if fallback_model:
+
+            # Explicitly check if the retrieved value is a string.
+            if isinstance(fallback_model, str):
                 logger.debug(
                     f"Found fallback_plugin model configuration: {fallback_model}"
                 )
                 return fallback_model
-            else:
-                logger.debug("No fallback_plugin model configuration found")
-                return None
+
+            if fallback_model is not None:
+                # Log a warning if the value is present but not a string.
+                logger.warning(
+                    "Expected 'fallback_plugin' to be a string, but got "
+                    f"{type(fallback_model).__name__}"
+                )
+
+            logger.debug("No fallback_plugin model configuration found or it's invalid")
+            return None
         except Exception as e:
             logger.warning(f"Failed to load model configuration: {e}")
             return None
@@ -171,7 +186,9 @@ INPUT TEXT:
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
-                return data.get("conversations", [])
+                conversations = data.get("conversations", [])
+                if isinstance(conversations, list):
+                    return conversations
         except json.JSONDecodeError:
             pass
         # Fallback to simple extraction if JSON parsing fails
@@ -365,7 +382,7 @@ class DefaultPlugin(Plugin):
             ]
         )
         # Track used block IDs to ensure uniqueness
-        used_block_ids = set()
+        used_block_ids: Set[str] = set()
         # Add conversation messages with block IDs
         for _i, message in enumerate(conversation["messages"]):
             speaker = message["speaker"]

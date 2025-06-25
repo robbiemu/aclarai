@@ -8,7 +8,7 @@ from docs/arch/idea-neo4J-ineteraction.md.
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable, TransientError
@@ -381,7 +381,6 @@ class Neo4jGraphManager:
         self,
         query: str,
         parameters: Optional[Dict[str, Any]] = None,
-        database: Optional[str] = None,
         read_only: bool = False,
         allow_dangerous_operations: bool = False,
     ) -> List[Dict[str, Any]]:
@@ -430,18 +429,22 @@ class Neo4jGraphManager:
             with self.session() as session:
                 if read_only:
                     # Use read transaction for better performance on read queries
-                    def read_transaction(tx):
+                    def read_transaction(tx) -> List[Dict[str, Any]]:
                         result = tx.run(query, parameters)
                         return [dict(record) for record in result]
 
-                    return session.execute_read(read_transaction)
+                    return cast(
+                        List[Dict[str, Any]], session.execute_read(read_transaction)
+                    )
                 else:
                     # Use write transaction for queries that modify data
-                    def write_transaction(tx):
+                    def write_transaction(tx) -> List[Dict[str, Any]]:
                         result = tx.run(query, parameters)
                         return [dict(record) for record in result]
 
-                    return session.execute_write(write_transaction)
+                    return cast(
+                        List[Dict[str, Any]], session.execute_write(write_transaction)
+                    )
 
         try:
             results = self._retry_with_backoff(_execute_query_internal)
@@ -617,7 +620,7 @@ class Neo4jGraphManager:
         return sanitized
 
     @staticmethod
-    def build_safe_query(base_query: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
+    def build_safe_query(base_query: str, **kwargs: Any) -> Tuple[str, Dict[str, Any]]:
         """
         Helper method to build parameterized queries safely.
 

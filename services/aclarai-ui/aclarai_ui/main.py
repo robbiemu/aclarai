@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 
 import gradio as gr
 
@@ -527,7 +527,7 @@ def create_import_interface() -> gr.Blocks:
                 "action": "create_interface",
             },
         )
-        return interface
+        return cast(gr.Blocks, interface)
     except Exception as e:
         logger.error(
             "Failed to create import interface",
@@ -1182,7 +1182,7 @@ def create_complete_interface() -> gr.Blocks:
                 "action": "create_complete_interface",
             },
         )
-        return interface
+        return cast(gr.Blocks, interface)
     except Exception as e:
         logger.error(
             "Failed to create complete interface",
@@ -1194,7 +1194,7 @@ def create_complete_interface() -> gr.Blocks:
                 "error_type": type(e).__name__,
             },
         )
-        raise
+        raise  # Always raise, never return None or Any
 
 
 def main():

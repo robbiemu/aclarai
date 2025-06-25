@@ -7,10 +7,10 @@ This module implements the main NounPhraseExtractor class that:
 4. Stores them in the concept_candidates vector table
 """
 
-from dataclasses import dataclass
 import logging
 import re
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import spacy
@@ -19,16 +19,24 @@ from ..config import aclaraiConfig, load_config
 from ..embedding import EmbeddingGenerator
 from ..graph import Neo4jGraphManager
 from .concept_candidates_store import ConceptCandidatesVectorStore
-from .models import ExtractionResult, NounPhraseCandidate
+from .models import NounPhraseCandidate
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ExtractionResult:
-    is_successful: bool
-    candidates: List["NounPhraseCandidate"]
+    """Results from noun phrase extraction process."""
+
+    is_successful: bool = True
+    candidates: List[NounPhraseCandidate] = field(default_factory=list)
     error: Optional[str] = None
+    total_nodes_processed: int = 0
+    successful_extractions: int = 0
+    failed_extractions: int = 0
+    total_phrases_extracted: int = 0
+    processing_time: float = 0.0
+    model_used: Optional[str] = None
 
 
 class NounPhraseExtractor:
@@ -105,10 +113,29 @@ class NounPhraseExtractor:
             # Extract noun phrases from each node
             for node in all_nodes:
                 try:
-                    candidates = self._extract_from_node(node)
-                    result.candidates.extend(candidates)
-                    result.successful_extractions += 1
-                    result.total_phrases_extracted += len(candidates)
+                    extraction_result = self._extract_from_node(
+                        text=node.get("text", ""),
+                        source_node_id=node.get("id", ""),
+                        source_node_type=node.get("node_type", ""),
+                        aclarai_id=node.get("id", ""),  # Using node id as aclarai_id
+                    )
+                    if extraction_result.is_successful:
+                        result.candidates.extend(extraction_result.candidates)
+                        result.successful_extractions += 1
+                        result.total_phrases_extracted += len(
+                            extraction_result.candidates
+                        )
+                    else:
+                        result.failed_extractions += 1
+                        logger.warning(
+                            f"Failed to extract from node {node.get('id')}: {extraction_result.error}",
+                            extra={
+                                "service": "aclarai",
+                                "filename.function_name": "noun_phrase_extraction.NounPhraseExtractor.extract_from_all_nodes",
+                                "node_id": node.get("id"),
+                                "error": extraction_result.error,
+                            },
+                        )
                 except Exception as e:
                     logger.error(
                         f"Failed to extract noun phrases from node {node.get('id')}",
@@ -139,6 +166,7 @@ class NounPhraseExtractor:
             return result
         except Exception as e:
             result.error = str(e)
+            result.is_successful = False
             result.processing_time = time.time() - start_time
             logger.error(
                 f"Noun phrase extraction failed: {e}",

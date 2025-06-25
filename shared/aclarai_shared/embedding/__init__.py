@@ -85,7 +85,7 @@ class EmbeddingPipeline:
             EmbeddingResult with processing metrics and status
         """
         logger.info("Starting embedding pipeline for Tier 1 content")
-        errors = []
+        errors: List[str] = []
         try:
             # Step 1: Chunk the content
             logger.debug("Step 1: Chunking Tier 1 content")
@@ -175,7 +175,7 @@ class EmbeddingPipeline:
             EmbeddingResult with processing metrics and status
         """
         logger.info(f"Processing single block: {aclarai_block_id}")
-        errors = []
+        errors: List[str] = []
         try:
             # Remove existing chunks if requested
             if replace_existing:
@@ -274,7 +274,7 @@ class EmbeddingPipeline:
         Returns:
             Status dictionary with component health
         """
-        status = {"components": {}, "overall_status": "healthy"}
+        status: Dict[str, Any] = {"components": {}, "overall_status": "healthy"}
         try:
             # Check vector store
             metrics = self.vector_store.get_store_metrics()

@@ -13,7 +13,7 @@ Key Features:
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import Document, TextNode
@@ -106,7 +106,9 @@ class UtteranceChunker:
         base_chunks = self.splitter.get_nodes_from_documents([document])
         logger.debug(f"Base splitter generated {len(base_chunks)} initial chunks")
         # Step 2: Apply post-processing rules for semantic coherence
-        processed_chunks = self._apply_postprocessing_rules(base_chunks)
+        processed_chunks = self._apply_postprocessing_rules(
+            cast(List[TextNode], base_chunks)
+        )
         # Step 3: Create ChunkMetadata objects
         chunk_metadata = []
         for i, chunk_node in enumerate(processed_chunks):
@@ -114,7 +116,7 @@ class UtteranceChunker:
                 aclarai_block_id=aclarai_block_id,
                 chunk_index=i,
                 original_text=text,
-                text=chunk_node.text,
+                text=chunk_node.get_content(),
                 # Note: token_count and offsets could be added later if needed
             )
             chunk_metadata.append(metadata)
@@ -224,7 +226,7 @@ class UtteranceChunker:
         """
         if not base_chunks:
             return base_chunks
-        processed = []
+        processed: List[TextNode] = []
         i = 0
         while i < len(base_chunks):
             current_chunk = base_chunks[i]

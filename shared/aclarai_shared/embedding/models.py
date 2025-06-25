@@ -101,13 +101,13 @@ class EmbeddingGenerator:
             logger.error(f"Failed to generate embeddings: {e}")
             raise
 
-    def embed_single_chunk(self, chunk: ChunkMetadata) -> EmbeddedChunk:
+    def embed_single_chunk(self, chunk: ChunkMetadata) -> Optional[EmbeddedChunk]:
         """
         Generate embedding for a single chunk.
         Args:
             chunk: ChunkMetadata object to embed
         Returns:
-            EmbeddedChunk object with embedding
+            EmbeddedChunk object with embedding, or None if no embedding is generated
         """
         embedded_chunks = self.embed_chunks([chunk])
         return embedded_chunks[0] if embedded_chunks else None

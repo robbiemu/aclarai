@@ -7,7 +7,7 @@ candidate management.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
 from aclarai_shared import load_config
 from aclarai_shared.concept_detection import ConceptDetector
@@ -25,6 +25,34 @@ from aclarai_shared.noun_phrase_extraction.concept_candidates_store import (
 from aclarai_shared.tier3_concept import ConceptFileWriter
 
 logger = logging.getLogger(__name__)
+
+
+class ConceptActionInfo(TypedDict):
+    candidate_text: str
+    action: str  # Action taken on the candidate
+    confidence: float
+    reason: str
+    best_match: Optional[
+        Dict[str, Any]
+    ]  # Contains matched text and similarity score if available
+
+
+class MergedConceptInfo(TypedDict):
+    matched_id: Optional[str]  # ID of the concept candidate that was merged
+    matched_text: str  # Text of the matched candidate
+    similarity_score: float  # Similarity score of the match
+
+
+class UpdateCandidateStatus(TypedDict):
+    candidate_id: str  # ID of the concept candidate
+    candidate_text: str  # Text of the candidate
+    new_status: str  # New status after processing (e.g., "merged", "promoted")
+    confidence: float  # Confidence in the decision
+    reason: str  # Reason for the status change
+    merged_with_info: Optional[
+        MergedConceptInfo
+    ]  # Info if merged with another candidate
+    concept_id: Optional[str]  # ID of the created Concept node (if promoted)
 
 
 class ConceptProcessor:
@@ -159,7 +187,7 @@ class ConceptProcessor:
             }
             # Add concept action recommendations
             for result in detection_batch.results:
-                action_info = {
+                action_info: ConceptActionInfo = {
                     "candidate_text": result.candidate_text,
                     "action": result.action.value,
                     "confidence": result.confidence,
@@ -209,7 +237,7 @@ class ConceptProcessor:
         self,
         detection_batch: ConceptDetectionBatch,
         candidate_metadata_map: Dict[str, Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[UpdateCandidateStatus]:
         """
         Update the status of candidates based on detection results and create Concept nodes for promoted candidates.
         Args:
@@ -218,15 +246,17 @@ class ConceptProcessor:
         Returns:
             List of candidate updates that were applied
         """
-        updates = []
+        updates: List[UpdateCandidateStatus] = []
         promoted_concepts = []
         for result in detection_batch.results:
-            update = {
+            update: UpdateCandidateStatus = {
                 "candidate_id": result.candidate_id,
                 "candidate_text": result.candidate_text,
                 "new_status": result.action.value,
                 "confidence": result.confidence,
                 "reason": result.reason,
+                "merged_with_info": None,
+                "concept_id": None,
             }
             # Update candidate status in vector store
             metadata_updates = {

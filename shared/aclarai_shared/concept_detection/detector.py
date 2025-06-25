@@ -196,7 +196,7 @@ class ConceptDetector:
                 return []
             # Ensure embedding is a numpy array
             if not isinstance(embedding, np.ndarray):
-                embedding = np.array(embedding, dtype=np.float32)
+                embedding = np.array(embedding, dtype=np.float32).tolist()
             # Search for similar items
             labels, distances = self.index.knn_query(
                 np.array(embedding, dtype=np.float32).reshape(1, -1),

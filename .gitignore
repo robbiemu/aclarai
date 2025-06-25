@@ -240,3 +240,6 @@ demo_*.py
 project_bundle.zip
 pr-*-summary.md
 combined.md
+
+# Gemini
+GEMINI.md

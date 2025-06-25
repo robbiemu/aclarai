@@ -15,7 +15,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .config import aclaraiConfig, load_config
 from .plugin_interface import MarkdownOutput, Plugin, UnknownFormatError
@@ -73,7 +73,7 @@ def is_duplicate_import(
         return False
     try:
         with open(import_log_file, "r", encoding="utf-8") as f:
-            imported_files = json.load(f)
+            imported_files: Dict[str, Any] = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"Could not read import log {import_log_file}: {e}")
         return False
@@ -96,7 +96,7 @@ def record_import(
     # Create directory if it doesn't exist
     import_log_dir.mkdir(parents=True, exist_ok=True)
     # Read existing log or create new one
-    imported_files = {"hashes": {}, "files": {}}
+    imported_files: Dict[str, Dict] = {"hashes": {}, "files": {}}
     if import_log_file.exists():
         try:
             with open(import_log_file, "r", encoding="utf-8") as f:

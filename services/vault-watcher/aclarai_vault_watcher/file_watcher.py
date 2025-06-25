@@ -8,7 +8,7 @@ in sprint_4-Vault_file_watcher.md.
 import logging
 from pathlib import Path
 from threading import Lock, Timer
-from typing import Callable, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, Set
 
 if TYPE_CHECKING:
     from watchdog.observers.api import BaseObserver

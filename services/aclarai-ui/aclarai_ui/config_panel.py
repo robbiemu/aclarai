@@ -861,7 +861,7 @@ def create_configuration_panel() -> gr.Blocks:
                 save_status,
             ],
         )
-    return interface
+    return gr.Blocks.from_config(interface.config, interface.fns)  # type: ignore
 
 
 if __name__ == "__main__":
