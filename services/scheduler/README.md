@@ -29,7 +29,16 @@ scheduler:
 
 ### Scheduling
 
-The service uses **APScheduler** (Advanced Python Scheduler) to run jobs on cron schedules. Jobs can be paused system-wide using the `AUTOMATION_PAUSE` environment variable.
+The service uses **APScheduler** (Advanced Python Scheduler) to run jobs on cron schedules. Jobs can be paused system-wide via:
+
+1. The Review Panel's pause button in the UI
+2. Creation of a `.aclarai_pause` file in the vault root
+
+When the system is paused:
+- New jobs will not be executed
+- The pause state is checked before running any job
+- Jobs are skipped (not queued) when paused
+- Normal execution resumes once the pause is lifted
 
 ## Architecture
 
@@ -62,7 +71,7 @@ Main service class that:
 
 ## Environment Variables
 
-- `AUTOMATION_PAUSE`: Set to "true" to pause all scheduled jobs
+- `AUTOMATION_PAUSE`: (Deprecated) Use `.aclarai_pause` file or UI for pausing jobs
 - `CONCEPT_EMBEDDING_REFRESH_ENABLED`: Enable/disable concept refresh job (future)
 - `CONCEPT_EMBEDDING_REFRESH_CRON`: Override cron schedule for concept refresh
 

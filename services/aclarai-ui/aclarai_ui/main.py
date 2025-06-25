@@ -9,6 +9,7 @@ from typing import Optional, Tuple, cast
 import gradio as gr
 
 from .config import config
+from .review_panel import create_review_panel
 
 # Configure structured logging as per docs/arch/on-error-handling-and-resilience.md
 logging.basicConfig(
@@ -679,6 +680,10 @@ def create_complete_interface() -> gr.Blocks:
                             import_status_state,
                         ],
                     )
+                with gr.Tab("📊 Review", id="review_tab"):
+                    # Embed the Review Panel
+                    create_review_panel()
+
                 with gr.Tab("⚙️ Configuration", id="config_tab"):
                     # Configuration panel - directly embed the components
                     from .config_panel import (
