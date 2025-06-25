@@ -14,6 +14,7 @@ import time
 from typing import Optional
 
 from aclarai_shared import load_config
+from aclarai_shared.automation.pause_controller import is_paused
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -77,9 +78,8 @@ class SchedulerService:
 
     def _register_jobs(self):
         """Register all periodic jobs from configuration."""
-        # Get automation pause state
-        automation_pause = os.getenv("AUTOMATION_PAUSE", "false").lower() == "true"
-        if automation_pause:
+        # Check if automation is paused
+        if is_paused():
             self.logger.warning(
                 "scheduler.main._register_jobs: Automation is paused, jobs will not be registered",
                 extra={
@@ -164,6 +164,17 @@ class SchedulerService:
 
     def _run_vault_sync_job(self):
         """Execute the vault synchronization job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_vault_sync_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_vault_sync_job",
+                },
+            )
+            return
+
         job_start_time = __import__("time").time()
         job_id = f"vault_sync_{int(job_start_time)}"
         self.logger.info(
@@ -207,6 +218,25 @@ class SchedulerService:
 
     def _run_concept_refresh_job(self) -> JobStatsTypedDict:
         """Execute the concept embedding refresh job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_concept_refresh_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_refresh_job",
+                },
+            )
+            return {
+                "success": False,
+                "concepts_processed": 0,
+                "concepts_updated": 0,
+                "concepts_skipped": 0,
+                "errors": 0,
+                "error_details": ["Automation is paused"],
+                "duration": 0,
+            }
+
         job_start_time = time.time()
         job_id = f"concept_refresh_{int(job_start_time)}"
         self.logger.info(
