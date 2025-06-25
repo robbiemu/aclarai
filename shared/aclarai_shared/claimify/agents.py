@@ -45,7 +45,7 @@ class BaseClaimifyAgent:
         self.config = config or ClaimifyConfig()
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
-    def _log_decision(self, stage: str, decision: str, reasoning: str = "") -> None:
+    def _log_decision(self, stage: str, decision: str, reasoning: str = ""):
         """Log agent decisions if configured."""
         if self.config.log_decisions:
             self.logger.info(
@@ -60,7 +60,7 @@ class BaseClaimifyAgent:
 
     def _log_transformation(
         self, stage: str, original: str, transformed: str, changes: list
-    ) -> None:
+    ):
         """Log transformations if configured."""
         if self.config.log_transformations:
             self.logger.info(
@@ -74,7 +74,7 @@ class BaseClaimifyAgent:
                 },
             )
 
-    def _log_timing(self, stage: str, processing_time: float) -> None:
+    def _log_timing(self, stage: str, processing_time: float):
         """Log processing time if configured."""
         if self.config.log_timing:
             self.logger.debug(
@@ -142,6 +142,8 @@ class SelectionAgent(BaseClaimifyAgent):
         1. Identifies if the sentence contains verifiable factual information
         2. Uses JSON output format as specified in claimify_selection.yaml prompt
         """
+        assert self.llm is not None, "LLM must be initialized for this method"
+
         sentence = context.current_sentence
         context_text = self._build_context_text(context)
         # Use JSON prompt format matching claimify_selection.yaml
@@ -283,6 +285,8 @@ class DisambiguationAgent(BaseClaimifyAgent):
         2. Uses context to resolve ambiguities confidently
         3. Uses JSON output format as specified in claimify_disambiguation.yaml prompt
         """
+        assert self.llm is not None, "LLM must be initialized for this method"
+
         context_text = self._build_context_text(context)
         # Use JSON prompt format matching claimify_disambiguation.yaml
         prompt = f"""You are an expert at disambiguating text by resolving pronouns, adding missing context, and making implicit information explicit. Your goal is to rewrite sentences to be clear and self-contained while preserving their original meaning.
@@ -421,6 +425,8 @@ class DecompositionAgent(BaseClaimifyAgent):
         2. Uses JSON output format as specified in claimify_decomposition.yaml prompt
         3. Gets quality criteria evaluation from the LLM rather than hardcoding
         """
+        assert self.llm is not None, "LLM must be initialized for this method"
+
         # Use JSON prompt format matching claimify_decomposition.yaml
         prompt = f"""You are an expert at extracting atomic claims from text. Your task is to break down sentences into individual, verifiable claims that meet strict quality criteria. Each claim must be atomic (single fact), self-contained (no ambiguous references), and verifiable (factually checkable).
 Analyze the following disambiguated sentence and extract atomic claims that meet the Claimify quality criteria.

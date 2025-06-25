@@ -61,7 +61,7 @@ class Tier2MarkdownUpdater:
         Returns:
             Dictionary with update statistics
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "files_processed": 0,
             "files_updated": 0,
             "links_added": 0,
@@ -123,7 +123,7 @@ class Tier2MarkdownUpdater:
         # Get source file mapping from Neo4j
         claim_to_file = self.neo4j_manager.get_claims_source_files(claim_ids)
         # Group link results by file
-        links_by_file = {}
+        links_by_file: Dict[str, List[ClaimConceptLinkResult]] = {}
         for link in link_results:
             aclarai_id = claim_to_file.get(link.claim_id)
             if aclarai_id:
@@ -298,7 +298,7 @@ class Tier2MarkdownUpdater:
         # Pattern to match aclarai:id=... ver=N
         version_pattern = r"(aclarai:id=[^\s]+)\s+ver=(\d+)"
 
-        def increment_match(match):
+        def increment_match(match: re.Match) -> str:
             aclarai_part = match.group(1)
             current_version = int(match.group(2))
             new_version = current_version + 1

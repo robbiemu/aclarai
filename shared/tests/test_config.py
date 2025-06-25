@@ -79,6 +79,8 @@ class TestaclaraiConfig:
 
     def test_from_env_with_defaults(self):
         """Test configuration creation with default values."""
+        os.environ["POSTGRES_PASSWORD"] = "test"
+        os.environ["NEO4J_PASSWORD"] = "test"
         config = aclaraiConfig.from_env()
         assert config.postgres.host == "postgres"
         assert config.postgres.port == 5432

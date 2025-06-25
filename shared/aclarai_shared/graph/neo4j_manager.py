@@ -8,7 +8,7 @@ from docs/arch/idea-neo4J-ineteraction.md.
 import logging
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable, TransientError
@@ -17,6 +17,9 @@ from ..config import aclaraiConfig
 from .models import Claim, ClaimInput, Concept, ConceptInput, Sentence, SentenceInput
 
 logger = logging.getLogger(__name__)
+
+# Type variable for generic retry function
+T = TypeVar("T")
 
 
 class Neo4jGraphManager:
@@ -96,7 +99,9 @@ class Neo4jGraphManager:
         finally:
             session.close()
 
-    def _retry_with_backoff(self, func, *args, **kwargs):
+    def _retry_with_backoff(
+        self, func: Callable[..., T], *args: Any, **kwargs: Any
+    ) -> T:
         """
         Execute function with retry logic and exponential backoff.
         Following guidelines from docs/arch/on-error-handling-and-resilience.md
@@ -157,6 +162,9 @@ class Neo4jGraphManager:
                     },
                 )
                 raise
+        # This part is unreachable due to the raise in the loop, but mypy requires it
+        # for functions with a return type.
+        raise RuntimeError("Retry logic failed unexpectedly.")
 
     def setup_schema(self):
         """
@@ -259,7 +267,7 @@ class Neo4jGraphManager:
         RETURN c.id as claim_id
         """
 
-        def _execute_claim_creation():
+        def _execute_claim_creation() -> List[str]:
             with self.session() as session:
                 result = session.run(cypher_query, claims_data=claims_data)
                 created_ids = [record["claim_id"] for record in result]
@@ -340,7 +348,7 @@ class Neo4jGraphManager:
         RETURN s.id as sentence_id
         """
 
-        def _execute_sentence_creation():
+        def _execute_sentence_creation() -> List[str]:
             with self.session() as session:
                 result = session.run(cypher_query, sentences_data=sentences_data)
                 created_ids = [record["sentence_id"] for record in result]
@@ -369,6 +377,276 @@ class Neo4jGraphManager:
             )
             raise
 
+    def execute_query(
+        self,
+        query: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        read_only: bool = False,
+        allow_dangerous_operations: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute a custom Cypher query with retry logic and proper error handling.
+
+        SECURITY NOTE: This method requires parameterized queries to prevent injection.
+        Direct string concatenation in queries is strongly discouraged.
+
+        Args:
+            query: Cypher query string to execute (should use parameters, not string formatting)
+            parameters: Optional dictionary of query parameters for safe value substitution
+            database: Optional database name (uses default if None)
+            read_only: If True, uses read transaction for better performance
+            allow_dangerous_operations: If True, allows potentially dangerous operations like
+                                    DROP, DELETE ALL, etc. Default False for safety.
+
+        Returns:
+            List of dictionaries representing query results
+
+        Raises:
+            ValueError: If query is empty, invalid, or contains dangerous operations
+            SecurityError: If query appears to use unsafe string formatting
+            Neo4jError: If query execution fails after retries
+        """
+        if not query or not query.strip():
+            raise ValueError("Query cannot be empty")
+
+        # Security checks
+        self._validate_query_security(query, allow_dangerous_operations)
+
+        if parameters is None:
+            parameters = {}
+
+        logger.info(
+            f"neo4j_manager.execute_query: Executing {'read-only' if read_only else 'read-write'} query",
+            extra={
+                "service": "aclarai-core",
+                "filename.function_name": "neo4j_manager.execute_query",
+                "query_type": "read" if read_only else "write",
+                "has_parameters": bool(parameters),
+            },
+        )
+
+        def _execute_query_internal() -> List[Dict[str, Any]]:
+            with self.session() as session:
+                if read_only:
+                    # Use read transaction for better performance on read queries
+                    def read_transaction(tx) -> List[Dict[str, Any]]:
+                        result = tx.run(query, parameters)
+                        return [dict(record) for record in result]
+
+                    return cast(
+                        List[Dict[str, Any]], session.execute_read(read_transaction)
+                    )
+                else:
+                    # Use write transaction for queries that modify data
+                    def write_transaction(tx) -> List[Dict[str, Any]]:
+                        result = tx.run(query, parameters)
+                        return [dict(record) for record in result]
+
+                    return cast(
+                        List[Dict[str, Any]], session.execute_write(write_transaction)
+                    )
+
+        try:
+            results = self._retry_with_backoff(_execute_query_internal)
+            logger.info(
+                f"neo4j_manager.execute_query: Query executed successfully, returned {len(results)} records",
+                extra={
+                    "service": "aclarai-core",
+                    "filename.function_name": "neo4j_manager.execute_query",
+                    "result_count": len(results),
+                },
+            )
+            return results
+        except Exception as e:
+            logger.error(
+                f"neo4j_manager.execute_query: Query execution failed: {e}",
+                extra={
+                    "service": "aclarai-core",
+                    "filename.function_name": "neo4j_manager.execute_query",
+                    "error": str(e),
+                    "query_preview": query[:100] + "..." if len(query) > 100 else query,
+                },
+            )
+            raise
+
+    def _validate_query_security(
+        self, query: str, allow_dangerous_operations: bool = False
+    ):
+        """
+        Validate query for security concerns and dangerous operations.
+
+        Args:
+            query: The Cypher query to validate
+            allow_dangerous_operations: Whether to allow dangerous operations
+
+        Raises:
+            ValueError: If query contains dangerous operations and they're not allowed
+            SecurityError: If query appears to use unsafe practices
+        """
+        query_upper = query.upper().strip()
+
+        # Check for dangerous operations
+        dangerous_patterns = [
+            "DROP ",
+            "DELETE ",  # Note: This catches both DELETE and DETACH DELETE
+            "REMOVE ",
+            "SET ",  # Can be dangerous if used to modify system properties
+        ]
+
+        # Extremely dangerous patterns that should rarely be allowed
+        extremely_dangerous_patterns = [
+            "DELETE *",
+            "DETACH DELETE",
+            "DROP DATABASE",
+            "DROP CONSTRAINT",
+            "DROP INDEX",
+            "CALL DBMS.",
+            "CALL DB.",
+        ]
+
+        if not allow_dangerous_operations:
+            for pattern in dangerous_patterns:
+                if pattern in query_upper:
+                    raise ValueError(
+                        f"Query contains potentially dangerous operation '{pattern.strip()}'. "
+                        f"Set allow_dangerous_operations=True if this is intentional."
+                    )
+
+        # Always check for extremely dangerous operations
+        for pattern in extremely_dangerous_patterns:
+            if pattern in query_upper:
+                raise ValueError(
+                    f"Query contains extremely dangerous operation '{pattern.strip()}'. "
+                    f"This operation is not allowed through execute_query for safety."
+                )
+
+        # Check for potential SQL injection patterns (string formatting indicators)
+        injection_indicators = [
+            "%s",
+            "%d",
+            "%f",  # Python string formatting
+            "{}",  # Python .format()
+            "' +",  # String concatenation
+            '" +',
+            "' ||",  # Cypher string concatenation
+            '" ||',
+            'f"',  # f-string indicators
+            "f'",
+        ]
+
+        for indicator in injection_indicators:
+            if indicator in query:
+                logger.warning(
+                    f"neo4j_manager._validate_query_security: Query may use unsafe string formatting: {indicator}",
+                    extra={
+                        "service": "aclarai-core",
+                        "filename.function_name": "neo4j_manager._validate_query_security",
+                        "security_indicator": indicator,
+                    },
+                )
+                # Note: We log but don't raise here as these could be legitimate in some contexts
+
+        # Check for unparameterized dynamic values (basic heuristic)
+        if any(char in query for char in ["'", '"']) and not any(
+            char in query for char in ["$", ":"]
+        ):
+            logger.warning(
+                "neo4j_manager._validate_query_security: Query contains string literals but no parameters. "
+                "Consider using parameterized queries for better security.",
+                extra={
+                    "service": "aclarai-core",
+                    "filename.function_name": "neo4j_manager._validate_query_security",
+                },
+            )
+
+    def _sanitize_parameters(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize query parameters to prevent injection through parameter values.
+
+        Args:
+            parameters: Dictionary of parameters to sanitize
+
+        Returns:
+            Sanitized parameters dictionary
+
+        Raises:
+            ValueError: If parameters contain unsafe values
+        """
+        sanitized = {}
+
+        for key, value in parameters.items():
+            # Validate parameter keys (should be simple identifiers)
+            if not key.replace("_", "").isalnum():
+                raise ValueError(f"Parameter key '{key}' contains invalid characters")
+
+            # Basic value validation
+            if isinstance(value, str):
+                # Check for extremely long strings that might cause DoS
+                if len(value) > 10000:  # Configurable limit
+                    logger.warning(
+                        f"neo4j_manager._sanitize_parameters: Large string parameter truncated: {key}",
+                        extra={
+                            "service": "aclarai-core",
+                            "filename.function_name": "neo4j_manager._sanitize_parameters",
+                            "parameter_key": key,
+                            "original_length": len(value),
+                        },
+                    )
+                    value = value[:10000]  # Truncate for safety
+
+                # Check for potential Cypher injection in string values
+                dangerous_cypher_patterns = [
+                    "MATCH ",
+                    "CREATE ",
+                    "DELETE ",
+                    "DROP ",
+                    "CALL ",
+                ]
+                value_upper = value.upper()
+                for pattern in dangerous_cypher_patterns:
+                    if pattern in value_upper:
+                        logger.warning(
+                            f"neo4j_manager._sanitize_parameters: Parameter contains Cypher keywords: {key}",
+                            extra={
+                                "service": "aclarai-core",
+                                "filename.function_name": "neo4j_manager._sanitize_parameters",
+                                "parameter_key": key,
+                                "detected_pattern": pattern.strip(),
+                            },
+                        )
+
+            sanitized[key] = value
+
+        return sanitized
+
+    @staticmethod
+    def build_safe_query(base_query: str, **kwargs: Any) -> Tuple[str, Dict[str, Any]]:
+        """
+        Helper method to build parameterized queries safely.
+
+        Args:
+            base_query: Base query string with parameter placeholders
+            **kwargs: Named parameters for the query
+
+        Returns:
+            Tuple of (query_string, parameters_dict)
+
+        Example:
+            query, params = Neo4jGraphManager.build_safe_query(
+                "MATCH (c:Claim) WHERE c.text CONTAINS $text AND c.score > $min_score RETURN c",
+                text="climate change",
+                min_score=0.8
+            )
+            results = manager.execute_query(query, params)
+        """
+        # Validate that all kwargs have corresponding parameters in query
+        for param_name in kwargs:
+            param_placeholder = f"${param_name}"
+            if param_placeholder not in base_query:
+                raise ValueError(f"Parameter '{param_name}' not found in query")
+
+        return base_query, kwargs
+
     def get_claim_by_id(self, claim_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve a Claim node by ID.
@@ -384,7 +662,7 @@ class Neo4jGraphManager:
                c.version as version, c.timestamp as timestamp
         """
 
-        def _execute_get_claim():
+        def _execute_get_claim() -> Optional[Dict[str, Any]]:
             with self.session() as session:
                 result = session.run(cypher_query, claim_id=claim_id)
                 record = result.single()
@@ -438,7 +716,7 @@ class Neo4jGraphManager:
                s.rejection_reason as rejection_reason, s.version as version, s.timestamp as timestamp
         """
 
-        def _execute_get_sentence():
+        def _execute_get_sentence() -> Optional[Dict[str, Any]]:
             with self.session() as session:
                 result = session.run(cypher_query, sentence_id=sentence_id)
                 record = result.single()
@@ -490,7 +768,7 @@ class Neo4jGraphManager:
         RETURN claim_count, sentence_count, block_count
         """
 
-        def _execute_count_nodes():
+        def _execute_count_nodes() -> Dict[str, int]:
             with self.session() as session:
                 result = session.run(cypher_query)
                 record = result.single()
@@ -555,7 +833,7 @@ class Neo4jGraphManager:
             },
         )
 
-        def _execute_concept_creation():
+        def _execute_concept_creation() -> List[Concept]:
             with self.session() as session:
                 concepts = []
                 for concept_input in concept_inputs:

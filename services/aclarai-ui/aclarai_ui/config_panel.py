@@ -35,12 +35,12 @@ class ConfigurationManager:
         """Load configuration from YAML file with defaults merge."""
         try:
             # Load default configuration first
-            default_config = {}
+            default_config: Dict[str, Any] = {}
             if self.default_config_path.exists():
                 with open(self.default_config_path, "r") as f:
                     default_config = yaml.safe_load(f) or {}
             # Load user configuration
-            user_config = {}
+            user_config: Dict[str, Any] = {}
             if self.config_path.exists():
                 with open(self.config_path, "r") as f:
                     user_config = yaml.safe_load(f) or {}
@@ -111,9 +111,7 @@ class ConfigurationManager:
         """Deep merge user configuration over default configuration."""
         result = copy.deepcopy(default)
 
-        def _merge_recursive(
-            base_dict: Dict[str, Any], override_dict: Dict[str, Any]
-        ) -> None:
+        def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
             for key, value in override_dict.items():
                 if (
                     key in base_dict
@@ -783,7 +781,7 @@ def create_configuration_panel() -> gr.Blocks:
             )
 
         # Event handlers
-        def reload_configuration():
+        def reload_configuration() -> Tuple[Any, ...]:
             """Reload configuration from file."""
             try:
                 values = load_current_config()
@@ -863,7 +861,7 @@ def create_configuration_panel() -> gr.Blocks:
                 save_status,
             ],
         )
-    return interface
+    return gr.Blocks.from_config(interface.config, interface.fns)  # type: ignore
 
 
 if __name__ == "__main__":

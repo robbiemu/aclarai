@@ -76,8 +76,10 @@ jobs:
         .venv/bin/ruff check .
         .venv/bin/ruff format --check .
       
-    - name: Run MyPy type checking
-      run: .venv/bin/mypy . || true
+    - name: Run type checking
+      run: |
+        .venv/bin/mypy .
+        .venv/bin/check-annotations . --config-section tool.coverage.run --config-exclude-key omit
 
   security-scan:
     name: Security Scan

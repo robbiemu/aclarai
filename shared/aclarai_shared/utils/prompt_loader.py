@@ -77,6 +77,8 @@ class PromptLoader:
                         spec = importlib.util.spec_from_file_location(
                             "config", config_path
                         )
+                        if spec is None or spec.loader is None:
+                            raise ImportError(f"Could not load spec for {config_path}")
                         config_module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(config_module)
                         config = config_module.load_config(validate=False)
@@ -144,9 +146,7 @@ class PromptLoader:
 
         result = copy.deepcopy(default)
 
-        def _merge_recursive(
-            base_dict: Dict[str, Any], override_dict: Dict[str, Any]
-        ) -> None:
+        def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
             for key, value in override_dict.items():
                 if (
                     key in base_dict
@@ -183,7 +183,7 @@ class PromptLoader:
                 f"Invalid YAML in default template {template_name}: {e}"
             ) from e
         # Load user template if it exists
-        user_data = {}
+        user_data: Dict[str, Any] = {}
         if user_path:
             try:
                 with open(user_path, "r", encoding="utf-8") as f:

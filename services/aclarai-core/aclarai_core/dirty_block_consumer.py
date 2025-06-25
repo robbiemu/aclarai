@@ -6,13 +6,15 @@ from vault-watcher and updates graph nodes with proper version checking.
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Any, Dict, Optional
+
 from aclarai_shared import load_config
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.mq import RabbitMQManager
 from aclarai_shared.vault import BlockParser
+
 from .concept_processor import ConceptProcessor
 
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ class DirtyBlockConsumer:
     including proper version checking and conflict detection.
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[Any] = None):
         """Initialize the dirty block consumer."""
         self.config = config or load_config(validate=True)
         self.graph_manager = Neo4jGraphManager(self.config)
@@ -46,16 +48,16 @@ class DirtyBlockConsumer:
             },
         )
 
-    def connect(self) -> None:
+    def connect(self):
         """Establish connection to RabbitMQ."""
         self.rabbitmq_manager.connect()
         self.rabbitmq_manager.ensure_queue(self.queue_name, durable=True)
 
-    def disconnect(self) -> None:
+    def disconnect(self):
         """Close the RabbitMQ connection."""
         self.rabbitmq_manager.close()
 
-    def start_consuming(self) -> None:
+    def start_consuming(self):
         """Start consuming messages from the dirty blocks queue."""
         if not self.rabbitmq_manager.is_connected():
             self.connect()
@@ -77,7 +79,8 @@ class DirtyBlockConsumer:
             },
         )
         try:
-            channel.start_consuming()
+            while self.rabbitmq_manager.is_connected():
+                self.rabbitmq_manager.process_data_events(time_limit=1)
         except KeyboardInterrupt:
             logger.info(
                 "DirtyBlockConsumer: Stopping consumption due to interrupt",
@@ -86,10 +89,12 @@ class DirtyBlockConsumer:
                     "filename.function_name": "dirty_block_consumer.start_consuming",
                 },
             )
-            channel.stop_consuming()
+            channel.close()
             self.disconnect()
 
-    def _on_message_received(self, channel, method, properties, body) -> None:
+    def _on_message_received(
+        self, channel: Any, method: Any, _properties: Any, body: bytes
+    ):
         """
         Process a received dirty block message.
         Args:
@@ -400,7 +405,7 @@ class DirtyBlockConsumer:
                b.needs_reprocessing as needs_reprocessing
         """
 
-        def _execute_get_block():
+        def _execute_get_block() -> Optional[Dict[str, Any]]:
             with self.graph_manager.session() as session:
                 result = session.run(cypher_query, aclarai_id=aclarai_id)
                 record = result.single()
@@ -410,7 +415,7 @@ class DirtyBlockConsumer:
 
     def _create_block_in_graph(self, block: Dict[str, Any], file_path: Path):
         """Create a new block in the Neo4j graph."""
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now(timezone.utc).isoformat()
         cypher_query = """
         MERGE (b:Block {id: $aclarai_id})
         ON CREATE SET
@@ -445,7 +450,7 @@ class DirtyBlockConsumer:
         - Increment the graph version (ver = ver + 1)
         - Mark with needs_reprocessing: true
         """
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now(timezone.utc).isoformat()
         # Increment the graph version, not use the vault version
         current_graph_version = existing_block.get("version", 1)
         new_version = current_graph_version + 1

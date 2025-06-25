@@ -9,7 +9,7 @@ import hashlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple, TypedDict
 
 from aclarai_shared import load_config
 from aclarai_shared.config import aclaraiConfig
@@ -19,6 +19,16 @@ from aclarai_shared.embedding.storage import aclaraiVectorStore
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 
 logger = logging.getLogger(__name__)
+
+
+class JobStatsTypedDict(TypedDict):
+    success: bool
+    concepts_processed: int
+    concepts_updated: int
+    concepts_skipped: int
+    errors: int
+    error_details: List[str]  # List of error messages
+    duration: float
 
 
 class ConceptEmbeddingRefreshJob:
@@ -56,20 +66,15 @@ class ConceptEmbeddingRefreshJob:
         )
         self.vector_store = vector_store or aclaraiVectorStore(self.config)
 
-    def run_job(self) -> Dict[str, Any]:
-        """
-        Execute the concept embedding refresh job.
-        Returns:
-            Dictionary with job results and statistics
-        """
+    def run_job(self) -> JobStatsTypedDict:
         start_time = time.time()
-        job_stats = {
+        job_stats: JobStatsTypedDict = {
             "success": True,
             "concepts_processed": 0,
             "concepts_updated": 0,
             "concepts_skipped": 0,
             "errors": 0,
-            "error_details": [],
+            "error_details": [],  # Ensure it's initialized as a list
             "duration": 0.0,
         }
         logger.info(
@@ -291,8 +296,8 @@ class ConceptEmbeddingRefreshJob:
                     name=concept_name,
                 )
                 record = result.single()
-                if record:
-                    return record["hash"]
+                if record and record["hash"] is not None:
+                    return str(record["hash"])  # Ensure it's a string
                 else:
                     logger.debug(
                         f"concept_refresh._get_stored_embedding_hash: No concept found with name: {concept_name}",
@@ -316,7 +321,7 @@ class ConceptEmbeddingRefreshJob:
             # Return None to force update on error
             return None
 
-    def _update_vector_store(self, concept_name: str, embedding: List[float]) -> None:
+    def _update_vector_store(self, concept_name: str, embedding: List[float]):
         """
         Update the vector store with the new embedding for a concept.
         This is achieved by deleting existing entries and inserting the new one.
@@ -402,7 +407,7 @@ class ConceptEmbeddingRefreshJob:
             )
             raise
 
-    def _update_neo4j_metadata(self, concept_name: str, embedding_hash: str) -> None:
+    def _update_neo4j_metadata(self, concept_name: str, embedding_hash: str):
         """
         Update Neo4j concept metadata with new embedding hash and timestamp.
         Args:

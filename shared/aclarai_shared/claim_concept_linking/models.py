@@ -5,7 +5,7 @@ following the schema from docs/arch/on-linking_claims_to_concepts.md.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -53,7 +53,7 @@ class ClaimConceptLinkResult:
     def __post_init__(self):
         """Set classified_at if not provided."""
         if self.classified_at is None:
-            self.classified_at = datetime.utcnow()
+            self.classified_at = datetime.now(timezone.utc)
 
     def to_neo4j_properties(self) -> Dict[str, Any]:
         """Convert to Neo4j relationship properties."""
@@ -81,7 +81,7 @@ class LinkingError:
     def __post_init__(self):
         """Set timestamp if not provided."""
         if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
+            self.timestamp = datetime.now(timezone.utc)
 
 
 @dataclass

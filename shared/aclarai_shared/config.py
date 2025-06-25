@@ -8,17 +8,27 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import IO, Any, Dict, List, Optional, Union
+
+import yaml
+
+StrPath = Union[str, "os.PathLike[str]"]
+
 
 try:
     from dotenv import load_dotenv
 except ImportError:
     # Fallback if python-dotenv is not available
-    def load_dotenv(*args, **kwargs):
-        pass
+    def load_dotenv(
+        dotenv_path: Optional[StrPath] = None,  # noqa: ARG001
+        stream: Optional[IO[str]] = None,  # noqa: ARG001
+        verbose: bool = False,  # noqa: ARG001
+        override: bool = False,  # noqa: ARG001
+        interpolate: bool = True,  # noqa: ARG001
+        encoding: Optional[str] = "utf-8",  # noqa: ARG001
+    ) -> bool:  # noqa: F841
+        return False
 
-
-import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +178,21 @@ class SchedulerConfig:
 
 
 @dataclass
+class LLMConfig:
+    """Configuration for LLM providers and models."""
+
+    provider: str = "openai"
+    model: str = "gpt-3.5-turbo"
+    api_key: Optional[str] = None
+    model_params: Dict[str, Any] = field(default_factory=lambda: {})
+
+
+@dataclass
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
+
+    # LLM configuration
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
     # Database configurations
     postgres: DatabaseConfig = field(
@@ -426,7 +449,7 @@ class aclaraiConfig:
         if user_config_file is None:
             user_config_file = cls._find_user_config_file()
         # Load user configuration if it exists
-        user_config = {}
+        user_config: Dict[str, Any] = {}
         if user_config_file and Path(user_config_file).exists():
             logger.info(f"Loading YAML configuration from {user_config_file}")
             try:
@@ -503,9 +526,7 @@ class aclaraiConfig:
 
         result = copy.deepcopy(default)
 
-        def _merge_recursive(
-            base_dict: Dict[str, Any], override_dict: Dict[str, Any]
-        ) -> None:
+        def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
             for key, value in override_dict.items():
                 if (
                     key in base_dict

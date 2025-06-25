@@ -5,7 +5,7 @@ the full linking process, from fetching claims to updating Markdown files.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from ..config import aclaraiConfig, load_config
 from .agent import ClaimConceptLinkerAgent
@@ -18,6 +18,18 @@ from .models import (
 from .neo4j_operations import ClaimConceptNeo4jManager
 
 logger = logging.getLogger(__name__)
+
+
+class LinkStats(TypedDict):
+    claims_fetched: int
+    claims_processed: int
+    concepts_available: int
+    pairs_analyzed: int
+    links_created: int
+    relationships_created: int
+    files_updated: int
+    markdown_files_updated: int
+    errors: list[str]
 
 
 class ClaimConceptLinker:
@@ -103,7 +115,7 @@ class ClaimConceptLinker:
                 "strength_threshold": strength_threshold,
             },
         )
-        stats = {
+        stats: LinkStats = {
             "claims_fetched": 0,
             "claims_processed": 0,  # For test compatibility
             "concepts_available": 0,
@@ -126,7 +138,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return stats
+                return dict(stats)
             # Step 2: Fetch available concepts
             concepts = self.neo4j_manager.fetch_all_concepts()
             stats["concepts_available"] = len(concepts)
@@ -138,7 +150,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return stats
+                return dict(stats)
             # Step 3: Process claim-concept pairs
             successful_links = []
             for claim in claims:
@@ -162,7 +174,9 @@ class ClaimConceptLinker:
                                 self.strength = 0.8
                                 self.reasoning = "Mock classification for testing"
 
-                            def to_relationship_type(self):
+                            def to_relationship_type(
+                                self,
+                            ) -> Optional[RelationshipType]:
                                 return RelationshipType.SUPPORTS_CONCEPT
 
                         classification = MockClassification()
@@ -220,7 +234,7 @@ class ClaimConceptLinker:
                     "error": str(e),
                 },
             )
-        return stats
+        return dict(stats)
 
     def _find_candidate_concepts_vector(
         self, claim: Dict[str, Any], threshold: float
@@ -363,11 +377,12 @@ class ClaimConceptLinker:
             )
             return []
         try:
-            return self.vector_store.find_similar_candidates(
+            result = self.vector_store.find_similar_candidates(
                 query_text=query_text,
                 top_k=top_k,
                 similarity_threshold=similarity_threshold,
             )
+            return list(result)
         except Exception as e:
             logger.error(
                 f"Error finding candidate concepts: {e}",

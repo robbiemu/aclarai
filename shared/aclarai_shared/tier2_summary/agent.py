@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from llama_index.core.base.llms.types import CompletionResponse
 from llama_index.core.llms import LLM
 from llama_index.llms.openai import OpenAI
 
@@ -31,6 +32,8 @@ class Tier2SummaryAgent:
     3. Creates properly formatted Markdown with links back to Tier 1
     4. Writes files atomically to the vault
     """
+
+    claim_concept_manager: Optional[ClaimConceptNeo4jManager]
 
     def __init__(
         self,
@@ -80,12 +83,10 @@ class Tier2SummaryAgent:
             self.llm = llm
         else:
             # Use configured model or default
-            model_name = self.config.llm.models.get("default", "gpt-3.5-turbo")
-            self.llm = OpenAI(
-                model=model_name,
-                temperature=self.config.llm.temperature,
-                max_tokens=self.config.llm.max_tokens,
-            )
+            # Use getattr to avoid mypy error for dynamically loaded config
+            llm_config = self.config.llm
+            model_name = llm_config.model
+            self.llm = OpenAI(model=model_name, **llm_config.model_params)
         logger.info(
             "Initialized Tier2SummaryAgent",
             extra={
@@ -103,9 +104,9 @@ class Tier2SummaryAgent:
         Returns:
             True if enabled, False otherwise
         """
-        return self.config.features.get("tier2_generation", False)
+        return bool(self.config.features.get("tier2_generation", False))
 
-    def _retry_with_backoff(self, func, *args, **kwargs):
+    def _retry_with_backoff(self, func, *args, **kwargs) -> Any:
         """
         Execute function with retry logic and exponential backoff.
         Following guidelines from docs/arch/on-error-handling-and-resilience.md
@@ -287,6 +288,7 @@ class Tier2SummaryAgent:
         High-quality claims are those with good evaluation scores that can
         serve as seeds for finding semantically related content.
         """
+        assert self.neo4j_manager is not None, "Neo4j manager is not initialized"
         try:
             # Get claims with high evaluation scores
             # These serve as "seeds" for finding semantic neighborhoods
@@ -359,7 +361,10 @@ class Tier2SummaryAgent:
         3. Group the similar content into semantic neighborhoods
         4. Return groups suitable for summarization
         """
-        groups = []
+        assert self.embedding_storage is not None, (
+            "Embedding storage is not initialized"
+        )
+        groups: List[SummaryInput] = []
         processed_block_ids = set()  # Track to avoid duplicates
         for seed_claim in seed_claims[:max_groups]:  # Limit seeds to max_groups
             if len(groups) >= max_groups:
@@ -432,6 +437,7 @@ class Tier2SummaryAgent:
         Returns:
             Tuple of (claims, sentences) lists
         """
+        assert self.neo4j_manager is not None, "Neo4j manager is not initialized"
         try:
             # Get Claims that reference these blocks
             claims_query = """
@@ -443,7 +449,7 @@ class Tier2SummaryAgent:
                    b.aclarai_id as source_block_id
             """
             claims_result = self.neo4j_manager.execute_query(
-                claims_query, block_ids=block_ids
+                claims_query, parameters={"block_ids": block_ids}
             )
             claims = []
             for record in claims_result:
@@ -471,7 +477,7 @@ class Tier2SummaryAgent:
                    b.aclarai_id as source_block_id
             """
             sentences_result = self.neo4j_manager.execute_query(
-                sentences_query, block_ids=block_ids
+                sentences_query, parameters={"block_ids": block_ids}
             )
             sentences = []
             for record in sentences_result:
@@ -527,7 +533,7 @@ class Tier2SummaryAgent:
             )
 
             # Generate summary using LLM with retry logic
-            def _generate_llm_response():
+            def _generate_llm_response() -> CompletionResponse:
                 return self.llm.complete(prompt)
 
             response = self._retry_with_backoff(_generate_llm_response)
@@ -611,7 +617,9 @@ class Tier2SummaryAgent:
         try:
             # Extract claim IDs
             claim_ids = [
-                claim.get("id") for claim in summary_input.claims if claim.get("id")
+                cid
+                for claim in summary_input.claims
+                if isinstance(cid := claim.get("id"), str)
             ]
             if not claim_ids:
                 return []
@@ -737,7 +745,7 @@ class Tier2SummaryAgent:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         start_time = time.time()
-        written_files = []
+        written_files: List[Path] = []
         logger.info(
             "Starting Tier 2 summary generation process",
             extra={

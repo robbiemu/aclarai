@@ -61,9 +61,7 @@ def import_file(
         return False
 
 
-def import_directory(
-    system: Tier1ImportSystem, dir_path: Path, recursive: bool = True
-) -> None:
+def import_directory(system: Tier1ImportSystem, dir_path: Path, recursive: bool = True):
     """
     Import all files from a directory.
     Args:

@@ -57,6 +57,8 @@ def install_default_prompt(
                 config_path = current_file.parent.parent / "config.py"
                 if config_path.exists():
                     spec = importlib.util.spec_from_file_location("config", config_path)
+                    if spec is None or spec.loader is None:
+                        raise ImportError(f"Could not load spec for {config_path}")
                     config_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(config_module)
                     config = config_module.load_config(validate=False)
@@ -133,6 +135,8 @@ def install_all_default_prompts(
                 config_path = current_file.parent.parent / "config.py"
                 if config_path.exists():
                     spec = importlib.util.spec_from_file_location("config", config_path)
+                    if spec is None or spec.loader is None:
+                        raise ImportError(f"Could not load spec for {config_path}")
                     config_module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(config_module)
                     config = config_module.load_config(validate=False)
@@ -203,6 +207,8 @@ def ensure_prompt_exists(template_name: str = "conversation_extraction") -> Path
             config_path = current_file.parent.parent / "config.py"
             if config_path.exists():
                 spec = importlib.util.spec_from_file_location("config", config_path)
+                if spec is None or spec.loader is None:
+                    raise ImportError(f"Could not load spec for {config_path}")
                 config_module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(config_module)
                 config = config_module.load_config(validate=False)

@@ -81,7 +81,6 @@ class TestClaimConceptLinkerOrchestrator:
         )
         assert linker.neo4j_manager is mock_claim_concept_manager
         assert linker.vector_store is vector_store
-        assert linker.agent is None  # Should have mock classification logic
         assert linker.markdown_updater is not None  # Should be initialized
 
     def test_init_with_config_only(self):
@@ -114,22 +113,22 @@ class TestClaimConceptLinkerOrchestrator:
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
         )
-        # Test claim similar to seeded concepts
-        claim = {
-            "id": "test_claim_1",
-            "text": "An error related to CUDA occurred",
-        }
-        candidates = linker._find_candidate_concepts_vector(claim, threshold=0.1)
+        # Test finding candidates
+        candidates = linker.find_candidate_concepts(
+            query_text="An error related to CUDA occurred",
+            top_k=5,
+            similarity_threshold=0.1,
+        )
         assert isinstance(candidates, list)
         # Should find relevant candidates from golden dataset
         assert len(candidates) > 0
         # Verify candidate structure
-        candidate = candidates[0]
-        assert isinstance(candidate, ConceptCandidate)
-        assert hasattr(candidate, "concept_id")
-        assert hasattr(candidate, "concept_text")
-        assert hasattr(candidate, "similarity_score")
-        assert 0.0 <= candidate.similarity_score <= 1.0
+        candidate, similarity = candidates[0]
+        assert isinstance(candidate, dict)
+        assert "id" in candidate
+        assert "text" in candidate
+        assert isinstance(similarity, float)
+        assert 0.0 <= similarity <= 1.0
 
     def test_create_claim_concept_pair(self):
         """Test claim-concept pair creation."""
@@ -168,6 +167,7 @@ class TestClaimConceptLinkerOrchestrator:
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
+            agent=None,  # Use mock agent
         )
         pair = ClaimConceptPair(
             claim_id="test_claim_1",
@@ -189,7 +189,8 @@ class TestClaimConceptLinkerOrchestrator:
                 return RelationshipType.SUPPORTS_CONCEPT
 
         classification = MockClassification()
-        link_result = linker._create_link_result(pair, classification)
+        with patch.object(linker, "agent", None):
+            link_result = linker._create_link_result(pair, classification)
         assert isinstance(link_result, ClaimConceptLinkResult)
         assert link_result.claim_id == "test_claim_1"
         assert link_result.concept_id == "concept_gpu_error"

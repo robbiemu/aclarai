@@ -129,9 +129,7 @@ class ConceptCandidatesVectorStore:
                 logger.debug(
                     f"Generating embeddings for {len(texts_to_embed)} candidates"
                 )
-                embeddings = self.embedding_generator.generate_embeddings(
-                    texts_to_embed
-                )
+                embeddings = self.embedding_generator._embed_texts_batch(texts_to_embed)
                 for idx, embedding in zip(indices_to_embed, embeddings, strict=False):
                     candidates[idx].embedding = embedding
                     documents[idx].embedding = embedding
@@ -247,7 +245,6 @@ class ConceptCandidatesVectorStore:
         )
         try:
             # For PostgreSQL vector store, we need to update via SQL
-            from llama_index.vector_stores.postgres.base import ITEMS_TABLE
             from sqlalchemy import text
 
             # Build the update query
@@ -257,9 +254,9 @@ class ConceptCandidatesVectorStore:
             with self.engine.connect() as conn:
                 # First get the current record
                 select_stmt = text(f"""
-                    SELECT metadata FROM {ITEMS_TABLE}
+                    SELECT metadata FROM {self.vector_store.table_name}
                     WHERE metadata->>'candidate_id' = :candidate_id
-                """)  # nosec B608 - ITEMS_TABLE is a constant from LlamaIndex, not user input
+                """)  # nosec B608 - table_name is from config, not user input
                 result = conn.execute(select_stmt, {"candidate_id": candidate_id})
                 row = result.fetchone()
                 if not row:
@@ -281,10 +278,10 @@ class ConceptCandidatesVectorStore:
                 current_metadata.update(metadata_updates)
                 # Update the record
                 update_stmt = text(f"""
-                    UPDATE {ITEMS_TABLE}
+                    UPDATE {self.vector_store.table_name}
                     SET metadata = :metadata
                     WHERE metadata->>'candidate_id' = :candidate_id
-                """)  # nosec B608 - ITEMS_TABLE is a constant from LlamaIndex, not user input
+                """)  # nosec B608 - table_name is from config, not user input
                 conn.execute(
                     update_stmt,
                     {
@@ -376,7 +373,7 @@ class ConceptCandidatesVectorStore:
                 database=self.config.postgres.database,
                 host=self.config.postgres.host,
                 password=self.config.postgres.password,
-                port=self.config.postgres.port,
+                port=str(self.config.postgres.port),
                 user=self.config.postgres.user,
                 table_name=self.collection_name,
                 embed_dim=self.embed_dim,

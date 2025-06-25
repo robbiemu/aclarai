@@ -6,7 +6,7 @@ environment variables with sensible defaults.
 
 import os
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 from aclarai_shared import aclaraiConfig
 
@@ -25,7 +25,7 @@ class UIConfig:
     server_port: int = 7860
     debug_mode: bool = False
     # Shared configuration access
-    _shared_config: aclaraiConfig = None
+    _shared_config: Optional[aclaraiConfig] = None
 
     @classmethod
     def from_env(cls) -> "UIConfig":

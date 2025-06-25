@@ -7,9 +7,9 @@ through content hashing and updating graph nodes accordingly.
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from aclarai_shared import load_config
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
@@ -25,7 +25,7 @@ class VaultSyncJob:
     docs/arch/on-graph_vault_synchronization.md.
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[Any] = None):
         """Initialize vault sync job."""
         self.config = config or load_config(validate=True)
         self.graph_manager = Neo4jGraphManager(self.config)
@@ -122,9 +122,11 @@ class VaultSyncJob:
             )
             raise
 
-    def _process_tier_files(self, tier_path: Path, tier_name: str) -> Dict[str, int]:
+    def _process_tier_files(
+        self, tier_path: Path, tier_name: str
+    ) -> Dict[str, Union[int, float, None]]:
         """Process all Markdown files in a tier directory."""
-        stats = {
+        stats: Dict[str, Union[int, float, None]] = {
             "files_processed": 0,
             "blocks_processed": 0,
             "blocks_unchanged": 0,
@@ -158,7 +160,7 @@ class VaultSyncJob:
             try:
                 file_stats = self._process_markdown_file(md_file, tier_name)
                 self._merge_stats(stats, file_stats)
-                stats["files_processed"] += 1
+                stats["files_processed"] = (stats["files_processed"] or 0) + 1
             except Exception as e:
                 logger.error(
                     f"vault_sync._process_tier_files: Error processing file {md_file}: {e}",
@@ -170,12 +172,14 @@ class VaultSyncJob:
                         "error": str(e),
                     },
                 )
-                stats["errors"] += 1
+                stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
-    def _process_markdown_file(self, file_path: Path, tier_name: str) -> Dict[str, int]:
+    def _process_markdown_file(
+        self, file_path: Path, tier_name: str
+    ) -> Dict[str, Union[int, float, None]]:
         """Process a single Markdown file for aclarai:id blocks."""
-        stats = {
+        stats: Dict[str, Union[int, float, None]] = {
             "blocks_processed": 0,
             "blocks_unchanged": 0,
             "blocks_updated": 0,
@@ -213,7 +217,7 @@ class VaultSyncJob:
                 try:
                     block_stats = self._sync_block_with_graph(block, file_path)
                     self._merge_stats(stats, block_stats)
-                    stats["blocks_processed"] += 1
+                    stats["blocks_processed"] = (stats["blocks_processed"] or 0) + 1
                 except Exception as e:
                     logger.error(
                         f"vault_sync._process_markdown_file: Error processing block {block.get('aclarai_id', 'unknown')}: {e}",
@@ -225,7 +229,7 @@ class VaultSyncJob:
                             "error": str(e),
                         },
                     )
-                    stats["errors"] += 1
+                    stats["errors"] = (stats["errors"] or 0) + 1
         except Exception as e:
             logger.error(
                 f"vault_sync._process_markdown_file: Error reading file {file_path}: {e}",
@@ -236,17 +240,17 @@ class VaultSyncJob:
                     "error": str(e),
                 },
             )
-            stats["errors"] += 1
+            stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
     def _sync_block_with_graph(
         self, block: Dict[str, Any], file_path: Path
-    ) -> Dict[str, int]:
+    ) -> Dict[str, Union[int, float, None]]:
         """
         Synchronize a single block with the Neo4j graph.
         Returns stats about the sync operation.
         """
-        stats = {
+        stats: Dict[str, Union[int, float, None]] = {
             "blocks_unchanged": 0,
             "blocks_updated": 0,
             "blocks_new": 0,
@@ -259,7 +263,7 @@ class VaultSyncJob:
             if existing_block is None:
                 # New block - create in graph
                 self._create_block_in_graph(block, file_path)
-                stats["blocks_new"] += 1
+                stats["blocks_new"] = (stats["blocks_new"] or 0) + 1
                 logger.info(
                     "vault_sync._sync_block_with_graph: Created new block in graph",
                     extra={
@@ -277,7 +281,7 @@ class VaultSyncJob:
                 if existing_hash != new_hash:
                     # Content changed - update block
                     self._update_block_in_graph(block, existing_block, file_path)
-                    stats["blocks_updated"] += 1
+                    stats["blocks_updated"] = (stats["blocks_updated"] or 0) + 1
                     logger.info(
                         "vault_sync._sync_block_with_graph: Updated changed block in graph",
                         extra={
@@ -294,7 +298,7 @@ class VaultSyncJob:
                     )
                 else:
                     # No change
-                    stats["blocks_unchanged"] += 1
+                    stats["blocks_unchanged"] = (stats["blocks_unchanged"] or 0) + 1
                     logger.debug(
                         "vault_sync._sync_block_with_graph: Block unchanged",
                         extra={
@@ -315,7 +319,7 @@ class VaultSyncJob:
                     "error": str(e),
                 },
             )
-            stats["errors"] += 1
+            stats["errors"] = (stats["errors"] or 0) + 1
         return stats
 
     def _get_block_from_graph(self, aclarai_id: str) -> Optional[Dict[str, Any]]:
@@ -327,7 +331,7 @@ class VaultSyncJob:
                b.needs_reprocessing as needs_reprocessing
         """
 
-        def _execute_get_block():
+        def _execute_get_block() -> Optional[Dict[str, Any]]:
             with self.graph_manager.session() as session:
                 result = session.run(cypher_query, aclarai_id=aclarai_id)
                 record = result.single()
@@ -337,7 +341,9 @@ class VaultSyncJob:
 
     def _create_block_in_graph(self, block: Dict[str, Any], file_path: Path):
         """Create a new block in the Neo4j graph."""
-        current_time = datetime.utcnow().isoformat()
+        from datetime import timezone
+
+        current_time = datetime.now(timezone.utc).isoformat()
         cypher_query = """
         MERGE (b:Block {id: $aclarai_id})
         ON CREATE SET
@@ -367,7 +373,7 @@ class VaultSyncJob:
         self, block: Dict[str, Any], _existing_block: Dict[str, Any], file_path: Path
     ):
         """Update an existing block in the Neo4j graph."""
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now(timezone.utc).isoformat()
         new_version = block["version"]  # Use version from vault file
         cypher_query = """
         MATCH (b:Block {id: $aclarai_id})
@@ -393,7 +399,11 @@ class VaultSyncJob:
 
         self.graph_manager._retry_with_backoff(_execute_update_block)
 
-    def _merge_stats(self, target: Dict[str, int], source: Dict[str, int]):
+    def _merge_stats(
+        self,
+        target: Dict[str, Union[int, float, None]],
+        source: Dict[str, Union[int, float, None]],
+    ):
         """Merge statistics from source into target."""
         for key in [
             "files_processed",
@@ -404,7 +414,7 @@ class VaultSyncJob:
             "errors",
         ]:
             if key in source:
-                target[key] += source[key]
+                target[key] = (target.get(key) or 0) + (source.get(key) or 0)
 
     def close(self):
         """Clean up resources."""

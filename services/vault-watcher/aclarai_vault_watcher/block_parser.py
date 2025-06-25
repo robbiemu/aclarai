@@ -8,7 +8,7 @@ on-graph_vault_synchronization.md.
 import hashlib
 import re
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 
 class aclaraiBlock(NamedTuple):
@@ -196,7 +196,7 @@ class BlockParser:
 
     def compare_blocks(
         self, old_blocks: List[aclaraiBlock], new_blocks: List[aclaraiBlock]
-    ) -> Dict[str, Dict]:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Compare two sets of blocks and return the differences.
         Args:

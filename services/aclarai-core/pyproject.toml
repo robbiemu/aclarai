@@ -10,6 +10,3 @@ dependencies = [
     "aclarai-shared",
     "pika>=1.3.0"
 ]
-
-[tool.ruff]
-# Service-specific ruff config if needed, or inherits from root.

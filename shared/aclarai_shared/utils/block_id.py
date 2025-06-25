@@ -6,6 +6,7 @@ that can be used across different plugins and components.
 
 import random
 import string
+from typing import Callable
 
 
 def generate_unique_block_id(used_ids: set) -> str:
@@ -32,15 +33,15 @@ def generate_unique_block_id(used_ids: set) -> str:
     )
 
 
-def create_block_id_generator():
+def create_block_id_generator() -> Callable[[], str]:
     """
     Create a generator function for block IDs that maintains state.
     Returns:
         Generator function that yields unique block IDs
     """
-    used_ids = set()
+    used_ids: set[str] = set()
 
-    def generate():
+    def generate() -> str:
         """Generate next unique block ID."""
         block_id = generate_unique_block_id(used_ids)
         used_ids.add(block_id)

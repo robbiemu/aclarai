@@ -136,42 +136,44 @@ The version has been incremented to trigger an update.
 
         # Create and configure the consumer
         config = load_config(validate=True)
-        with patch.object(config, "vault_path", str(temp_vault_path)):
-            with patch.object(config.vault_watcher, "queue_name", queue_name):
-                consumer = DirtyBlockConsumer(config=config)
+        with (
+            patch.object(config, "vault_path", str(temp_vault_path)),
+            patch.object(config.vault_watcher, "queue_name", queue_name),
+        ):
+            consumer = DirtyBlockConsumer(config=config)
 
-                # Track if message was processed
-                processed = threading.Event()
-                original_process_message = consumer.process_message
+            # Track if message was processed
+            processed = threading.Event()
+            original_process_message = consumer.process_message
 
-                def mock_process_message(*args, **kwargs):
-                    try:
-                        result = original_process_message(*args, **kwargs)
-                        processed.set()
-                        return result
-                    except Exception as e:
-                        processed.set()
-                        raise e
+            def mock_process_message(*args, **kwargs):
+                try:
+                    result = original_process_message(*args, **kwargs)
+                    processed.set()
+                    return result
+                except Exception as e:
+                    processed.set()
+                    raise e
 
-                consumer.process_message = mock_process_message
+            consumer.process_message = mock_process_message
 
-                # Start consumer in a separate thread
-                consumer_thread = threading.Thread(target=consumer.start_consuming)
-                consumer_thread.daemon = True
-                consumer_thread.start()
+            # Start consumer in a separate thread
+            consumer_thread = threading.Thread(target=consumer.start_consuming)
+            consumer_thread.daemon = True
+            consumer_thread.start()
 
-                # Wait for message to be processed (timeout after 10 seconds)
-                if not processed.wait(timeout=10):
-                    pytest.fail("Message was not processed within timeout")
+            # Wait for message to be processed (timeout after 10 seconds)
+            if not processed.wait(timeout=10):
+                pytest.fail("Message was not processed within timeout")
 
-                # Stop the consumer
-                consumer.stop_consuming()
-                consumer_thread.join(timeout=5)
+            # Stop the consumer
+            consumer.stop_consuming()
+            consumer_thread.join(timeout=5)
 
         # Verify the block was updated in Neo4j
         with integration_neo4j_manager.session() as session:
             result = session.run("""
-                MATCH (b:Block {id: 'test_consumer_block_001'}) 
+                MATCH (b:Block {id: 'test_consumer_block_001'})
                 RETURN b.version as version, b.hash as hash, b.content as content
             """)
             record = result.single()
@@ -230,39 +232,41 @@ The version has been incremented to trigger an update.
 
         # Process the message
         config = load_config(validate=True)
-        with patch.object(config, "vault_path", str(temp_vault_path)):
-            with patch.object(config.vault_watcher, "queue_name", queue_name):
-                consumer = DirtyBlockConsumer(config=config)
+        with (
+            patch.object(config, "vault_path", str(temp_vault_path)),
+            patch.object(config.vault_watcher, "queue_name", queue_name),
+        ):
+            consumer = DirtyBlockConsumer(config=config)
 
-                # Process one message and then stop
-                processed = threading.Event()
-                original_process_message = consumer.process_message
+            # Process one message and then stop
+            processed = threading.Event()
+            original_process_message = consumer.process_message
 
-                def mock_process_message(*args, **kwargs):
-                    try:
-                        result = original_process_message(*args, **kwargs)
-                        processed.set()
-                        return result
-                    except Exception as e:
-                        processed.set()
-                        raise e
+            def mock_process_message(*args, **kwargs):
+                try:
+                    result = original_process_message(*args, **kwargs)
+                    processed.set()
+                    return result
+                except Exception as e:
+                    processed.set()
+                    raise e
 
-                consumer.process_message = mock_process_message
+            consumer.process_message = mock_process_message
 
-                consumer_thread = threading.Thread(target=consumer.start_consuming)
-                consumer_thread.daemon = True
-                consumer_thread.start()
+            consumer_thread = threading.Thread(target=consumer.start_consuming)
+            consumer_thread.daemon = True
+            consumer_thread.start()
 
-                if not processed.wait(timeout=10):
-                    pytest.fail("Message was not processed within timeout")
+            if not processed.wait(timeout=10):
+                pytest.fail("Message was not processed within timeout")
 
-                consumer.stop_consuming()
-                consumer_thread.join(timeout=5)
+            consumer.stop_consuming()
+            consumer_thread.join(timeout=5)
 
         # Verify the block was NOT updated (version conflict)
         with integration_neo4j_manager.session() as session:
             result = session.run("""
-                MATCH (b:Block {id: 'test_consumer_block_002'}) 
+                MATCH (b:Block {id: 'test_consumer_block_002'})
                 RETURN b.version as version, b.hash as hash, b.content as content
             """)
             record = result.single()
@@ -308,38 +312,40 @@ The version has been incremented to trigger an update.
 
         # Process the message
         config = load_config(validate=True)
-        with patch.object(config, "vault_path", str(temp_vault_path)):
-            with patch.object(config.vault_watcher, "queue_name", queue_name):
-                consumer = DirtyBlockConsumer(config=config)
+        with (
+            patch.object(config, "vault_path", str(temp_vault_path)),
+            patch.object(config.vault_watcher, "queue_name", queue_name),
+        ):
+            consumer = DirtyBlockConsumer(config=config)
 
-                processed = threading.Event()
-                original_process_message = consumer.process_message
+            processed = threading.Event()
+            original_process_message = consumer.process_message
 
-                def mock_process_message(*args, **kwargs):
-                    try:
-                        result = original_process_message(*args, **kwargs)
-                        processed.set()
-                        return result
-                    except Exception as e:
-                        processed.set()
-                        raise e
+            def mock_process_message(*args, **kwargs):
+                try:
+                    result = original_process_message(*args, **kwargs)
+                    processed.set()
+                    return result
+                except Exception as e:
+                    processed.set()
+                    raise e
 
-                consumer.process_message = mock_process_message
+            consumer.process_message = mock_process_message
 
-                consumer_thread = threading.Thread(target=consumer.start_consuming)
-                consumer_thread.daemon = True
-                consumer_thread.start()
+            consumer_thread = threading.Thread(target=consumer.start_consuming)
+            consumer_thread.daemon = True
+            consumer_thread.start()
 
-                if not processed.wait(timeout=10):
-                    pytest.fail("Message was not processed within timeout")
+            if not processed.wait(timeout=10):
+                pytest.fail("Message was not processed within timeout")
 
-                consumer.stop_consuming()
-                consumer_thread.join(timeout=5)
+            consumer.stop_consuming()
+            consumer_thread.join(timeout=5)
 
         # Verify the new block was created
         with integration_neo4j_manager.session() as session:
             result = session.run("""
-                MATCH (b:Block {id: 'test_consumer_block_003'}) 
+                MATCH (b:Block {id: 'test_consumer_block_003'})
                 RETURN b.version as version, b.hash as hash, b.aclarai_id as aclarai_id
             """)
             record = result.single()

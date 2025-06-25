@@ -221,9 +221,16 @@ class TestNounPhraseExtractor:
             "text": "This claim discusses machine learning techniques.",
             "node_type": "claim",
         }
-        candidates = extractor._extract_from_node(node)
-        assert len(candidates) == 1
-        candidate = candidates[0]
+        extraction_result = extractor._extract_from_node(
+            text=node["text"],
+            source_node_id=node["id"],
+            source_node_type=node["node_type"],
+            aclarai_id=node[
+                "id"
+            ],  # Assuming aclarai_id is the same as node id for this test
+        )
+        assert len(extraction_result.candidates) == 1
+        candidate = extraction_result.candidates[0]
         assert candidate.text == "machine learning"
         assert candidate.normalized_text == "machine learning"
         assert candidate.source_node_id == "claim_123"

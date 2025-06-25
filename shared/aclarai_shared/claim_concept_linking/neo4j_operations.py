@@ -348,7 +348,7 @@ class ClaimConceptNeo4jManager:
             ORDER BY c.id, r.strength DESC
             """
             result = self.neo4j_manager.execute_query(query, {"claim_ids": claim_ids})
-            concepts_mapping = {}
+            concepts_mapping: Dict[str, List[Dict[str, Any]]] = {}
             for record in result:
                 claim_id = record["claim_id"]
                 if claim_id not in concepts_mapping:

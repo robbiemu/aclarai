@@ -10,6 +10,7 @@ This module implements the main NounPhraseExtractor class that:
 import logging
 import re
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import spacy
@@ -18,9 +19,24 @@ from ..config import aclaraiConfig, load_config
 from ..embedding import EmbeddingGenerator
 from ..graph import Neo4jGraphManager
 from .concept_candidates_store import ConceptCandidatesVectorStore
-from .models import ExtractionResult, NounPhraseCandidate
+from .models import NounPhraseCandidate
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExtractionResult:
+    """Results from noun phrase extraction process."""
+
+    is_successful: bool = True
+    candidates: List[NounPhraseCandidate] = field(default_factory=list)
+    error: Optional[str] = None
+    total_nodes_processed: int = 0
+    successful_extractions: int = 0
+    failed_extractions: int = 0
+    total_phrases_extracted: int = 0
+    processing_time: float = 0.0
+    model_used: Optional[str] = None
 
 
 class NounPhraseExtractor:
@@ -52,7 +68,7 @@ class NounPhraseExtractor:
         self.neo4j_manager = Neo4jGraphManager(config)
         self.embedding_generator = EmbeddingGenerator(config)
         # Initialize spaCy model
-        self._nlp = None
+        self._nlp: Optional[spacy.language.Language] = None
         self._initialize_spacy()
         # Initialize concept candidates vector store
         self.concept_candidates_store = ConceptCandidatesVectorStore(config)
@@ -97,10 +113,29 @@ class NounPhraseExtractor:
             # Extract noun phrases from each node
             for node in all_nodes:
                 try:
-                    candidates = self._extract_from_node(node)
-                    result.candidates.extend(candidates)
-                    result.successful_extractions += 1
-                    result.total_phrases_extracted += len(candidates)
+                    extraction_result = self._extract_from_node(
+                        text=node.get("text", ""),
+                        source_node_id=node.get("id", ""),
+                        source_node_type=node.get("node_type", ""),
+                        aclarai_id=node.get("id", ""),  # Using node id as aclarai_id
+                    )
+                    if extraction_result.is_successful:
+                        result.candidates.extend(extraction_result.candidates)
+                        result.successful_extractions += 1
+                        result.total_phrases_extracted += len(
+                            extraction_result.candidates
+                        )
+                    else:
+                        result.failed_extractions += 1
+                        logger.warning(
+                            f"Failed to extract from node {node.get('id')}: {extraction_result.error}",
+                            extra={
+                                "service": "aclarai",
+                                "filename.function_name": "noun_phrase_extraction.NounPhraseExtractor.extract_from_all_nodes",
+                                "node_id": node.get("id"),
+                                "error": extraction_result.error,
+                            },
+                        )
                 except Exception as e:
                     logger.error(
                         f"Failed to extract noun phrases from node {node.get('id')}",
@@ -131,6 +166,7 @@ class NounPhraseExtractor:
             return result
         except Exception as e:
             result.error = str(e)
+            result.is_successful = False
             result.processing_time = time.time() - start_time
             logger.error(
                 f"Noun phrase extraction failed: {e}",
@@ -216,29 +252,35 @@ class NounPhraseExtractor:
             )
             return []
 
-    def _extract_from_node(self, node: Dict[str, Any]) -> List[NounPhraseCandidate]:
+    def _extract_from_node(
+        self, text: str, source_node_id: str, source_node_type: str, aclarai_id: str
+    ) -> ExtractionResult:
         """
         Extract noun phrases from a single node (Claim or Summary).
+
         Args:
-            node: Dictionary containing node data (id, text, node_type)
+            text: Text content of the node
+            source_node_id: ID of the node
+            source_node_type: Type of the node ("claim" or "summary")
+            aclarai_id: ID for traceability
         Returns:
-            List of NounPhraseCandidate objects
+            ExtractionResult object containing success status, candidates, and error if applicable.
         """
-        text = node.get("text", "")
-        node_id = node.get("id", "")
-        node_type = node.get("node_type", "unknown")
-        if not text or not node_id:
+        if not text or not source_node_id:
+            error_msg = f"Skipping node with missing text or ID: {source_node_id}"
             logger.warning(
-                f"Skipping node with missing text or ID: {node_id}",
+                error_msg,
                 extra={
                     "service": "aclarai",
                     "filename.function_name": "noun_phrase_extraction.NounPhraseExtractor._extract_from_node",
-                    "node_id": node_id,
+                    "node_id": source_node_id,
                 },
             )
-            return []
+            return ExtractionResult(is_successful=False, candidates=[], error=error_msg)
+
         # Extract noun phrases using spaCy
         noun_phrases = self._extract_noun_phrases(text)
+
         # Create candidates with normalization
         candidates = []
         for phrase in noun_phrases:
@@ -249,23 +291,25 @@ class NounPhraseExtractor:
             candidate = NounPhraseCandidate(
                 text=phrase,
                 normalized_text=normalized,
-                source_node_id=node_id,
-                source_node_type=node_type,
-                aclarai_id=node_id,  # Use node_id as aclarai:id for traceability
+                source_node_id=source_node_id,
+                source_node_type=source_node_type,
+                aclarai_id=aclarai_id,  # Use node_id as aclarai:id for traceability
                 status="pending",
             )
             candidates.append(candidate)
+
         logger.debug(
-            f"Extracted {len(candidates)} noun phrases from {node_type} {node_id}",
+            f"Extracted {len(candidates)} noun phrases from {source_node_type} {source_node_id}",
             extra={
                 "service": "aclarai",
                 "filename.function_name": "noun_phrase_extraction.NounPhraseExtractor._extract_from_node",
-                "node_id": node_id,
-                "node_type": node_type,
+                "node_id": source_node_id,
+                "node_type": source_node_type,
                 "phrases_count": len(candidates),
             },
         )
-        return candidates
+
+        return ExtractionResult(is_successful=True, candidates=candidates, error=None)
 
     def _extract_noun_phrases(self, text: str) -> List[str]:
         """
@@ -350,7 +394,7 @@ class NounPhraseExtractor:
             # Fallback: basic lowercase and punctuation removal
             return re.sub(r"[^\w\s]", "", phrase.lower()).strip()
 
-    def _store_candidates(self, candidates: List[NounPhraseCandidate]) -> None:
+    def _store_candidates(self, candidates: List[NounPhraseCandidate]):
         """
         Store noun phrase candidates in the concept_candidates vector table.
         Args:
@@ -392,7 +436,7 @@ class NounPhraseExtractor:
             )
             raise
 
-    def _initialize_spacy(self) -> None:
+    def _initialize_spacy(self):
         """Initialize the spaCy model."""
         if spacy is None:
             raise ImportError(
