@@ -123,7 +123,7 @@ class TestConceptProcessor:
             processing_time=0.5,
         )
         # Configure mocks
-        concept_processor.noun_phrase_extractor.extract_from_text.return_value = (
+        concept_processor.noun_phrase_extractor._extract_from_node.return_value = (
             mock_extraction_result
         )
         concept_processor.candidates_store.store_candidates.return_value = 2
@@ -154,7 +154,7 @@ class TestConceptProcessor:
             successful_extractions=0,
             total_phrases_extracted=0,
         )
-        concept_processor.noun_phrase_extractor.extract_from_text.return_value = (
+        concept_processor.noun_phrase_extractor._extract_from_node.return_value = (
             mock_extraction_result
         )
         # Execute the method
@@ -178,7 +178,7 @@ class TestConceptProcessor:
             failed_extractions=1,
             error="Extraction failed",
         )
-        concept_processor.noun_phrase_extractor.extract_from_text.return_value = (
+        concept_processor.noun_phrase_extractor._extract_from_node.return_value = (
             mock_extraction_result
         )
         # Execute the method
@@ -193,7 +193,7 @@ class TestConceptProcessor:
     ):
         """Test exception handling during processing."""
         # Mock exception during extraction
-        concept_processor.noun_phrase_extractor.extract_from_text.side_effect = (
+        concept_processor.noun_phrase_extractor._extract_from_node.side_effect = (
             Exception("Test error")
         )
         # Execute the method

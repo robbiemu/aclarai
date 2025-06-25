@@ -86,7 +86,7 @@ class Tier2SummaryAgent:
             # Use getattr to avoid mypy error for dynamically loaded config
             llm_config = self.config.llm
             model_name = llm_config.model
-            self.llm = OpenAI(model=model_name)
+            self.llm = OpenAI(model=model_name, **llm_config.model_params)
         logger.info(
             "Initialized Tier2SummaryAgent",
             extra={

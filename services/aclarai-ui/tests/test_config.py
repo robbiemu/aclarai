@@ -7,7 +7,6 @@ from pathlib import Path
 # Add the service directory to the path for testing
 service_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(service_dir))
-# ruff: noqa: E402
 from aclarai_ui.config import UIConfig
 
 
@@ -29,13 +28,13 @@ class TestUIConfig:
         """Test configuration from environment with default values."""
         # Clear any existing environment variables
         env_vars = [
-            "aclarai_TIER1_PATH",
-            "aclarai_SUMMARIES_PATH",
-            "aclarai_CONCEPTS_PATH",
-            "aclarai_LOGS_PATH",
-            "aclarai_UI_HOST",
-            "aclarai_UI_PORT",
-            "aclarai_UI_DEBUG",
+            "ACLARAI_TIER1_PATH",
+            "ACLARAI_SUMMARIES_PATH",
+            "ACLARAI_CONCEPTS_PATH",
+            "ACLARAI_LOGS_PATH",
+            "ACLARAI_UI_HOST",
+            "ACLARAI_UI_PORT",
+            "ACLARAI_UI_DEBUG",
         ]
         for var in env_vars:
             if var in os.environ:
@@ -71,13 +70,13 @@ class TestUIConfig:
         finally:
             # Clean up environment variables
             for var in [
-                "aclarai_TIER1_PATH",
-                "aclarai_SUMMARIES_PATH",
-                "aclarai_CONCEPTS_PATH",
-                "aclarai_LOGS_PATH",
-                "aclarai_UI_HOST",
-                "aclarai_UI_PORT",
-                "aclarai_UI_DEBUG",
+                "ACLARAI_TIER1_PATH",
+                "ACLARAI_SUMMARIES_PATH",
+                "ACLARAI_CONCEPTS_PATH",
+                "ACLARAI_LOGS_PATH",
+                "ACLARAI_UI_HOST",
+                "ACLARAI_UI_PORT",
+                "ACLARAI_UI_DEBUG",
             ]:
                 if var in os.environ:
                     del os.environ[var]

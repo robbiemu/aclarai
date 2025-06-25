@@ -202,9 +202,8 @@ class TestTier2SummaryAgent:
         config = Mock(spec=aclaraiConfig)
         # Create nested mock structure for llm and paths
         config.llm = Mock()
-        config.llm.models = {"default": "gpt-3.5-turbo"}
-        config.llm.temperature = 0.1
-        config.llm.max_tokens = 1000
+        config.llm.model = "gpt-3.5-turbo"
+        config.llm.model_params = {"temperature": 0.1, "max_tokens": 1000}
         config.paths = Mock()
         config.paths.vault = "/test/vault"
         config.paths.tier2 = "summaries"
@@ -274,15 +273,15 @@ class TestTier2SummaryAgent:
             "aclarai_shared.tier2_summary.agent.aclaraiConfig"
         ) as mock_config_class:
             mock_config = Mock()
-            mock_config.llm.models = {"default": "gpt-3.5-turbo"}
-            mock_config.llm.temperature = 0.1
-            mock_config.llm.max_tokens = 1000
+            mock_config.llm.model = "gpt-3.5-turbo"
+            mock_config.llm.model_params = {"temperature": 0.1, "max_tokens": 1000}
             mock_config_class.return_value = mock_config
             with patch("aclarai_shared.tier2_summary.agent.OpenAI") as mock_openai:
                 mock_llm = Mock()
                 mock_openai.return_value = mock_llm
                 agent = Tier2SummaryAgent()
                 assert agent.config == mock_config
+                print(mock_openai.call_args)
                 mock_openai.assert_called_once_with(
                     model="gpt-3.5-turbo", temperature=0.1, max_tokens=1000
                 )
@@ -591,9 +590,8 @@ class TestTier2SummaryAgent:
             "aclarai_shared.tier2_summary.agent.aclaraiConfig"
         ) as mock_config_class:
             mock_config = Mock()
-            mock_config.llm.models = {"default": "gpt-3.5-turbo"}
-            mock_config.llm.temperature = 0.1
-            mock_config.llm.max_tokens = 1000
+            mock_config.llm.model = "gpt-3.5-turbo"
+            mock_config.llm.model_params = {}
             mock_config.features = {"tier2_generation": True}
             mock_config_class.return_value = mock_config
             with patch("aclarai_shared.tier2_summary.agent.OpenAI") as mock_openai:
@@ -624,9 +622,8 @@ class TestTier2SummaryAgent:
             "aclarai_shared.tier2_summary.agent.aclaraiConfig"
         ) as mock_config_class:
             mock_config = Mock()
-            mock_config.llm.models = {"default": "gpt-3.5-turbo"}
-            mock_config.llm.temperature = 0.1
-            mock_config.llm.max_tokens = 1000
+            mock_config.llm.model = "gpt-3.5-turbo"
+            mock_config.llm.model_params = {}
             mock_config.features = {"tier2_generation": True}
             mock_config_class.return_value = mock_config
             with patch("aclarai_shared.tier2_summary.agent.OpenAI") as mock_openai:
@@ -656,9 +653,8 @@ class TestAtomicFileWriting:
                 "aclarai_shared.tier2_summary.agent.aclaraiConfig"
             ) as mock_config_class:
                 mock_config = Mock()
-                mock_config.llm.models = {"default": "gpt-3.5-turbo"}
-                mock_config.llm.temperature = 0.1
-                mock_config.llm.max_tokens = 1000
+                mock_config.llm.model = "gpt-3.5-turbo"
+                mock_config.llm.model_params = {}
                 mock_config_class.return_value = mock_config
                 with patch("aclarai_shared.tier2_summary.agent.OpenAI") as mock_openai:
                     mock_llm = Mock()
