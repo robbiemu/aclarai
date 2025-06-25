@@ -79,7 +79,8 @@ class DirtyBlockConsumer:
             },
         )
         try:
-            channel.start_consuming()
+            while self.rabbitmq_manager.is_connected():
+                self.rabbitmq_manager.process_data_events(time_limit=1)
         except KeyboardInterrupt:
             logger.info(
                 "DirtyBlockConsumer: Stopping consumption due to interrupt",
@@ -88,7 +89,7 @@ class DirtyBlockConsumer:
                     "filename.function_name": "dirty_block_consumer.start_consuming",
                 },
             )
-            channel.stop_consuming()
+            channel.close()
             self.disconnect()
 
     def _on_message_received(

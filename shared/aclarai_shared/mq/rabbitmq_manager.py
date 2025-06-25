@@ -37,7 +37,9 @@ class RabbitMQManager:
         self.rabbitmq_user = getattr(self.config, "rabbitmq_user", None)
         self.rabbitmq_password = getattr(self.config, "rabbitmq_password", None)
         self._connection: Optional[pika.BlockingConnection] = None
-        self._channel: Optional[pika.channel.Channel] = None
+        self._channel: Optional[pika.adapters.blocking_connection.BlockingChannel] = (
+            None
+        )
         logger.info(
             f"{self.service_name}.RabbitMQManager: Initialized RabbitMQ manager",
             extra={
@@ -88,7 +90,7 @@ class RabbitMQManager:
             )
             raise
 
-    def get_channel(self) -> pika.channel.Channel:
+    def get_channel(self) -> pika.adapters.blocking_connection.BlockingChannel:
         """
         Get an active RabbitMQ channel.
         Automatically connects if not already connected or if connection is closed.
@@ -97,6 +99,7 @@ class RabbitMQManager:
         """
         if not self.is_connected():
             self.connect()
+        assert self._channel is not None, "RabbitMQ channel is not initialized"
         return self._channel
 
     def ensure_queue(self, queue_name: str, durable: bool = True):
@@ -140,3 +143,23 @@ class RabbitMQManager:
             and self._channel is not None
             and self._channel.is_open
         )
+
+    def process_data_events(self, time_limit: int = 1):
+        """
+        Process data events for a given time limit.
+        This is useful for consumers to allow processing of messages.
+        Args:
+            time_limit: The maximum time to block waiting for events.
+        """
+        if self.is_connected() and self._connection:
+            try:
+                self._connection.process_data_events(time_limit=time_limit)
+            except Exception as e:
+                logger.error(
+                    f"{self.service_name}.RabbitMQManager: Error processing data events: {e}",
+                    extra={
+                        "service": self.service_name,
+                        "filename.function_name": "rabbitmq_manager.process_data_events",
+                        "error": str(e),
+                    },
+                )
