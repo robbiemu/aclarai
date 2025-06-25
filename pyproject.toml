@@ -32,7 +32,9 @@ optional-dependencies = { dev = [
     "playwright>=1.48.0",
     "pytest-playwright>=0.5.2",
     "ruff>=0.11.13",
-]}
+], types-pyyaml = [
+    "types-pika>=1.2.0b1",
+] }
 
 [build-system]
 requires = ["hatchling"]
