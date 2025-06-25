@@ -9,19 +9,18 @@ in the aclarai system. The state is determined by the presence/absence of a
 import logging
 from pathlib import Path
 
+from aclarai_shared.config import load_config
+
 logger = logging.getLogger(__name__)
 
 PAUSE_FILE = ".aclarai_pause"
 
 
 def get_pause_file_path() -> Path:
-    """Get the absolute path to the pause file."""
-    # TODO: In the future, this could be read from config, but for MVP it's hardcoded
-    import os
-    from pathlib import Path
-
-    # For MVP, we'll use the current directory
-    return Path(os.getcwd()) / PAUSE_FILE
+    """Get the absolute path to the pause file in the vault root."""
+    config = load_config(validate=False)  # validate=False is safe here
+    vault_root = Path(config.vault_path)
+    return vault_root / PAUSE_FILE
 
 
 def is_paused() -> bool:
