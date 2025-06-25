@@ -184,9 +184,7 @@ class LLMConfig:
     provider: str = "openai"
     model: str = "gpt-3.5-turbo"
     api_key: Optional[str] = None
-    model_params: Dict[str, Any] = field(
-        default_factory=lambda: {}
-    )
+    model_params: Dict[str, Any] = field(default_factory=lambda: {})
 
 
 @dataclass

@@ -215,7 +215,7 @@ class TestConceptProcessorTier3Integration:
             mock_concept_file_writer_instance.write_concept_file.assert_not_called()
             # Verify updates don't include concept_id for merged concepts
             assert len(updates) == 1
-            assert updates[0]["concept_id"] == None
+            assert updates[0]["concept_id"] is None
             assert updates[0]["new_status"] == "merged"
 
 

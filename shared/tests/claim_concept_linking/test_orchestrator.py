@@ -189,7 +189,7 @@ class TestClaimConceptLinkerOrchestrator:
                 return RelationshipType.SUPPORTS_CONCEPT
 
         classification = MockClassification()
-        with patch.object(linker, 'agent', None):
+        with patch.object(linker, "agent", None):
             link_result = linker._create_link_result(pair, classification)
         assert isinstance(link_result, ClaimConceptLinkResult)
         assert link_result.claim_id == "test_claim_1"

@@ -7,7 +7,7 @@ from pathlib import Path
 # Add the service directory to the path for testing
 service_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(service_dir))
-from aclarai_ui.config import UIConfig
+from aclarai_ui.config import UIConfig  # noqa: E402
 
 
 class TestUIConfig:
