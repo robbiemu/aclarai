@@ -142,27 +142,37 @@
 
 **Tasks:**
 
-* [ ] Implement entailment evaluation agent
-  * Uses source + claim to produce `entailed_score`
-  * Writes score to graph edges and Markdown metadata
-  * Sets `null` on failure with retries
+*   [ ] **Implement Shared Tool Factory for Agents**
+    *   Create a centralized `ToolFactory` in `shared/aclarai_shared/tools/` that provides agents with a standard set of tools based on `settings/aclarai.config.yaml`.
+    *   Implement `Neo4jQueryTool` and `VectorSearchTool`.
+    *   Implement a pluggable `WebSearchTool` that is **only enabled if a provider and API key are configured**.
+    *   Define the `tools:` configuration schema in `aclarai.config.default.yaml`.
+    *   Ensure agents can be initialized with the tools provided by the factory.
 
-* [ ] Implement coverage evaluation agent
-  * Computes `coverage_score` from claim + source
-  * Extracts omitted verifiable elements
-  * Adds `(:Element)` nodes and `[:OMITS]` edges to graph
-  * Writes score to Markdown and graph; handles null
+*   [ ] Implement entailment evaluation agent
+    *   **Implement as a LlamaIndex `CodeActAgent`** that uses tools from the **Shared Tool Factory**.
+    *   Uses source + claim to produce `entailed_score`.
+    *   Writes score to graph edges and Markdown metadata.
+    *   Sets `null` on failure with retries.
 
-* [ ] Implement decontextualization evaluation agent
-  * Determines `decontextualization_score` from claim + source
-  * Writes to graph + Markdown
-  * Follows same retry/null logic
+*   [ ] Implement coverage evaluation agent
+    *   **Implement as a LlamaIndex `CodeActAgent`** that uses tools from the **Shared Tool Factory**, including the conditional `WebSearchTool`.
+    *   Computes `coverage_score` from claim + source.
+    *   Extracts omitted verifiable elements.
+    *   Adds `(:Element)` nodes and `[:OMITS]` edges to graph.
+    *   Writes score to Markdown and graph; handles null.
 
-* [ ] Apply evaluation thresholds to linking and filtering
-  * Computes geomean from all scores
-  * Skips concept linking, promotion, or summary export for claims below threshold or with nulls
-  * Integrates into existing claim-to-concept and vault update logic
+*   [ ] Implement decontextualization evaluation agent
+    *   **Implement as a LlamaIndex `CodeActAgent`** that uses tools from the **Shared Tool Factory**.
+    *   Determines `decontextualization_score` from claim + source.
+    *   Writes to graph + Markdown.
+    *   Follows same retry/null logic.
 
+*   [ ] Apply evaluation thresholds to linking and filtering
+    *   Computes geomean from all scores.
+    *   Skips concept linking, promotion, or summary export for claims below threshold or with nulls.
+    *   Integrates into existing claim-to-concept and vault update logic.
+  
 ## 🧪 **Sprint 8: Import UX & Evaluation Display**
 
 **Goal:** Surface evaluation results in the vault and support import via Gradio. 

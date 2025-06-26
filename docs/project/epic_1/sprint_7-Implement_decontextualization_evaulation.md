@@ -37,7 +37,8 @@ Desenvolver e implementar um agente de avaliação de descontextualização que 
 - Pipeline Claimify implementado (de Sprint 3), fornecendo claims e suas fontes.
 - Nós `(:Claim)` e `(:Block)` e arestas `[:ORIGINATES_FROM]` criados no Neo4j (de Sprint 3), para armazenamento das pontuações.
 - Acesso ao sistema de arquivos para atualização de metadados Markdown Tier 1.
-- Modelo de linguagem (LLM) configurado para avaliação (conforme `docs/arch/design_config_panel.md` e `docs/arch/on-evaluation_agents.md`, Seção "Model Configuration").
+- **Fábrica de Ferramentas Compartilhada (`ToolFactory`) implementada** (de `sprint_7-Implement_Shared_Tool_Factory.md`), que fornecerá a `VectorSearchTool` para testar a ambiguidade do claim.
+- Modelo de linguagem (LLM) configurado para o **agente interno**, conforme `docs/arch/design_config_panel.md`.
 - Mecanismos de escrita atômica para arquivos Markdown (de Sprint 3).
 
 ## Entregáveis
@@ -61,6 +62,7 @@ Desenvolver e implementar um agente de avaliação de descontextualização que 
 ## Notas Técnicas
 - O `decontextualization_score` deve ser um `Float` que pode ser `null` no Neo4j e no Markdown, conforme `docs/arch/on-evaluation_agents.md`.
 - A estrutura do prompt para o LLM deve ser otimizada para a tarefa de descontextualização, conforme o exemplo em `docs/arch/on-evaluation_agents.md` (Seção "Prompt").
-- O agente deve ser capaz de receber o modelo LLM a ser utilizado via configuração (do Sprint 6).
+- O agente será implementado como um `CodeActAgent` do LlamaIndex (ou similar). Sua principal estratégia será usar a `VectorSearchTool` para consultar o claim no `utterances` vector store e analisar a diversidade dos resultados para medir a ambiguidade.
+- A estrutura do prompt para o LLM deve instruí-lo a usar a busca vetorial como um método para simular a experiência de um leitor sem contexto.
 - A escrita dos metadados no Markdown deve ser feita utilizando a lógica de escrita atômica já existente para garantir a segurança dos arquivos.
 - O logging deve incluir o `claim_id` e o `source_id` para facilitar a depuração e rastreabilidade.

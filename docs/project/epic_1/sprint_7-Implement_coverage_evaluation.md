@@ -8,6 +8,7 @@ Desenvolver e implementar um agente de avaliação de coverage que analise a com
 ### Incluído
 - Implementação do **Agente de Avaliação de Coverage**, seguindo a descrição em `docs/arch/on-evaluation_agents.md` (Seção "Agent: `coverage`").
 - Desenvolvimento de lógica para calcular o `coverage_score` (float entre 0.0 e 1.0) a partir do `claim` (texto do claim candidato) e sua `source` (bloco Markdown original ou contexto estruturado). A estrutura de entrada para o agente é definida em `docs/arch/on-evaluation_agents.md` (Seção "Input Format").
+- **Utilização de ferramentas da `ToolFactory`**, como a `WebSearchTool` (se configurada), para verificar a significância de entidades e melhorar a precisão da avaliação de cobertura.
 - **Extração de elementos verificáveis omitidos** que estavam na `source` mas não foram capturados pelo `claim`, conforme `docs/arch/on-evaluation_agents.md`.
 - **Adição de nós `(:Element)` ao grafo Neo4j** para cada elemento verificável omitido, com a propriedade `text` (conforme `docs/arch/on-evaluation_agents.md`).
 - **Criação de arestas `[:OMITS]` entre o `(:Claim)` node e cada `(:Element)` node** omitido no grafo, conforme `docs/arch/on-evaluation_agents.md` (Seção "Missed Elements").
@@ -43,7 +44,8 @@ Desenvolver e implementar um agente de avaliação de coverage que analise a com
 - Nós `(:Claim)` e `(:Block)` e arestas `[:ORIGINATES_FROM]` criados no Neo4j (de Sprint 3), para armazenamento das pontuações.
 - Acesso ao Neo4j para criação de novos nós `(:Element)` e arestas `[:OMITS]`.
 - Acesso ao sistema de arquivos para atualização de metadados Markdown Tier 1.
-- Modelo de linguagem (LLM) configurado para avaliação (conforme `docs/arch/design_config_panel.md` e `docs/arch/on-evaluation_agents.md`, Seção "Model Configuration").
+- **Fábrica de Ferramentas Compartilhada (`ToolFactory`) implementada** (de `sprint_7-Implement_Shared_Tool_Factory.md`), que fornecerá as ferramentas necessárias, incluindo a `WebSearchTool` condicional.
+- Modelo de linguagem (LLM) configurado para o **agente interno**, conforme `docs/arch/design_config_panel.md`.
 - Mecanismos de escrita atômica para arquivos Markdown (de Sprint 3).
 
 ## Entregáveis
@@ -68,7 +70,8 @@ Desenvolver e implementar um agente de avaliação de coverage que analise a com
 ## Notas Técnicas
 - O `coverage_score` deve ser um `Float` que pode ser `null` no Neo4j e no Markdown, conforme `docs/arch/on-evaluation_agents.md`.
 - A estrutura do prompt para o LLM deve ser otimizada para a tarefa de coverage, instruindo o LLM a identificar e listar os elementos omitidos.
-- O agente deve ser capaz de receber o modelo LLM a ser utilizado via configuração (do Sprint 6).
+- O agente será implementado como um `CodeActAgent` do LlamaIndex (ou similar). Ele **deve funcionar graciosamente** se a `WebSearchTool` não estiver disponível, baseando sua análise no contexto interno do grafo e dos vetores.
+- A estrutura do prompt para o LLM deve instruí-lo a usar as ferramentas disponíveis para verificar a importância de entidades antes de decidir se sua omissão impacta a pontuação de cobertura.
 - A escrita dos metadados no Markdown deve ser feita utilizando a lógica de escrita atômica já existente para garantir a segurança dos arquivos.
 - O logging deve incluir o `claim_id`, `source_id`, `coverage_score` e, se aplicável, os `Element`s omitidos para facilitar a depuração e rastreabilidade.
 - A criação de nós `(:Element)` e arestas `[:OMITS]` deve ser feita em lote para otimizar a performance de escrita no Neo4j.
