@@ -162,9 +162,3 @@ exclude_dirs = ["tests", "*/tests", ".venv", "*/.*", "vault", "docs"]
 # Focus on medium and high severity issues
 severity = "medium"
 confidence = "medium"
-
-[dependency-groups]
-dev = [
-    "types-pika>=1.2.0b1",
-    "types-pyyaml>=6.0.12.20250516",
-]
