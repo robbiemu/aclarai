@@ -1,92 +1,129 @@
-# Tutorial: Customizing Agent Tools
+# Tutorial: Customizing the Web Search Tool
 
-aclarai's evaluation agents (like the ones that check claims for entailment and coverage) can use "tools" to gather more information before making a decision. One of the most powerful tools is a web search tool.
+aclarai's agents can use "tools" to gather more information before making a decision. One of the most powerful is the web search tool, which allows agents to access up-to-date information from the internet.
 
-By default, aclarai comes with a basic web search tool. However, you can easily replace it with your own custom tool—for example, to use a specific search API like Brave Search, or to connect to a private, internal knowledge base.
-
-This tutorial will show you how to create and plug in your own custom search tool.
+This tutorial will show you how to replace the default web search provider (Tavily) with a custom one, using the [Brave Search API](https://brave.com/search/api/) as an example.
 
 ## What You'll Learn
 
--   How to create a custom tool class that is compatible with aclarai's agents.
--   How to configure aclarai to use your custom tool instead of the default one.
+- How to create a custom tool class compatible with aclarai's `ToolFactory`.
+- How to register your new tool so the factory can find it.
+- How to configure aclarai to use your custom tool.
 
 ## Prerequisites
 
--   A working aclarai setup.
--   Basic Python knowledge.
--   Access to the `shared/aclarai_tools/` directory in your aclarai installation.
+- A working aclarai setup.
+- Basic Python knowledge.
+- Access to the `shared/aclarai_shared/tools/` directory in your aclarai installation.
 
 ---
 
-## Step 1: Create Your Custom Tool File
+## Step 1: Create Your Custom Provider File
 
-First, you need to create a Python file for your custom tool. We recommend placing it in the `shared/aclarai_tools/` directory to make it accessible to all services.
+First, create a Python file for your custom search provider. All web search providers should inherit from `WebSearchProvider`.
 
-Let's create a tool for the [Brave Search API](https://brave.com/search/api/).
-
-**Create a new file: `shared/aclarai_tools/brave_search.py`**
+**Create a new file: `shared/aclarai_shared/tools/implementations/web_search/brave.py`**
 
 ```python
-# shared/aclarai_tools/brave_search.py
+# shared/aclarai_shared/tools/implementations/web_search/brave.py
 
+import logging
 import os
-from llama_index.core.tools import BaseTool, ToolMetadata
+from typing import Any, Dict, List, Optional
 
-# You would typically use the official SDK for the service you're integrating.
-# For this example, we'll simulate it.
+# Import the base classes from the web_search module
+from .base import WebSearchProvider, WebSearchResult
+
+logger = logging.getLogger(__name__)
+
+# You would typically use the official SDK for the service. We'll simulate it here.
 class BraveSearchAPI:
     def __init__(self, api_key: str):
         if not api_key:
             raise ValueError("Brave Search API key is required.")
         self.api_key = api_key
 
-    def search(self, query: str, count: int = 3) -> list:
+    def search(self, query: str, max_results: int = 5) -> list:
         """Simulates a call to the Brave Search API."""
-        print(f"--- Faking a Brave Search for: '{query}' ---")
+        logger.info(f"--- Faking a Brave Search for: '{query}' ---")
         return [
-            {"title": f"Result 1 for {query}", "snippet": "This is the first search result..."},
-            {"title": f"Result 2 for {query}", "snippet": "This is the second search result..."},
-            {"title": f"Result 3 for {query}", "snippet": "This is the third search result..."},
+            {"title": f"Brave Result 1 for {query}", "url": "https://example.com/brave1", "snippet": "This is the first Brave search result..."},
+            {"title": f"Brave Result 2 for {query}", "url": "https://example.com/brave2", "snippet": "This is the second Brave search result..."},
         ]
 
-class BraveSearchTool(BaseTool):
-    """A tool for performing web searches using the Brave Search API."""
+class BraveSearchProvider(WebSearchProvider):
+    """A provider for performing web searches using the Brave Search API."""
 
     def __init__(self, api_key: str):
         self._api = BraveSearchAPI(api_key=api_key)
 
-    @property
-    def metadata(self) -> ToolMetadata:
-        """
-        Provides metadata for the agent.
-        
-        IMPORTANT: The 'name' should be generic like "web_search". This allows the
-        agent's prompts (which are written to use a tool named "web_search") to
-        work with any search provider you plug in.
-        """
-        return ToolMetadata(
-            name="web_search",
-            description="Performs a web search using the Brave Search API to find up-to-date information or verify facts."
-        )
-
-    def __call__(self, query: str) -> str:
-        """The main entry point for the tool when called by an agent."""
+    def search(self, query: str, max_results: int = 5) -> List[WebSearchResult]:
+        """Executes a search and returns standardized results."""
         try:
-            results = self._api.search(query)
-            # Format the results into a single string for the LLM to read.
-            formatted_results = "\n".join(
-                [f"Title: {r['title']}\nSnippet: {r['snippet']}" for r in results]
-            )
-            return formatted_results if formatted_results else "No results found."
+            raw_results = self._api.search(query=query, max_results=max_results)
+            return [
+                WebSearchResult(
+                    title=r.get("title", "Untitled"),
+                    url=r.get("url", ""),
+                    snippet=r.get("snippet", "")
+                )
+                for r in raw_results
+            ]
         except Exception as e:
-            return f"Error performing search: {e}"
+            logger.error(f"Brave Search failed: {e}", extra={"query": query})
+            return []
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> Optional["BraveSearchProvider"]:
+        """Creates an instance from the system configuration."""
+        api_key_var = config.get("api_key_env_var")
+        if not api_key_var:
+            logger.error("Brave provider requires 'api_key_env_var' in config.")
+            return None
+
+        api_key = os.getenv(api_key_var)
+        if not api_key:
+            logger.warning(
+                f"Web search enabled with Brave provider, but environment variable '{api_key_var}' is not set."
+            )
+            return None
+
+        return cls(api_key=api_key)
 
 ```
 
-## Step 2: Add Your API Key
+## Step 2: Register Your New Provider
 
-For your tool to work, it needs an API key. Add it to your `.env` file in the project root.
+The `ToolFactory` needs to know that the string `"brave"` maps to your new `BraveSearchProvider` class. You do this by registering it.
+
+**Edit `shared/aclarai_shared/tools/implementations/web_search/provider.py`:**
+
+```python
+# shared/aclarai_shared/tools/implementations/web_search/provider.py
+
+import logging
+from typing import Any, Dict, Optional, Type
+
+from .base import WebSearchProvider
+from .tavily import TavilySearchProvider
+# 1. Import your new provider class
+from .brave import BraveSearchProvider
+
+logger = logging.getLogger(__name__)
+
+# 2. Add your provider to the registry dictionary
+#    The key ("brave") is what you'll use in the config file.
+PROVIDERS: Dict[str, Type[WebSearchProvider]] = {
+    "tavily": TavilySearchProvider,
+    "brave": BraveSearchProvider,
+}
+
+# ... (the rest of the file remains the same) ...
+```
+
+## Step 3: Add Your API Key to the Environment
+
+Your tool needs an API key to authenticate. Add the new environment variable to your project's `.env` file.
 
 **Edit your `.env` file:**
 
@@ -99,39 +136,34 @@ For your tool to work, it needs an API key. Add it to your `.env` file in the pr
 BRAVE_SEARCH_API_KEY="your_brave_search_api_key_here"
 ```
 
-The aclarai configuration system will automatically load this variable.
+## Step 4: Configure aclarai to Use Your New Tool
 
-## Step 3: Configure aclarai to Use Your New Tool
-
-Now, you just need to tell aclarai to use your `BraveSearchTool` instead of the default one. You do this by editing your configuration file.
+Finally, tell the `ToolFactory` to use your Brave provider by default.
 
 **Edit `settings/aclarai.config.yaml`:**
 
-Find or add the `agents` section and specify your new provider.
+Find the `tools` section (or add it) and update the `web_search` settings.
 
 ```yaml
 # settings/aclarai.config.yaml
 
-agents:
-  evaluation:
-    # This is the switch. Change "default_web_search" to "brave_search".
-    web_search_provider: "brave_search"
+tools:
+  web_search:
+    enabled: true # Make sure to enable it!
+    # This is the switch. Change "tavily" to "brave".
+    provider: "brave"
+    # Tell the factory which environment variable to look for.
+    api_key_env_var: "BRAVE_SEARCH_API_KEY"
+    max_results: 3
 ```
-
-That's it! You don't need to change any other code.
-
-## Step 4: How it Works
-
-When an evaluation agent starts, it performs these steps:
-
-1.  It reads the `settings/aclarai.config.yaml` file.
-2.  It sees that `agents.evaluation.web_search_provider` is set to `"brave_search"`.
-3.  It looks inside its internal logic for the `"brave_search"` key and finds your `BraveSearchTool` class.
-4.  It instantiates your tool, passing the API key from your `.env` file.
-5.  It provides this tool to the LLM agent.
-
-Now, whenever the agent needs to perform a web search to evaluate a claim, it will automatically use your `BraveSearchTool`.
 
 ## Conclusion
 
-By following this pattern, you can create and plug in any number of custom tools to enhance the reasoning capabilities of aclarai's agents. This pluggable architecture allows you to tailor the system to your specific needs and data sources, whether they are public APIs or internal, proprietary systems.
+That's it! When you restart aclarai, the `ToolFactory` will:
+1.  Read the `tools.web_search` configuration.
+2.  See the provider is set to `"brave"`.
+3.  Look up `"brave"` in its registry and find your `BraveSearchProvider` class.
+4.  Call `BraveSearchProvider.from_config()`, which reads the `BRAVE_SEARCH_API_KEY` from your environment.
+5.  Initialize the tool and provide it to any agent that requests it.
+
+This pluggable architecture allows you to tailor aclarai's data-gathering capabilities to your specific needs, whether you're connecting to public APIs or internal, proprietary data sources.
