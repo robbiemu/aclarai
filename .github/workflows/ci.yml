@@ -80,25 +80,28 @@ jobs:
       run: |
         .venv/bin/mypy .
         .venv/bin/check-annotations . --config-section tool.coverage.run --config-exclude-key omit
+    - name: Upload venv artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-venv
+        path: .venv
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: [changes, lint-and-format] # Depends on linting and the changes job
-    if: needs.changes.outputs.python == 'true' # Match the condition of its dependency
+    needs: [lint-and-format]
+    if: needs.changes.outputs.python == 'true'
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Restore venv cache
-      uses: actions/cache@v4
+    - uses: actions/checkout@v4
+
+    - name: Download venv artifact
+      uses: actions/download-artifact@v4
       with:
+        name: python-venv
         path: .venv
-        key: ${{ runner.os }}-python-3.11-${{ hashFiles('**/uv.lock') }}
-        
+
     - name: Run Bandit security scan
-      # Bandit is installed as a dev dependency, so it's already in the cached venv
       run: .venv/bin/bandit -r . -c pyproject.toml
 
   test:
@@ -112,26 +115,29 @@ jobs:
     env:
       NEO4J_PASSWORD: fake_test_neo4j_password_123
       POSTGRES_PASSWORD: fake_test_postgres_password_456
-      
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # '0' means fetch all history for all branches and tags, to give the runner the data it needs to find commit A and correctly identify that the files changed in your PR are the ones modified
         fetch-depth: 0
 
-    - name: Restore venv cache
-      uses: actions/cache@v4
+    - name: Download venv artifact
+      uses: actions/download-artifact@v4
       with:
+        name: python-venv
         path: .venv
-        key: ${{ runner.os }}-python-3.11-${{ hashFiles('**/uv.lock') }}
-        
+
     - name: Run tests
       run: |
-        # Set PYTHONPATH to include the project root for pytest discovery
         export PYTHONPATH=$(pwd)
-        # explicit per directory testing for good logs
-        .venv/bin/pytest -v --tb=short tests/ shared/tests/ services/aclarai-core/tests/ services/aclarai-ui/tests/ services/scheduler/tests/ services/vault-watcher/tests/
+        .venv/bin/pytest -v --tb=short \
+          tests/ \
+          shared/tests/ \
+          services/aclarai-core/tests/ \
+          services/aclarai-ui/tests/ \
+          services/scheduler/tests/ \
+          services/vault-watcher/tests/
 
   docker-build:
     name: Docker Build Validation
