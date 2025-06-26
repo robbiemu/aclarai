@@ -38,7 +38,8 @@ Desenvolver e implementar um agente de avaliação de entailment que analise a r
 - Pipeline Claimify implementado (de Sprint 3), fornecendo claims e suas fontes.
 - Nós `(:Claim)` e `(:Block)` e arestas `[:ORIGINATES_FROM]` criados no Neo4j (de Sprint 3), para armazenamento das pontuações.
 - Acesso ao sistema de arquivos para atualização de metadados Markdown Tier 1.
-- Modelo de linguagem (LLM) configurado para avaliação (conforme `docs/arch/design_config_panel.md` e `docs/arch/on-evaluation_agents.md`, Seção "Model Configuration").
+- **Fábrica de Ferramentas Compartilhada (`ToolFactory`) implementada** (de `sprint_7-Implement_Shared_Tool_Factory.md`), que fornecerá as ferramentas necessárias (e.g., `Neo4jQueryTool`, `VectorSearchTool`).
+- Modelo de linguagem (LLM) configurado para o **agente interno**, conforme `docs/arch/design_config_panel.md`.
 - Mecanismos de escrita atômica para arquivos Markdown (de Sprint 3).
 
 ## Entregáveis
@@ -62,6 +63,7 @@ Desenvolver e implementar um agente de avaliação de entailment que analise a r
 ## Notas Técnicas
 - O `entailed_score` deve ser um `Float` que pode ser `null` no Neo4j e no Markdown, conforme `docs/arch/on-evaluation_agents.md`.
 - A estrutura do prompt para o LLM deve ser otimizada para a tarefa de entailment, conforme o exemplo em `docs/arch/on-evaluation_agents.md` (Seção "Prompt structure").
-- O agente deve ser capaz de receber o modelo LLM a ser utilizado via configuração (do sprint 6).
+- O agente será implementado como um `CodeActAgent` do LlamaIndex (ou similar), que utiliza um conjunto de ferramentas fornecido pela `ToolFactory` para coletar contexto antes de tomar uma decisão.
+- O logging deve incluir não apenas o `claim_id` e o `source_id`, mas também as ferramentas utilizadas e os resultados observados durante o ciclo de raciocínio do agente.
 - A escrita dos metadados no Markdown deve ser feita utilizando a lógica de escrita atômica já existente para garantir a segurança dos arquivos.
 - O logging deve incluir o `claim_id` e o `source_id` para facilitar a depuração e rastreabilidade.
