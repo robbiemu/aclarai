@@ -15,7 +15,7 @@ For detailed usage and configuration, see docs/guides/embedding_models_guide.md
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -123,7 +123,7 @@ class EmbeddingGenerator:
         try:
             embedding = self.embedding_model.get_text_embedding(text)
             logger.debug(f"Generated embedding for text (dim: {len(embedding)})")
-            return embedding
+            return cast(List[float], embedding)
         except Exception as e:
             logger.error(f"Failed to embed text: {e}")
             raise

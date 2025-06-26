@@ -1,3 +1,28 @@
+# Core tool configuration
+tools:
+  neo4j:
+    enabled: true
+    retry_attempts: 3
+    timeout_seconds: 30
+    uri: bolt://localhost:7687
+    username: neo4j
+    password: # Set in user's config
+  
+  vector_search:
+    enabled: true
+    collections:
+      - utterances
+      - concepts
+    similarity_threshold: 0.7
+    max_results: 5
+  
+  web_search:
+    enabled: false  # Default to disabled for safety
+    provider: "tavily"  # Current options: tavily
+    api_key_env_var: "TAVILY_API_KEY"
+    timeout_seconds: 30
+    max_results: 5
+
 # aclarai Default Configuration File
 # This file contains the default values for all configurable parameters in the aclarai system
 # Users can override these settings by creating a settings/aclarai.config.yaml file

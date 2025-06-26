@@ -18,14 +18,12 @@ jobs:
       docker: ${{ steps.filter.outputs.docker }}
       docker-compose: ${{ steps.filter.outputs.docker-compose }}
     steps:
-    # You only need a basic checkout. The filter uses the API, not the local git repo.
     - uses: actions/checkout@v4
 
     - name: Identify changed files
       uses: dorny/paths-filter@v2
       id: filter
       with:
-        # The action handles it automatically via the GitHub API.
         filters: |
           python:
             - '**/*.py'
@@ -39,12 +37,11 @@ jobs:
             - 'docker-compose*.yml'
             - '.env.example'
 
-
   lint-and-format:
     name: Lint and Format
     runs-on: ubuntu-latest
-    needs: changes # Needs the output from the changes job
-    if: needs.changes.outputs.python == 'true' # Only run if Python files changed
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     
     steps:
     - name: Checkout code
@@ -66,7 +63,6 @@ jobs:
         key: ${{ runner.os }}-python-3.11-${{ hashFiles('**/uv.lock') }}
         
     - name: Install dependencies
-      # No cache-hit check needed; uv handles this efficiently.
       run: |
         uv venv
         uv pip install -e ".[dev]" -e ./shared -e ./services/*
@@ -84,27 +80,41 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: [changes, lint-and-format] # Depends on linting and the changes job
-    if: needs.changes.outputs.python == 'true' # Match the condition of its dependency
+    needs: [changes, lint-and-format]
+    if: needs.changes.outputs.python == 'true'
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Restore venv cache
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      run: pip install uv
+      
+    - name: Cache Python virtual environment
       uses: actions/cache@v4
+      id: cache-venv
       with:
         path: .venv
         key: ${{ runner.os }}-python-3.11-${{ hashFiles('**/uv.lock') }}
         
+    - name: Install dependencies
+      # Always install dependencies, cache will speed this up if available
+      run: |
+        uv venv
+        uv pip install -e ".[dev]" -e ./shared -e ./services/*
+        
     - name: Run Bandit security scan
-      # Bandit is installed as a dev dependency, so it's already in the cached venv
       run: .venv/bin/bandit -r . -c pyproject.toml
 
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    needs: [changes, lint-and-format] # Depends on linting and the changes job
+    needs: [changes, lint-and-format]
     if: |
       github.event_name == 'push' || 
       (github.event_name == 'pull_request' && needs.changes.outputs.python == 'true')
@@ -117,27 +127,39 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # '0' means fetch all history for all branches and tags, to give the runner the data it needs to find commit A and correctly identify that the files changed in your PR are the ones modified
         fetch-depth: 0
 
-    - name: Restore venv cache
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install uv
+      run: pip install uv
+
+    - name: Cache Python virtual environment
       uses: actions/cache@v4
+      id: cache-venv
       with:
         path: .venv
         key: ${{ runner.os }}-python-3.11-${{ hashFiles('**/uv.lock') }}
         
+    - name: Install dependencies
+      # Always install dependencies, cache will speed this up if available
+      run: |
+        uv venv
+        uv pip install -e ".[dev]" -e ./shared -e ./services/*
+        
     - name: Run tests
       run: |
-        # Set PYTHONPATH to include the project root for pytest discovery
         export PYTHONPATH=$(pwd)
-        # explicit per directory testing for good logs
         .venv/bin/pytest -v --tb=short tests/ shared/tests/ services/aclarai-core/tests/ services/aclarai-ui/tests/ services/scheduler/tests/ services/vault-watcher/tests/
 
   docker-build:
     name: Docker Build Validation
     runs-on: ubuntu-latest
-    needs: [changes, test] # Depends on tests passing and the changes job
-    if: needs.changes.outputs.docker == 'true' # Only run if Docker-related files changed
+    needs: [changes, test]
+    if: needs.changes.outputs.docker == 'true'
     strategy:
       matrix:
         service: [aclarai-core, vault-watcher, scheduler, aclarai-ui]
@@ -149,8 +171,6 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     - name: Build Docker image
-      # This simplified build command is sufficient for validation.
-      # It doesn't need complex caching logic for a simple build check.
       run: >
         docker build --tag aclarai-${{ matrix.service }}:test -f ./services/${{ matrix.service }}/Dockerfile .
 
