@@ -155,26 +155,3 @@ class VectorSearchTool(AclaraiBaseTool):
             error_msg = f"Failed to execute vector search: {str(e)}"
             logger.error(error_msg)
             return error_msg
-
-    @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> Optional["VectorSearchTool"]:
-        """Create a vector search tool instance from configuration.
-
-        Args:
-            config: Configuration dictionary containing:
-                - vector_stores: Dict mapping collection names to initialized stores
-                - similarity_threshold: Optional similarity threshold
-                - max_results: Optional maximum results per collection
-
-        Returns:
-            Configured VectorSearchTool instance or None if config is invalid
-        """
-        if "vector_stores" not in config:
-            logger.error("Missing required vector stores configuration")
-            return None
-
-        return cls(
-            vector_stores=config["vector_stores"],
-            similarity_threshold=config.get("similarity_threshold", 0.7),
-            max_results=config.get("max_results", 5),
-        )
