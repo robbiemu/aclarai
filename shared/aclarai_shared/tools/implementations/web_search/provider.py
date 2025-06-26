@@ -10,21 +10,18 @@ logger = logging.getLogger(__name__)
 
 
 # Registry of available providers
-PROVIDERS = {
-    'tavily': TavilySearchProvider
-}
+PROVIDERS: Dict[str, Type[WebSearchProvider]] = {"tavily": TavilySearchProvider}
 
 
 def create_provider(
-    provider_name: str,
-    config: Dict[str, Any]
+    provider_name: str, config: Dict[str, Any]
 ) -> Optional[WebSearchProvider]:
     """Create a web search provider instance.
-    
+
     Args:
         provider_name: Name of the provider to create
         config: Provider-specific configuration
-        
+
     Returns:
         Configured provider instance or None if creation fails
     """
@@ -32,29 +29,23 @@ def create_provider(
     if not provider_cls:
         logger.error(
             f"Unknown web search provider: {provider_name}",
-            extra={
-                'provider': provider_name,
-                'available': list(PROVIDERS.keys())
-            }
+            extra={"provider": provider_name, "available": list(PROVIDERS.keys())},
         )
         return None
-        
+
     try:
         return provider_cls.from_config(config)
     except Exception as e:
         logger.error(
             f"Failed to create provider {provider_name}: {str(e)}",
-            extra={'provider': provider_name, 'config': config}
+            extra={"provider": provider_name, "config": config},
         )
         return None
 
 
-def register_provider(
-    name: str,
-    provider_cls: Type[WebSearchProvider]
-) -> None:
+def register_provider(name: str, provider_cls: Type[WebSearchProvider]) -> None:
     """Register a new web search provider.
-    
+
     Args:
         name: Name to register the provider under
         provider_cls: Provider class to register
