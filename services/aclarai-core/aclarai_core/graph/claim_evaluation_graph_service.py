@@ -5,7 +5,7 @@ Service for updating claim evaluation scores in Neo4j.
 import logging
 from typing import Any, Dict, List, Optional
 
-from aclarai_core.utils.config_manager import ConfigManager
+from aclarai_shared.config import aclaraiConfig
 from neo4j import (
     Driver,
 )  # Using `Driver` for type hinting, actual driver instance passed in __init__
@@ -18,18 +18,18 @@ class ClaimEvaluationGraphService:
     Manages graph database updates for claim evaluation scores.
     """
 
-    def __init__(self, neo4j_driver: Driver, config_manager: ConfigManager):
+    def __init__(self, neo4j_driver: Driver, config: aclaraiConfig):
         """
         Initializes the ClaimEvaluationGraphService.
 
         Args:
             neo4j_driver: An instance of the Neo4j Python Driver.
-            config_manager: Manages access to system configurations.
+            config: system configurations.
         """
         self.driver = neo4j_driver
-        self.config_manager = config_manager
+        self.config = config
         # Potential configuration for retries on DB operations if needed
-        # self.db_retries = self.config_manager.get("database.neo4j.retries", 3)
+        # self.db_retries = self.config.processing.get("retries", {}).get("max_attempts", 3)
 
     def update_decontextualization_score(
         self, claim_id: str, block_id: str, score: Optional[float]

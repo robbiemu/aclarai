@@ -1,13 +1,9 @@
-"""
-Service for updating aclarai metadata within Markdown files.
-"""
-
 import logging
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +80,7 @@ class MarkdownUpdaterService:
         # A more robust solution might need to parse Markdown structure or have clearer block delimiters.
 
         lines = content.splitlines()
-        new_lines = []
+        new_lines: List[str] = []
         block_found = False
         block_id_pattern_compiled = re.compile(self.ACLARAI_ID_PATTERN)
         score_comment_pattern_compiled = re.compile(

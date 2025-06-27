@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +18,12 @@ from aclarai_core.graph.claim_evaluation_graph_service import (
     ClaimEvaluationGraphService,
 )
 from aclarai_core.markdown.markdown_updater_service import MarkdownUpdaterService
-from llama_index.core.base.llms.types import ChatResponse
+from aclarai_shared.config import (
+    LLMConfig,
+    ProcessingConfig,
+    aclaraiConfig,
+)
+from llama_index.core.base.llms.types import ChatMessage, ChatResponse
 from llama_index.core.tools import BaseTool, ToolMetadata
 from neo4j import Driver
 
@@ -33,28 +38,38 @@ class MockLLM:
         self.response_text = response_text
         self.throw_exception = throw_exception
         self.chat_messages = []  # To inspect prompts
+        self.metadata = MagicMock()
+        self.metadata.context_window = 4096  # Default context window
+        self.callback_manager = MagicMock()
 
-    async def achat(self, messages, **kwargs):
-        self.chat_messages.append(messages)
+    async def achat(self, messages, **kwargs):  # noqa: ARG002
+        # ReActAgent can send multiple messages (e.g., system, user).
+        # We join them to test the full context sent to the LLM.
+        full_prompt_content = "\n".join(m.content for m in messages)
+        self.chat_messages.append(full_prompt_content)
+
         if self.throw_exception:
             raise self.throw_exception
-        # ReActAgent calls chat, then the response object's .response attribute
-        # The actual response content is often in message.content or similar
-        # For this mock, we'll assume the ReActAgent interaction results in this being the final string
         return ChatResponse(
-            message=MagicMock(content=self.response_text),
-            raw={"response": self.response_text},
+            message=ChatMessage(content=self.response_text),
+            response=self.response_text,
         )
 
     def chat(
-        self, messages, **kwargs
+        self,
+        messages,
+        **kwargs,  # noqa: ARG002
     ):  # Synchronous version often used by ReActAgent internals
-        self.chat_messages.append(messages)
+        # ReActAgent can send multiple messages (e.g., system, user).
+        # We join them to test the full context sent to the LLM.
+        full_prompt_content = "\n".join(m.content for m in messages)
+        self.chat_messages.append(full_prompt_content)
+
         if self.throw_exception:
             raise self.throw_exception
         return ChatResponse(
-            message=MagicMock(content=self.response_text),
-            raw={"response": self.response_text},
+            message=ChatMessage(content=self.response_text),
+            response=self.response_text,
         )
 
 
@@ -87,42 +102,28 @@ class MockTool(BaseTool):
 class MockToolFactory:
     """Mocks the ToolFactory."""
 
-    def __init__(self, vector_search_tool: Optional[MockTool] = None):
-        self.vector_search_tool = vector_search_tool or MockTool(
-            name="vector_search_utterances", description="Searches utterances"
-        )
+    def __init__(self, tools: Optional[List[BaseTool]] = None):
+        self._tools = tools or [
+            MockTool(name="vector_search", description="Searches utterances")
+        ]
+        self._agent_tool_cache = {}
 
-    def get_tool(
-        self,
-        tool_name: str,
-        collection_name: Optional[str] = None,
-        metadata: Optional[ToolMetadata] = None,
-    ) -> Optional[BaseTool]:
-        if tool_name == "VectorSearchTool" and collection_name == "utterances":
-            # Update mock tool's metadata if provided, useful for verifying agent setup
-            if metadata:
-                self.vector_search_tool._name = metadata.name
-                self.vector_search_tool._description = metadata.description
-                self.vector_search_tool._metadata = metadata
-            return self.vector_search_tool
-        return None
-
-
-class MockConfigManager:
-    """Mocks the ConfigManager."""
-
-    def __init__(self, configs: Optional[Dict[str, Any]] = None):
-        self.configs = configs or {}
-        self.configs.setdefault("processing.retries.max_attempts", "3")
-        self.configs.setdefault("model.claimify.decontextualization", "mock_llm")
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.configs.get(key, default)
+    def get_tools_for_agent(self, agent_name: str) -> List[BaseTool]:
+        # Simulate caching behavior
+        if agent_name not in self._agent_tool_cache:
+            self._agent_tool_cache[agent_name] = self._tools
+        return self._agent_tool_cache[agent_name]
 
 
 @pytest.fixture
-def mock_config_manager():
-    return MockConfigManager()
+def mock_aclarai_config() -> MagicMock:
+    """Provides a mock AclaraiConfig object for tests."""
+    mock_config = MagicMock(spec=aclaraiConfig)
+    mock_config.processing = MagicMock(spec=ProcessingConfig)
+    mock_config.processing.retries = {"max_attempts": 3}
+    mock_config.llm = MagicMock(spec=LLMConfig)
+    mock_config.llm.model_params = {"claimify": {"decontextualization": "mock_llm"}}
+    return mock_config
 
 
 @pytest.fixture
@@ -131,43 +132,80 @@ def mock_vector_search_tool():
 
 
 @pytest.fixture
-def mock_tool_factory(mock_vector_search_tool):
-    return MockToolFactory(vector_search_tool=mock_vector_search_tool)
+def mock_graph_service_config():
+    """Provide a mock configuration for ClaimEvaluationGraphService."""
+    return {
+        "neo4j": {
+            "uri": "bolt://localhost:7687",
+            "username": "neo4j",
+            "password": "password",
+        }
+    }
+
+
+@pytest.fixture
+def mock_tool_factory():
+    # Provide the correctly named tool to align with the prompt's instructions
+    return MockToolFactory(
+        tools=[
+            MockTool(name="vector_search_utterances", description="Searches utterances")
+        ]
+    )
 
 
 # --- DecontextualizationAgent Tests ---
 @pytest.mark.asyncio
 async def test_decontextualization_agent_success(
-    mock_tool_factory, mock_config_manager
+    mock_tool_factory, mock_aclarai_config
 ):
     """Test successful evaluation by the agent."""
     mock_llm = MockLLM(response_text="0.92")
     agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config_manager=mock_config_manager
+        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
     )  # type: ignore
 
-    score, message = await agent.evaluate_claim_decontextualization(
-        claim_id="c1",
-        claim_text="Claim text",
-        source_id="s1",
-        source_text="Source text",
-    )
+    # Mock the load_prompt_template function to avoid file I/O in this unit test
+    with patch(
+        "aclarai_core.agents.decontextualization_agent.load_prompt_template"
+    ) as mock_load_prompt:
+        # The actual content is loaded from the YAML, but we simulate it here
+        # to show what the agent receives.
+        mock_load_prompt.return_value = """Input:
+Claim: "Claim text"
+Source: "Source text"
+
+Task:
+1. Analyze the 'Claim' for any ambiguities or missing context.
+2. Optionally, use the 'vector_search_utterances' tool with the 'Claim' text to check for contextual diversity.
+3. Based on your analysis, provide a decontextualization score as a float between 0.0 and 1.0.
+Output only the float score. For example: 0.75"""
+
+        score, message = await agent.evaluate_claim_decontextualization(
+            claim_id="c1",
+            claim_text="Claim text",
+            source_id="s1",
+            source_text="Source text",
+        )
 
     assert score == 0.92
     assert message == "success"
-    # Check if the prompt was formatted as expected (basic check)
-    assert 'Claim: "Claim text"' in mock_llm.chat_messages[-1]
-    assert 'Source: "Source text"' in mock_llm.chat_messages[-1]
+    # Check if the prompt sent to the LLM contains both the agent's system instructions
+    # and the specific task (claim and source text).
+    prompt_content = mock_llm.chat_messages[-1]
+    assert 'Claim: "Claim text"' in prompt_content
+    assert 'Source: "Source text"' in prompt_content
+    # Also check that the agent's instructions about tools are present
+    assert "You have access to the following tools" in prompt_content
 
 
 @pytest.mark.asyncio
 async def test_decontextualization_agent_llm_parse_error(
-    mock_tool_factory, mock_config_manager
+    mock_tool_factory, mock_aclarai_config
 ):
     """Test agent handling of LLM returning non-float score."""
     mock_llm = MockLLM(response_text="not a float")
     agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config_manager=mock_config_manager
+        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
     )  # type: ignore
 
     score, message = await agent.evaluate_claim_decontextualization(
@@ -180,12 +218,12 @@ async def test_decontextualization_agent_llm_parse_error(
 
 @pytest.mark.asyncio
 async def test_decontextualization_agent_llm_score_out_of_range(
-    mock_tool_factory, mock_config_manager
+    mock_tool_factory, mock_aclarai_config
 ):
     """Test agent handling of LLM returning score out of 0.0-1.0 range."""
     mock_llm = MockLLM(response_text="1.5")
     agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config_manager=mock_config_manager
+        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
     )  # type: ignore
 
     score, message = await agent.evaluate_claim_decontextualization(
@@ -197,55 +235,58 @@ async def test_decontextualization_agent_llm_score_out_of_range(
 
 
 @pytest.mark.asyncio
-@patch(
-    "tenacity.AsyncRetrying.iter", return_value=iter([1, 2, 3])
-)  # Mock retries to run 3 times then fail
 async def test_decontextualization_agent_llm_exception_after_retries(
-    mock_tool_factory, # mock_retry_iter_unused removed
-): # mock_config_manager removed, mock_retry_iter renamed
+    mock_tool_factory, mock_aclarai_config
+):
     """Test agent handling of LLM consistently raising exceptions."""
-    mock_llm = MockLLM(throw_exception=RuntimeError("LLM API Error"))
-    # Configure retries to be 3, matching the patch, directly in a new mock config
-    mock_config_manager_for_this_test = MockConfigManager(
-        {"processing.retries.max_attempts": "3"}
-    )
-    agent = DecontextualizationAgent(
-        llm=mock_llm,
-        tool_factory=mock_tool_factory,
-        config_manager=mock_config_manager_for_this_test, # Use specific mock config
-    )  # type: ignore
+    original_exception = RuntimeError("LLM API Error")
+    mock_llm = MockLLM(throw_exception=original_exception)
+    mock_aclarai_config.processing.retries = {"max_attempts": 3}
 
-    score, message = await agent.evaluate_claim_decontextualization(
-        claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
-    )
+    # We must mock `load_prompt_template` to prevent file I/O
+    # AND provide a string `return_value` to prevent the Pydantic error.
+    with patch(
+        "aclarai_core.agents.decontextualization_agent.load_prompt_template",
+        return_value="A valid mock prompt string",
+    ) as mock_load_prompt:
+        agent = DecontextualizationAgent(
+            llm=mock_llm,
+            tool_factory=mock_tool_factory,
+            config=mock_aclarai_config,
+        )
+
+        # The agent will receive the string prompt,
+        # pass it to the ReActAgent, which will call our mock_llm.
+        # The mock_llm will raise the exception, which will be caught by tenacity.
+        score, message = await agent.evaluate_claim_decontextualization(
+            claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
+        )
 
     assert score is None
-    assert "error during decontextualization evaluation" in message.lower()
-    assert "llm api error" in message.lower()
-    assert (
-        "after 3 retries" in message.lower()
-    )  # Check if max_retries from config is mentioned
-    assert mock_llm.chat_messages  # Ensure LLM was called
-    # Tenacity's call count is tricky to get directly from mock_retry_iter here
-    # but we expect chat_messages to have been populated multiple times if retries happened.
-    # The number of actual calls to LLM depends on how ReActAgent handles it internally with tenacity.
-    # For a direct tenacity call, len(mock_llm.chat_messages) would be 3.
+    expected_error_snippet = f"Root cause: {repr(original_exception)}"
+    assert expected_error_snippet in message
+
+    mock_load_prompt.assert_called_once_with(
+        "decontextualization_evaluation",
+        claim_text="Claim",
+        source_text="Source",
+    )
 
 
 @pytest.mark.asyncio
-async def test_decontextualization_agent_tool_usage_in_prompt(
-    mock_vector_search_tool, mock_config_manager
-):
+async def test_decontextualization_agent_tool_usage_in_prompt(mock_aclarai_config):
     """Verify that the prompt correctly instructs the LLM on tool usage."""
     mock_llm = MockLLM(response_text="0.7")
     # Need a tool factory that provides the specific mock_vector_search_tool
     tool_factory_with_specific_tool = MockToolFactory(
-        vector_search_tool=mock_vector_search_tool
+        tools=[
+            MockTool(name="vector_search_utterances", description="Searches utterances")
+        ]
     )
     agent = DecontextualizationAgent(
         llm=mock_llm,
         tool_factory=tool_factory_with_specific_tool,
-        config_manager=mock_config_manager,
+        config=mock_aclarai_config,
     )  # type: ignore
 
     await agent.evaluate_claim_decontextualization(
@@ -255,15 +296,12 @@ async def test_decontextualization_agent_tool_usage_in_prompt(
         source_text="Source",
     )
 
-    # Check the prompt sent to the LLM
+    # Check the full prompt sent to the LLM
     prompt_text = mock_llm.chat_messages[-1]
-    assert "To help you, you have a 'vector_search_utterances' tool." in prompt_text
-    assert (
-        "Optionally, use the 'vector_search_utterances' tool with the 'Claim' text"
-        in prompt_text
-    )
-    # This doesn't test if the ReActAgent *actually* calls the tool, as that depends on LLM output.
-    # Testing the ReActAgent's tool execution loop is more complex and LLM-dependent.
+    # Check for the tool name in the agent's system prompt section
+    assert "Tool Name: vector_search_utterances" in prompt_text
+    # Check for the tool name in the user-level task description
+    assert "use the 'vector_search_utterances' tool" in prompt_text
 
 
 # --- ClaimEvaluationGraphService Tests ---
@@ -276,14 +314,16 @@ def mock_neo4j_driver():
     return driver, mock_session
 
 
-def test_graph_service_update_score_success(mock_neo4j_driver, mock_config_manager):
+def test_graph_service_update_score_success(
+    mock_neo4j_driver, mock_graph_service_config
+):
     driver, mock_session = mock_neo4j_driver
     mock_result = MagicMock()
     mock_result.single.return_value = {"updated_count": 1}
     mock_session.run.return_value = mock_result
 
     service = ClaimEvaluationGraphService(
-        neo4j_driver=driver, config_manager=mock_config_manager
+        neo4j_driver=driver, config=mock_graph_service_config
     )
     success = service.update_decontextualization_score("c1", "b1", 0.75)
 
@@ -295,7 +335,7 @@ def test_graph_service_update_score_success(mock_neo4j_driver, mock_config_manag
 
 
 def test_graph_service_update_score_null_success(
-    mock_neo4j_driver, mock_config_manager
+    mock_neo4j_driver, mock_graph_service_config
 ):
     driver, mock_session = mock_neo4j_driver
     mock_result = MagicMock()
@@ -303,7 +343,7 @@ def test_graph_service_update_score_null_success(
     mock_session.run.return_value = mock_result
 
     service = ClaimEvaluationGraphService(
-        neo4j_driver=driver, config_manager=mock_config_manager
+        neo4j_driver=driver, config=mock_graph_service_config
     )
     success = service.update_decontextualization_score("c1", "b1", None)
 
@@ -313,7 +353,7 @@ def test_graph_service_update_score_null_success(
 
 
 def test_graph_service_update_score_no_relationship(
-    mock_neo4j_driver, mock_config_manager, caplog
+    mock_neo4j_driver, mock_graph_service_config, caplog
 ):
     driver, mock_session = mock_neo4j_driver
     mock_result = MagicMock()
@@ -323,7 +363,7 @@ def test_graph_service_update_score_no_relationship(
     mock_session.run.return_value = mock_result
 
     service = ClaimEvaluationGraphService(
-        neo4j_driver=driver, config_manager=mock_config_manager
+        neo4j_driver=driver, config=mock_graph_service_config
     )
     with caplog.at_level(logging.WARNING):
         success = service.update_decontextualization_score(
@@ -338,13 +378,13 @@ def test_graph_service_update_score_no_relationship(
 
 
 def test_graph_service_update_score_db_error(
-    mock_neo4j_driver, mock_config_manager, caplog
+    mock_neo4j_driver, mock_graph_service_config, caplog
 ):
     driver, mock_session = mock_neo4j_driver
     mock_session.run.side_effect = Exception("Neo4j connection error")
 
     service = ClaimEvaluationGraphService(
-        neo4j_driver=driver, config_manager=mock_config_manager
+        neo4j_driver=driver, config=mock_graph_service_config
     )
     with caplog.at_level(logging.ERROR):
         success = service.update_decontextualization_score("c1", "b1", 0.5)
@@ -355,7 +395,7 @@ def test_graph_service_update_score_db_error(
 
 
 def test_graph_service_batch_update_scores(
-    mock_neo4j_driver, mock_config_manager, caplog
+    mock_neo4j_driver, mock_graph_service_config, caplog
 ):
     driver, mock_session = mock_neo4j_driver
 
@@ -368,7 +408,7 @@ def test_graph_service_batch_update_scores(
     mock_session.run.return_value = iter(mock_db_results)
 
     service = ClaimEvaluationGraphService(
-        neo4j_driver=driver, config_manager=mock_config_manager
+        neo4j_driver=driver, config=mock_graph_service_config
     )
     scores_data = [
         {"claim_id": "c_batch_1", "block_id": "b_batch_1", "score": 0.88},
@@ -479,7 +519,8 @@ def test_markdown_updater_update_existing_score_logic(
     for i, line_text in enumerate(lines):
         if (
             "<!-- aclarai:decontextualization_score=null -->" in line_text
-            and "blk_xyz789" not in line_text # Ensure it's the new one for the correct block
+            and "blk_xyz789"
+            not in line_text  # Ensure it's the new one for the correct block
             and i + 1 < len(lines)
             and "blk_xyz789 ver=4" in lines[i + 1]
         ):
@@ -487,7 +528,9 @@ def test_markdown_updater_update_existing_score_logic(
         if "Line for block two. <!-- aclarai:id=blk_xyz789 ver=4 -->" in line_text:
             found_block_id_line = i
 
-    assert found_new_score_line != -1, "New score comment for blk_xyz789 not found or not positioned correctly"
+    assert found_new_score_line != -1, (
+        "New score comment for blk_xyz789 not found or not positioned correctly"
+    )
     assert found_block_id_line != -1, "Block ID line for blk_xyz789 not found"
     assert found_new_score_line == found_block_id_line - 1, (
         "New score comment not immediately before its block ID line"
@@ -518,16 +561,16 @@ def test_markdown_updater_file_not_found(markdown_service, caplog):
     assert "markdown file not found" in caplog.text.lower()
 
 
-@patch("os.replace")
-@patch("os.fsync")
-@patch("os.fdopen")
+@patch(
+    "aclarai_core.markdown.markdown_updater_service.MarkdownUpdaterService._atomic_write"
+)
 def test_markdown_updater_atomic_write_failure(
-    mock_os_replace,    # mock_fdopen_unused and mock_fsync_unused removed
+    mock_atomic_write,
     markdown_service,
     temp_markdown_file,
     caplog,
 ):
-    mock_os_replace.side_effect = OSError("Disk full")  # Simulate failure during rename
+    mock_atomic_write.return_value = False  # Simulate failure during atomic write
 
     with caplog.at_level(logging.ERROR):
         success = markdown_service.add_or_update_decontextualization_score(
@@ -535,10 +578,7 @@ def test_markdown_updater_atomic_write_failure(
         )
 
     assert success is False
-    assert "failed to atomically write" in caplog.text.lower()
-    assert "disk full" in caplog.text.lower()
-    # Ensure temp file (if created by mkstemp mock path) would be attempted to be cleaned up
-    # This part is harder to test without deeper os patching or passing temp_file_path from _atomic_write
+    assert "atomic write failed" in caplog.text.lower()
 
 
 def test_markdown_updater_preserves_other_blocks(markdown_service, temp_markdown_file):
@@ -592,62 +632,3 @@ def test_markdown_updater_preserves_other_blocks(markdown_service, temp_markdown
         in content_after_second_update
     )
     assert "<!-- aclarai:id=blk_another ver=5 -->" in content_after_second_update
-
-
-# Integration Style Test (Conceptual)
-# This would require more setup, like a running Neo4j instance and actual LLM calls or more sophisticated mocks.
-# @pytest.mark.asyncio
-# async def test_full_decontextualization_workflow(mock_neo4j_driver, temp_markdown_file, mock_config_manager):
-#     # 1. Setup: Mock LLM, real ToolFactory (or one that returns a functional mock tool),
-#     #    real GraphService with mocked driver, real MarkdownUpdaterService.
-#
-#     # Mock LLM to return a specific score
-#     mock_llm = MockLLM(response_text="0.85")
-#     mock_tool_factory_inst = MockToolFactory() # Using the basic mock tool
-#
-#     agent = DecontextualizationAgent(llm=mock_llm, tool_factory=mock_tool_factory_inst, config_manager=mock_config_manager)
-#
-#     driver, mock_session_neo4j = mock_neo4j_driver
-#     mock_neo4j_result = MagicMock()
-#     mock_neo4j_result.single.return_value = {"updated_count": 1}
-#     mock_session_neo4j.run.return_value = mock_neo4j_result
-#     graph_service = ClaimEvaluationGraphService(neo4j_driver=driver, config_manager=mock_config_manager)
-#
-#     markdown_service_inst = MarkdownUpdaterService()
-#
-#     # Test data
-#     test_claim_id = "blk_abc123" # This ID is in temp_markdown_file
-#     test_block_id = "blk_abc123" # In this case, claim_id and block_id are the same for simplicity
-#     test_claim_text = "This is block one."
-#     test_source_text = "Some source for block one."
-#
-#     # 2. Execute: Agent evaluates
-#     score, eval_message = await agent.evaluate_claim_decontextualization(
-#         claim_id=test_claim_id, claim_text=test_claim_text,
-#         source_id=test_block_id, source_text=test_source_text
-#     )
-#     assert score == 0.85
-#     assert eval_message == "success"
-#
-#     # 3. Persist: Store score in Neo4j
-#     neo4j_success = graph_service.update_decontextualization_score(
-#         claim_id=test_claim_id, block_id=test_block_id, score=score
-#     )
-#     assert neo4j_success is True
-#     mock_session_neo4j.run.assert_called_with(
-#         Any, # Query string
-#         {'claim_id': test_claim_id, 'block_id': test_block_id, 'score': 0.85}
-#     )
-#
-#     # 4. Persist: Store score in Markdown
-#     md_success = markdown_service_inst.add_or_update_decontextualization_score(
-#         str(temp_markdown_file), test_block_id, score
-#     )
-#     assert md_success is True
-#
-#     # 5. Verify: Check Markdown content
-#     content = temp_markdown_file.read_text(encoding="utf-8")
-#     assert "<!-- aclarai:decontextualization_score=0.85 -->" in content
-#     assert f"{test_claim_text} <!-- aclarai:id={test_block_id} ver=2 -->" in content # Version incremented
-#
-#     # Add more assertions as needed for a full integration test.

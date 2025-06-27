@@ -23,6 +23,7 @@ class VectorSearchTool(AclaraiBaseTool):
         vector_stores: Dict[str, VectorStore],
         similarity_threshold: float = 0.7,
         max_results: int = 5,
+        metadata: Optional[ToolMetadata] = None,
     ) -> None:
         """Initialize the vector search tool.
 
@@ -30,15 +31,20 @@ class VectorSearchTool(AclaraiBaseTool):
             vector_stores: Dictionary mapping collection names to vector stores
             similarity_threshold: Minimum similarity score for matches (0-1)
             max_results: Maximum number of results to return per collection
+            metadeta: Optional metadata for the tool
         """
         self._vector_stores = vector_stores
         self._similarity_threshold = similarity_threshold
         self._max_results = max_results
+        self._metadata = metadata
         super().__init__()
 
     @property
     def metadata(self) -> ToolMetadata:
         """Get tool metadata for agent use."""
+        if self._metadata:
+            return self._metadata
+        # Fallback to default metadata if not provided
         return ToolMetadata(
             name="vector_search",
             description=(
@@ -46,6 +52,11 @@ class VectorSearchTool(AclaraiBaseTool):
                 f"Available collections: {', '.join(self._vector_stores.keys())}"
             ),
         )
+
+    @metadata.setter
+    def metadata(self, value: ToolMetadata) -> None:
+        """Set tool metadata."""
+        self._metadata = value
 
     def _search_collection(
         self, collection: str, query: str, max_results: Optional[int] = None

@@ -71,15 +71,22 @@ class WebSearchProvider(ABC):
 class WebSearchTool(AclaraiBaseTool):
     """Tool for performing web searches using configurable providers."""
 
-    def __init__(self, provider: WebSearchProvider, max_results: int = 5) -> None:
+    def __init__(
+        self,
+        provider: WebSearchProvider,
+        max_results: int = 5,
+        metadata: Optional[ToolMetadata] = None,
+    ) -> None:
         """Initialize the web search tool.
 
         Args:
             provider: Configured search provider instance
             max_results: Maximum number of results to return
+            metadata: Optional metadata for the tool
         """
         self._provider = provider
         self._max_results = max_results
+        self._metadata = metadata
         super().__init__()
 
     def __call__(self, input: Any) -> Any:
@@ -103,10 +110,18 @@ class WebSearchTool(AclaraiBaseTool):
     @property
     def metadata(self) -> ToolMetadata:
         """Get tool metadata for agent use."""
+        if self._metadata:
+            return self._metadata
+        # Fallback to default metadata if not provided
         return ToolMetadata(
             name="web_search",
             description="Search the web for information about a topic.",
         )
+
+    @metadata.setter
+    def metadata(self, value: ToolMetadata) -> None:
+        """Set tool metadata."""
+        self._metadata = value
 
     def _call(self, query: str, max_results: Optional[int] = None) -> str:
         """Execute a web search.

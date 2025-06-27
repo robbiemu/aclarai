@@ -15,25 +15,41 @@ logger = logging.getLogger(__name__)
 class Neo4jQueryTool(AclaraiBaseTool):
     """Tool for executing Cypher queries against Neo4j."""
 
-    def __init__(self, uri: str, auth: tuple[str, str], max_retries: int = 3) -> None:
+    def __init__(
+        self,
+        uri: str,
+        auth: tuple[str, str],
+        max_retries: int = 3,
+        metadata: Optional[ToolMetadata] = None,
+    ) -> None:
         """Initialize the Neo4j query tool.
 
         Args:
             uri: Neo4j connection URI
             auth: Tuple of (username, password) for authentication
             max_retries: Maximum number of retry attempts for failed queries
+            metadata: Optional metadata for the tool
         """
         self._driver = GraphDatabase.driver(uri, auth=auth)
         self._max_retries = max_retries
+        self._metadata = metadata
         super().__init__()
 
     @property
     def metadata(self) -> ToolMetadata:
         """Get tool metadata for agent use."""
+        if self._metadata:
+            return self._metadata
+        # Fallback to default metadata if not provided
         return ToolMetadata(
             name="neo4j_query",
             description="Execute Cypher queries against the knowledge graph. Returns results as a formatted string.",
         )
+
+    @metadata.setter
+    def metadata(self, value: ToolMetadata) -> None:
+        """Set tool metadata."""
+        self._metadata = value
 
     @retry(
         stop=stop_after_attempt(3),
