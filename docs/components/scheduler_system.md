@@ -4,59 +4,75 @@ The scheduler system provides periodic job execution infrastructure for the acla
 
 ## Overview
 
-The scheduler service runs background tasks on configurable cron schedules, including:
+The scheduler service runs background tasks on configurable cron schedules. Its primary responsibilities are to ensure data consistency, perform regular maintenance, and trigger agentic processes that operate on the entire knowledge base.
 
-- **Vault Synchronization**: Maintains consistency between Markdown files and the Neo4j knowledge graph
-- **Concept Hygiene**: Deduplication and refinement operations (future enhancement)
-- **Embedding Refresh**: Updates embeddings for changed content (future enhancement)
-- **Reprocessing Tasks**: Handles content marked for reprocessing (future enhancement)
+Key responsibilities:
+
+-   **Vault Synchronization**: Maintains consistency between Markdown files and the Neo4j knowledge graph.
+-   **Concept Embedding Refresh**: Updates vector embeddings for concept files that have been modified.
+-   **Reprocessing Tasks**: Handles content marked for reprocessing by other parts of the system.
+-   **Concept Hygiene**: (Future) Performs deduplication and refinement operations.
 
 ## Architecture
 
-The scheduler system follows aclarai architectural patterns:
+The scheduler system is a standalone service that runs within the Docker Compose stack. It follows aclarai architectural patterns:
 
-- **Structured Logging**: Adheres to `docs/arch/idea-logging.md` with service context and job IDs
-- **Error Handling**: Implements `docs/arch/on-error-handling-and-resilience.md` patterns
-- **Neo4j Integration**: Uses `docs/arch/on-neo4j_interaction.md` direct Cypher approach
-- **Configuration Management**: All parameters sourced from `settings/aclarai.config.yaml`
+-   **Structured Logging**: Adheres to `docs/arch/idea-logging.md` with service context and job IDs.
+-   **Error Handling**: Implements `docs/arch/on-error-handling-and-resilience.md` patterns with retry logic for transient database or network issues.
+-   **Neo4j Integration**: Uses `docs/arch/on-neo4j_interaction.md` patterns for direct Cypher execution.
+-   **Configuration Management**: All parameters are sourced from `settings/aclarai.config.yaml`.
 
 ## Core Components
 
 ### SchedulerService
 
-Main service class (`aclarai_scheduler.main`) that:
+The main service class (`aclarai_scheduler.main`) that:
 
-- Initializes APScheduler with thread pool executors
-- Registers jobs from configuration
-- Handles graceful shutdown and signal management
-- Provides centralized logging and error handling
+-   Initializes APScheduler with a thread pool executor.
+-   Registers jobs based on the central configuration file.
+-   Handles graceful shutdown and system signals (SIGINT/SIGTERM).
+-   Provides centralized logging and error handling for all jobs.
 
 ### VaultSyncJob
 
-Vault-to-graph synchronization implementation (`aclarai_scheduler.vault_sync`) following `docs/arch/on-graph_vault_synchronization.md`:
+The core synchronization job (`aclarai_scheduler.vault_sync`) that implements the periodic vault-to-graph sync loop as defined in `docs/arch/on-graph_vault_synchronization.md`.
 
-- **Block Extraction**: Parses Markdown files for `aclarai:id` blocks
-- **Change Detection**: Uses SHA-256 hashes of semantic text content
-- **Graph Synchronization**: Creates/updates Block nodes with version tracking
-- **Statistics Tracking**: Provides detailed metrics on sync operations
+-   **Block Extraction**: Parses Markdown files for `aclarai:id` blocks.
+-   **Change Detection**: Uses SHA-256 hashes of semantic text content to detect changes.
+-   **Graph Synchronization**: Creates/updates `:Block` nodes with version tracking.
+-   **Statistics Tracking**: Provides detailed metrics on sync operations.
+
+### ConceptEmbeddingRefreshJob
+
+A dedicated job (`aclarai_scheduler.concept_refresh`) for maintaining the concept vector store, as defined in `docs/arch/on-refreshing_concept_embeddings.md`.
+
+-   **File Scanning**: Iterates through all Tier 3 concept files.
+-   **Hash Comparison**: Compares the hash of the file's semantic content with the hash stored in the corresponding `:Concept` node in Neo4j.
+-   **Conditional Updates**: If hashes differ, it re-embeds the concept and updates both the vector store and the Neo4j node.
 
 ## Configuration
 
-Jobs are configured via `settings/aclarai.config.yaml`:
+Jobs are configured via `settings/aclarai.config.yaml` under the `scheduler.jobs` section. This allows for granular control over each job's behavior.
 
 ```yaml
 scheduler:
   jobs:
     vault_sync:
       enabled: true
+      manual_only: false
       cron: "*/30 * * * *"
       description: "Sync vault files with knowledge graph"
+    concept_embedding_refresh:
+      enabled: true
+      manual_only: false
+      cron: "0 3 * * *" # Daily at 3 AM
+      description: "Refresh concept embeddings from Tier 3 pages"
 ```
 
 ## Environment Controls
 
-- `AUTOMATION_PAUSE`: Set to "true" to pause all scheduled jobs
-- Service-specific environment variables can override job configurations
+-   **Global Automation Pause**: The scheduler respects the `.aclarai_pause` file in the vault root. If this file exists, all automatic job executions are skipped.
+-   **Individual Job Toggles**: Each job can be individually enabled, disabled, or set to `manual_only` via the configuration file.
 
 ## Synchronization Logic
 
@@ -64,20 +80,14 @@ The vault sync job implements the specification from `docs/arch/on-graph_vault_s
 
 ### Block Types Supported
 
-- **Inline blocks**: Individual sentences/claims with `<!-- aclarai:id=blk_abc123 ver=1 -->`
-- **File-level blocks**: Agent-generated content with file-scope IDs
+-   **Inline blocks**: Individual sentences/claims with `<!-- aclarai:id=blk_abc123 ver=1 -->`
+-   **File-level blocks**: Agent-generated content with file-scope IDs
 
 ### Change Detection
 
-- Calculates SHA-256 hashes of visible content (excluding metadata comments)
-- Compares with stored hashes in Neo4j Block nodes
-- Increments version numbers and sets `needs_reprocessing` flags for changes
-
-### Multi-tier Processing
-
-- **Tier 1**: Always processed (required content)
-- **Tier 2/3**: Processed when `aclarai:id` markers are present
-- Configurable file inclusion patterns
+-   Calculates SHA-256 hashes of visible content (excluding metadata comments).
+-   Compares with stored hashes in Neo4j `:Block` nodes.
+-   Increments version numbers (`ver=N`) and sets `needs_reprocessing: true` flags for changes.
 
 ## Logging Format
 
@@ -99,41 +109,40 @@ All operations use structured logging with required context:
 
 The system implements resilient patterns:
 
-- **Retry Logic**: Exponential backoff for transient Neo4j connection errors
-- **Graceful Degradation**: Jobs continue processing other files if individual files fail
-- **Atomic Operations**: Database updates use transactions to prevent partial state
-- **Signal Handling**: Graceful shutdown on SIGINT/SIGTERM
+-   **Retry Logic**: Exponential backoff for transient Neo4j connection errors.
+-   **Graceful Degradation**: Jobs continue processing other files if individual files fail.
+-   **Atomic Operations**: Database updates use transactions to prevent partial state.
+-   **Signal Handling**: Graceful shutdown on SIGINT/SIGTERM.
 
 ## Performance Considerations
 
-- **Thread Pool Execution**: Jobs run in isolated threads to prevent blocking
-- **Batch Processing**: Neo4j operations use efficient batch patterns
-- **Memory Management**: Large vaults processed incrementally
-- **Connection Pooling**: Neo4j driver handles connection lifecycle
+-   **Thread Pool Execution**: Jobs run in isolated threads to prevent blocking.
+-   **Batch Processing**: Neo4j operations use efficient batch patterns.
+-   **Memory Management**: Large vaults processed incrementally.
+-   **Connection Pooling**: Neo4j driver handles connection lifecycle.
 
 ## Monitoring and Observability
 
 Each job execution provides:
 
-- **Start/completion timestamps**
-- **Processing statistics** (files scanned, blocks updated, errors)
-- **Performance metrics** (execution duration, throughput)
-- **Error details** with stack traces for debugging
+-   **Start/completion timestamps**
+-   **Processing statistics** (files scanned, blocks updated, errors)
+-   **Performance metrics** (execution duration, throughput)
+-   **Error details** with stack traces for debugging
 
 ## Dependencies
 
 The scheduler system builds on:
 
-- **APScheduler**: Job scheduling and execution framework
-- **aclarai_shared**: Configuration, logging, and Neo4j components
-- **Neo4j Python Driver**: Database operations
-- **Standard Library**: Signal handling, hashing, file operations
+-   **APScheduler**: Job scheduling and execution framework.
+-   **aclarai_shared**: Configuration, logging, and Neo4j components.
+-   **Neo4j Python Driver**: Database operations.
+-   **Standard Library**: Signal handling, hashing, file operations.
 
 ## Future Enhancements
 
 Planned extensions include:
 
-- **Concept Embedding Refresh**: Periodic vector store updates
-- **Hygiene Jobs**: Automated cleanup and deduplication
-- **Advanced Scheduling**: Dependency-based job execution
-- **Performance Optimization**: Incremental sync for large vaults
+-   Concept hygiene and cleanup jobs.
+-   Advanced scheduling with dependency-based job execution.
+-   Performance optimizations for very large vaults.
