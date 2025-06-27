@@ -8,7 +8,8 @@ from typing import Optional, Tuple
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.utils.prompt_loader import load_prompt_template
-from llama_index.core.agent import ReActAgent
+from llama_index.core.agent.workflow import ReActAgent
+from llama_index.core.base.response.schema import Response
 from llama_index.core.llms import LLM
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
@@ -31,14 +32,14 @@ class DecontextualizationAgent:
         # The factory handles building the correct tools based on the YAML config.
         self.tools = tool_factory.get_tools_for_agent("decontextualization_agent")
 
-        self.agent = ReActAgent.from_tools(
+        self.agent = ReActAgent(
             tools=self.tools,
             llm=self.llm,
             verbose=True,
         )
         self.max_retries = self.config.processing.retries.get("max_attempts", 3)
 
-    async def evaluate_claim_decontextualization(
+    def evaluate_claim_decontextualization(
         self, claim_id: str, claim_text: str, source_id: str, source_text: str
     ) -> Tuple[Optional[float], str]:
         """
@@ -77,23 +78,21 @@ class DecontextualizationAgent:
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(multiplier=1, min=4, max=10),
         )
-        async def _attempt_evaluation_with_prompt(current_prompt: str) -> str:
+        def _attempt_evaluation_with_prompt(current_prompt: str) -> str:
             """Handle the actual LLM call with retries, ensuring a string response."""
-            chat_response = await self.agent.achat(current_prompt)
+            result = self.agent.run(input=current_prompt)
 
-            if isinstance(chat_response.response, str):
-                return chat_response.response.strip()
+            if isinstance(result, Response) and isinstance(result.response, str):
+                return result.response.strip()
 
-            raise ValueError(
-                f"LLM did not return a string response. Got: {chat_response.response}"
-            )
+            raise ValueError(f"LLM did not return a string response. Got: {result}")
 
         try:
             logger.info(
                 f"Evaluating decontextualization for claim_id: {claim_id} with max_retries: {self.max_retries}",
                 extra=log_details,
             )
-            response_text = await _attempt_evaluation_with_prompt(prompt)
+            response_text = _attempt_evaluation_with_prompt(prompt)
 
             try:
                 score = float(response_text)

@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +24,7 @@ from aclarai_shared.config import (
     aclaraiConfig,
 )
 from llama_index.core.base.llms.types import ChatMessage, ChatResponse
+from llama_index.core.base.response.schema import Response
 from llama_index.core.tools import BaseTool, ToolMetadata
 from neo4j import Driver
 
@@ -73,6 +74,29 @@ class MockLLM:
         )
 
 
+class MockReActAgent:
+    """Mocks the ReActAgent for testing."""
+
+    def __init__(
+        self, response_text: str = "0.85", throw_exception: Optional[Exception] = None
+    ):
+        self.response_text = response_text
+        self.throw_exception = throw_exception
+        self.last_input = None
+        self.call_count = 0
+
+    def run(self, input: str) -> Response:
+        self.last_input = input
+        self.call_count += 1
+
+        if self.throw_exception:
+            raise self.throw_exception
+
+        # Return a Response object like the real ReActAgent
+        response = Response(response=self.response_text)
+        return response
+
+
 class MockTool(BaseTool):
     """Mocks a LlamaIndex BaseTool."""
 
@@ -108,7 +132,9 @@ class MockToolFactory:
         ]
         self._agent_tool_cache = {}
 
-    def get_tools_for_agent(self, agent_name: str) -> List[BaseTool]:
+    def get_tools_for_agent(
+        self, agent_name: str
+    ) -> List[BaseTool | Callable[..., Any]]:
         # Simulate caching behavior
         if agent_name not in self._agent_tool_cache:
             self._agent_tool_cache[agent_name] = self._tools
@@ -154,25 +180,29 @@ def mock_tool_factory():
 
 
 # --- DecontextualizationAgent Tests ---
-@pytest.mark.asyncio
-async def test_decontextualization_agent_success(
-    mock_tool_factory, mock_aclarai_config
-):
+# In file: test_decontextualization_workflow.py
+def test_decontextualization_agent_success(mock_tool_factory, mock_aclarai_config):
     """Test successful evaluation by the agent."""
     mock_llm = MockLLM(response_text="0.92")
-    agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
-    )  # type: ignore
 
-    # Mock the load_prompt_template function to avoid file I/O in this unit test
-    with patch(
-        "aclarai_core.agents.decontextualization_agent.load_prompt_template"
-    ) as mock_load_prompt:
-        # The actual content is loaded from the YAML, but we simulate it here
-        # to show what the agent receives.
-        mock_load_prompt.return_value = """Input:
-Claim: "Claim text"
-Source: "Source text"
+    # Mock the ReActAgent
+    mock_react_agent = MockReActAgent(response_text="0.92")
+
+    with (
+        patch(
+            "aclarai_core.agents.decontextualization_agent.load_prompt_template"
+        ) as mock_load_prompt,
+        patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent",
+            return_value=mock_react_agent,
+        ),
+    ):
+        # Define test data and the prompt template
+        claim_text_val = "Claim text"
+        source_text_val = "Source text"
+        prompt_template = """Input:
+Claim: "{claim_text}"
+Source: "{source_text}"
 
 Task:
 1. Analyze the 'Claim' for any ambiguities or missing context.
@@ -180,85 +210,117 @@ Task:
 3. Based on your analysis, provide a decontextualization score as a float between 0.0 and 1.0.
 Output only the float score. For example: 0.75"""
 
-        score, message = await agent.evaluate_claim_decontextualization(
+        # FIX: Format the template before setting it as the mock's return value
+        mock_load_prompt.return_value = prompt_template.format(
+            claim_text=claim_text_val, source_text=source_text_val
+        )
+
+        agent = DecontextualizationAgent(
+            llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
+        )
+
+        score, message = agent.evaluate_claim_decontextualization(
             claim_id="c1",
-            claim_text="Claim text",
+            claim_text=claim_text_val,
             source_id="s1",
-            source_text="Source text",
+            source_text=source_text_val,
         )
 
     assert score == 0.92
     assert message == "success"
-    # Check if the prompt sent to the LLM contains both the agent's system instructions
-    # and the specific task (claim and source text).
-    prompt_content = mock_llm.chat_messages[-1]
-    assert 'Claim: "Claim text"' in prompt_content
-    assert 'Source: "Source text"' in prompt_content
-    # Also check that the agent's instructions about tools are present
-    assert "You have access to the following tools" in prompt_content
+
+    # Verify the ReActAgent was called correctly
+    assert mock_react_agent.call_count == 1
+    assert 'Claim: "Claim text"' in mock_react_agent.last_input
+    assert 'Source: "Source text"' in mock_react_agent.last_input
 
 
-@pytest.mark.asyncio
-async def test_decontextualization_agent_llm_parse_error(
+def test_decontextualization_agent_llm_parse_error(
     mock_tool_factory, mock_aclarai_config
 ):
     """Test agent handling of LLM returning non-float score."""
     mock_llm = MockLLM(response_text="not a float")
-    agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
-    )  # type: ignore
+    mock_react_agent = MockReActAgent(response_text="not a float")
 
-    score, message = await agent.evaluate_claim_decontextualization(
-        claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
-    )
+    with (
+        patch(
+            "aclarai_core.agents.decontextualization_agent.load_prompt_template"
+        ) as mock_load_prompt,
+        patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent",
+            return_value=mock_react_agent,
+        ),
+    ):
+        mock_load_prompt.return_value = "Mock prompt"
+
+        agent = DecontextualizationAgent(
+            llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
+        )
+
+        score, message = agent.evaluate_claim_decontextualization(
+            claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
+        )
 
     assert score is None
     assert "invalid score format" in message.lower()
 
 
-@pytest.mark.asyncio
-async def test_decontextualization_agent_llm_score_out_of_range(
+def test_decontextualization_agent_llm_score_out_of_range(
     mock_tool_factory, mock_aclarai_config
 ):
     """Test agent handling of LLM returning score out of 0.0-1.0 range."""
     mock_llm = MockLLM(response_text="1.5")
-    agent = DecontextualizationAgent(
-        llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
-    )  # type: ignore
+    mock_react_agent = MockReActAgent(response_text="1.5")
 
-    score, message = await agent.evaluate_claim_decontextualization(
-        claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
-    )
+    with (
+        patch(
+            "aclarai_core.agents.decontextualization_agent.load_prompt_template"
+        ) as mock_load_prompt,
+        patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent",
+            return_value=mock_react_agent,
+        ),
+    ):
+        mock_load_prompt.return_value = "Mock prompt"
+
+        agent = DecontextualizationAgent(
+            llm=mock_llm, tool_factory=mock_tool_factory, config=mock_aclarai_config
+        )
+
+        score, message = agent.evaluate_claim_decontextualization(
+            claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
+        )
 
     assert score is None
     assert "out-of-range value" in message.lower()
 
 
-@pytest.mark.asyncio
-async def test_decontextualization_agent_llm_exception_after_retries(
+def test_decontextualization_agent_llm_exception_after_retries(
     mock_tool_factory, mock_aclarai_config
 ):
     """Test agent handling of LLM consistently raising exceptions."""
     original_exception = RuntimeError("LLM API Error")
     mock_llm = MockLLM(throw_exception=original_exception)
+    mock_react_agent = MockReActAgent(throw_exception=original_exception)
     mock_aclarai_config.processing.retries = {"max_attempts": 3}
 
-    # We must mock `load_prompt_template` to prevent file I/O
-    # AND provide a string `return_value` to prevent the Pydantic error.
-    with patch(
-        "aclarai_core.agents.decontextualization_agent.load_prompt_template",
-        return_value="A valid mock prompt string",
-    ) as mock_load_prompt:
+    with (
+        patch(
+            "aclarai_core.agents.decontextualization_agent.load_prompt_template",
+            return_value="A valid mock prompt string",
+        ) as mock_load_prompt,
+        patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent",
+            return_value=mock_react_agent,
+        ),
+    ):
         agent = DecontextualizationAgent(
             llm=mock_llm,
             tool_factory=mock_tool_factory,
             config=mock_aclarai_config,
         )
 
-        # The agent will receive the string prompt,
-        # pass it to the ReActAgent, which will call our mock_llm.
-        # The mock_llm will raise the exception, which will be caught by tenacity.
-        score, message = await agent.evaluate_claim_decontextualization(
+        score, message = agent.evaluate_claim_decontextualization(
             claim_id="c1", claim_text="Claim", source_id="s1", source_text="Source"
         )
 
@@ -273,35 +335,53 @@ async def test_decontextualization_agent_llm_exception_after_retries(
     )
 
 
-@pytest.mark.asyncio
-async def test_decontextualization_agent_tool_usage_in_prompt(mock_aclarai_config):
+def test_decontextualization_agent_tool_usage_in_prompt(mock_aclarai_config):
     """Verify that the prompt correctly instructs the LLM on tool usage."""
     mock_llm = MockLLM(response_text="0.7")
+    mock_react_agent = MockReActAgent(response_text="0.7")
+
     # Need a tool factory that provides the specific mock_vector_search_tool
     tool_factory_with_specific_tool = MockToolFactory(
         tools=[
             MockTool(name="vector_search_utterances", description="Searches utterances")
         ]
     )
-    agent = DecontextualizationAgent(
-        llm=mock_llm,
-        tool_factory=tool_factory_with_specific_tool,
-        config=mock_aclarai_config,
-    )  # type: ignore
 
-    await agent.evaluate_claim_decontextualization(
-        claim_id="c1",
-        claim_text="A generic claim",
-        source_id="s1",
-        source_text="Source",
-    )
+    with (
+        patch(
+            "aclarai_core.agents.decontextualization_agent.load_prompt_template"
+        ) as mock_load_prompt,
+        patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent",
+            return_value=mock_react_agent,
+        ) as mock_react_from_tools,
+    ):
+        mock_load_prompt.return_value = "use the 'vector_search_utterances' tool"
 
-    # Check the full prompt sent to the LLM
-    prompt_text = mock_llm.chat_messages[-1]
-    # Check for the tool name in the agent's system prompt section
-    assert "Tool Name: vector_search_utterances" in prompt_text
-    # Check for the tool name in the user-level task description
-    assert "use the 'vector_search_utterances' tool" in prompt_text
+        agent = DecontextualizationAgent(
+            llm=mock_llm,
+            tool_factory=tool_factory_with_specific_tool,
+            config=mock_aclarai_config,
+        )
+
+        agent.evaluate_claim_decontextualization(
+            claim_id="c1",
+            claim_text="A generic claim",
+            source_id="s1",
+            source_text="Source",
+        )
+
+    # Verify ReActAgent was created with the correct tools
+    mock_react_from_tools.assert_called_once()
+    call_args = mock_react_from_tools.call_args
+    tools_passed = call_args[1]["tools"]  # keyword argument 'tools'
+
+    # Check that the tool with the correct name was passed
+    tool_names = [tool.metadata.name for tool in tools_passed]
+    assert "vector_search_utterances" in tool_names
+
+    # Check that the prompt contains the tool usage instruction
+    assert "use the 'vector_search_utterances' tool" in mock_react_agent.last_input
 
 
 # --- ClaimEvaluationGraphService Tests ---

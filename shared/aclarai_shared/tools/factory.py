@@ -1,7 +1,7 @@
 # In shared/aclarai_shared/tools/factory.py
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from llama_index.core.tools import BaseTool, ToolMetadata
 
@@ -28,9 +28,11 @@ class ToolFactory:
         self._config = config.get("tools", {})
         self.vector_store_manager = vector_store_manager
         # Instance-level cache to store initialized tools for each agent
-        self._agent_tool_cache: Dict[str, List[BaseTool]] = {}
+        self._agent_tool_cache: Dict[str, List[BaseTool | Callable[..., Any]]] = {}
 
-    def get_tools_for_agent(self, agent_name: str) -> List[BaseTool]:
+    def get_tools_for_agent(
+        self, agent_name: str
+    ) -> List[BaseTool | Callable[..., Any]]:
         """
         Get a cached list of tools for a specific agent role.
         This is the primary entry point for agents to get their tools.
@@ -49,7 +51,7 @@ class ToolFactory:
             logger.warning(f"No tool configuration found for agent: {agent_name}")
             return []
 
-        tools: List[BaseTool] = []
+        tools: List[BaseTool | Callable[..., Any]] = []
         for tool_config in agent_tool_configs:
             tool_type = tool_config.get("name")
             params = tool_config.get("params", {})

@@ -70,7 +70,6 @@ def event_loop():
 
 
 @pytest.fixture(scope="class")
-@pytest.mark.integration
 def integration_neo4j_driver():
     """Fixture to set up a connection to a real Neo4j database for testing."""
     if not os.getenv("NEO4J_PASSWORD"):
