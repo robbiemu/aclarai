@@ -47,6 +47,16 @@ def mock_config():
                 "api_key_env_var": "TAVILY_API_KEY",
                 "max_results": 5,
             },
+            "agent_tool_mappings": {
+                "test_agent": [
+                    {"name": "Neo4jQueryTool"},
+                    {
+                        "name": "VectorSearchTool",
+                        "params": {"collection": "test_collection"},
+                    },
+                    {"name": "WebSearchTool"},
+                ]
+            },
         }
     }
 

@@ -1,151 +1,25 @@
-"""Tool factory for initializing and managing aclarai tools."""
+# In shared/aclarai_shared/tools/factory.py
 
-import functools
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
-from llama_index.core.tools import BaseTool
+from llama_index.core.tools import BaseTool, ToolMetadata
 
 from .implementations.neo4j_tool import Neo4jQueryTool
 from .implementations.vector_search_tool import VectorSearchTool
 from .implementations.web_search.base import WebSearchTool
 from .implementations.web_search.provider import create_provider
-from .vector_store_manager import VectorStore, VectorStoreManager
+from .vector_store_manager import VectorStoreManager
 
 logger = logging.getLogger(__name__)
 
 
-def _freeze(obj: Any) -> Union[frozenset, tuple, Any]:
-    """Recursively freeze a container to make it hashable for caching."""
-    if isinstance(obj, dict):
-        return frozenset((k, _freeze(v)) for k, v in obj.items())
-    if isinstance(obj, list):
-        return tuple(_freeze(v) for v in obj)
-    return obj
-
-
-def _unfreeze(obj: Any) -> Any:
-    """Recursively unfreeze a container back to its mutable form."""
-    if isinstance(obj, frozenset):
-        return {k: _unfreeze(v) for k, v in obj}
-    if isinstance(obj, tuple):
-        return [_unfreeze(v) for v in obj]
-    return obj
-
-
-def _initialize_neo4j_tool(config: Dict[str, Any]) -> Optional[Neo4jQueryTool]:
-    """Initialize the Neo4j query tool."""
-    try:
-        tool = Neo4jQueryTool.from_config(config)
-        if tool:
-            logger.info("Successfully initialized Neo4j query tool")
-        return tool
-    except Exception as e:
-        logger.error(f"Failed to initialize Neo4j tool: {str(e)}")
-        return None
-
-
-def _initialize_vector_search_tool(
-    config: Dict[str, Any], vector_store_manager: VectorStoreManager
-) -> Optional[VectorSearchTool]:
-    """Initialize the vector search tool using the VectorStoreManager."""
-    try:
-        collection_names = config.get("collections", [])
-        if not collection_names:
-            logger.warning(
-                "Vector search tool enabled but no collections specified in config."
-            )
-            return None
-
-        vector_stores: Dict[str, VectorStore] = {}
-        for name in collection_names:
-            store = vector_store_manager.get_store(name)
-            if store:
-                vector_stores[name] = store
-            else:
-                logger.error(f"Vector store '{name}' not found in VectorStoreManager.")
-
-        if not vector_stores:
-            logger.error("Could not initialize any vector stores for VectorSearchTool.")
-            return None
-
-        tool = VectorSearchTool(
-            vector_stores=vector_stores,
-            similarity_threshold=config.get("similarity_threshold", 0.7),
-            max_results=config.get("max_results", 5),
-        )
-        logger.info("Successfully initialized vector search tool")
-        return tool
-    except Exception as e:
-        logger.error(f"Failed to initialize vector search tool: {str(e)}")
-        return None
-
-
-def _initialize_web_search_tool(config: Dict[str, Any]) -> Optional[WebSearchTool]:
-    """Initialize the web search tool."""
-    try:
-        provider_name = config.get("provider")
-        if not provider_name:
-            logger.error("No web search provider specified in config")
-            return None
-
-        provider = create_provider(provider_name, config)
-        if not provider:
-            return None
-
-        tool = WebSearchTool(
-            provider=provider, max_results=config.get("max_results", 5)
-        )
-        logger.info(
-            "Successfully initialized web search tool",
-            extra={"provider": provider_name},
-        )
-        return tool
-    except Exception as e:
-        logger.error(f"Failed to initialize web search tool: {str(e)}")
-        return None
-
-
-@functools.lru_cache(maxsize=None)
-def _get_cached_tools(
-    config_hash: frozenset, vector_store_manager: VectorStoreManager
-) -> List[BaseTool]:
-    """
-    Get a cached list of tools based on a hashable configuration and manager.
-
-    This function is defined outside the class to prevent memory leaks associated
-    with caching instance methods.
-    """
-    config = _unfreeze(config_hash)
-    tools: List[BaseTool] = []
-
-    # Initialize Neo4j tool if enabled
-    if config.get("neo4j", {}).get("enabled", True) and (
-        neo4j_tool := _initialize_neo4j_tool(config.get("neo4j", {}))
-    ):
-        tools.append(neo4j_tool)
-
-    # Initialize vector search tool if enabled
-    if config.get("vector_search", {}).get("enabled", True) and (
-        vector_tool := _initialize_vector_search_tool(
-            config.get("vector_search", {}), vector_store_manager
-        )
-    ):
-        tools.append(vector_tool)
-
-    # Initialize web search tool if enabled and configured
-    if (
-        (web_config := config.get("web_search", {}))
-        and web_config.get("enabled", False)
-        and (web_tool := _initialize_web_search_tool(web_config))
-    ):
-        tools.append(web_tool)
-
-    return tools
-
-
 class ToolFactory:
-    """Factory for creating and managing aclarai tools."""
+    """
+    Factory for creating and managing agent tools based on system configuration.
+    This class reads the `tools` section of the configuration and constructs
+    the appropriate toolset for a given agent role.
+    """
 
     def __init__(
         self, config: Dict[str, Any], vector_store_manager: VectorStoreManager
@@ -153,14 +27,127 @@ class ToolFactory:
         """Initialize the tool factory."""
         self._config = config.get("tools", {})
         self.vector_store_manager = vector_store_manager
+        # Instance-level cache to store initialized tools for each agent
+        self._agent_tool_cache: Dict[str, List[BaseTool | Callable[..., Any]]] = {}
 
-    def get_tools_for_agent(self, _agent_name: str) -> List[BaseTool]:
+    def get_tools_for_agent(
+        self, agent_name: str
+    ) -> List[BaseTool | Callable[..., Any]]:
         """
-        Get the appropriate set of tools for an agent.
+        Get a cached list of tools for a specific agent role.
+        This is the primary entry point for agents to get their tools.
+        The result is cached per agent name to prevent re-initializing tools
+        on every call for the same agent.
+        """
+        # Check the instance cache first
+        if agent_name in self._agent_tool_cache:
+            return self._agent_tool_cache[agent_name]
 
-        This method acts as a public interface to the cached tool creation
-        logic, ensuring that tool initialization only happens once for a given
-        configuration.
-        """
-        hashable_config = _freeze(self._config)
-        return _get_cached_tools(hashable_config, self.vector_store_manager)
+        # If not cached, build the tools for this agent
+        agent_tool_configs = self._config.get("agent_tool_mappings", {}).get(
+            agent_name, []
+        )
+        if not agent_tool_configs:
+            logger.warning(f"No tool configuration found for agent: {agent_name}")
+            return []
+
+        tools: List[BaseTool | Callable[..., Any]] = []
+        for tool_config in agent_tool_configs:
+            tool_type = tool_config.get("name")
+            params = tool_config.get("params", {})
+
+            tool: Optional[BaseTool] = None
+            if tool_type == "VectorSearchTool":
+                tool = self._initialize_vector_search_tool(params)
+            elif tool_type == "Neo4jQueryTool":
+                tool = self._initialize_neo4j_tool(self._config.get("neo4j", {}))
+            elif tool_type == "WebSearchTool":
+                tool = self._initialize_web_search_tool(
+                    self._config.get("web_search", {})
+                )
+            else:
+                logger.warning(
+                    f"Unknown tool type '{tool_type}' configured for agent '{agent_name}'"
+                )
+                continue
+
+            if tool:
+                # Allow agent-specific metadata to override the tool's default metadata
+                if "metadata" in params:
+                    tool.metadata = ToolMetadata(**params["metadata"])
+                tools.append(tool)
+
+        # Store the newly created tool list in the cache before returning
+        self._agent_tool_cache[agent_name] = tools
+        return tools
+
+    def _initialize_neo4j_tool(
+        self, config: Dict[str, Any]
+    ) -> Optional[Neo4jQueryTool]:
+        """Initialize the Neo4j query tool from its configuration section."""
+        if not config.get("enabled", True):
+            return None
+        try:
+            tool = Neo4jQueryTool.from_config(config)
+            if tool:
+                logger.info("Successfully initialized Neo4j query tool.")
+            return tool
+        except Exception as e:
+            logger.error(f"Failed to initialize Neo4j tool: {str(e)}")
+            return None
+
+    def _initialize_vector_search_tool(
+        self, params: Dict[str, Any]
+    ) -> Optional[VectorSearchTool]:
+        """Initialize the vector search tool based on specific parameters."""
+        collection_name = params.get("collection")
+        if not collection_name:
+            logger.error("VectorSearchTool config params missing 'collection' key.")
+            return None
+
+        store = self.vector_store_manager.get_store(collection_name)
+        if not store:
+            logger.error(
+                f"Vector store '{collection_name}' not found in VectorStoreManager."
+            )
+            return None
+
+        main_vector_config = self._config.get("vector_search", {})
+
+        return VectorSearchTool(
+            vector_stores={collection_name: store},
+            similarity_threshold=params.get(
+                "similarity_threshold",
+                main_vector_config.get("similarity_threshold", 0.7),
+            ),
+            max_results=params.get(
+                "max_results", main_vector_config.get("max_results", 5)
+            ),
+        )
+
+    def _initialize_web_search_tool(
+        self, config: Dict[str, Any]
+    ) -> Optional[WebSearchTool]:
+        """Initialize the web search tool from its configuration section."""
+        if not config.get("enabled", False):
+            return None
+        try:
+            provider_name = config.get("provider")
+            if not provider_name:
+                logger.error("No web search provider specified in config.")
+                return None
+
+            provider = create_provider(provider_name, config)
+            if not provider:
+                return None
+
+            tool = WebSearchTool(
+                provider=provider, max_results=config.get("max_results", 5)
+            )
+            logger.info(
+                f"Successfully initialized web search tool with provider: {provider_name}."
+            )
+            return tool
+        except Exception as e:
+            logger.error(f"Failed to initialize web search tool: {str(e)}")
+            return None

@@ -33,6 +33,21 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# In shared/aclarai_shared/config.py
+
+
+@dataclass
+class ProcessingConfig:
+    """Configuration for data processing parameters."""
+
+    temperature: float = 0.1
+    max_tokens: int = 1000
+    timeout_seconds: int = 30
+    claimify: Dict[str, Any] = field(default_factory=dict)
+    batch_sizes: Dict[str, Any] = field(default_factory=dict)
+    retries: Dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class EmbeddingConfig:
     """Configuration for embedding models and vector storage."""
@@ -201,6 +216,7 @@ class aclaraiConfig:
     neo4j: DatabaseConfig = field(default_factory=lambda: DatabaseConfig("", 0, "", ""))
     # New configuration sections
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     concepts: ConceptsConfig = field(default_factory=ConceptsConfig)
     noun_phrase_extraction: NounPhraseExtractionConfig = field(
         default_factory=NounPhraseExtractionConfig
@@ -305,6 +321,16 @@ class aclaraiConfig:
             min_chunk_tokens=embedding_config.get("chunking", {}).get(
                 "min_chunk_tokens", 5
             ),
+        )
+        # Load processing configuration from YAML
+        processing_config_data = yaml_config.get("processing", {})
+        processing = ProcessingConfig(
+            temperature=processing_config_data.get("temperature", 0.1),
+            max_tokens=processing_config_data.get("max_tokens", 1000),
+            timeout_seconds=processing_config_data.get("timeout_seconds", 30),
+            claimify=processing_config_data.get("claimify", {}),
+            batch_sizes=processing_config_data.get("batch_sizes", {}),
+            retries=processing_config_data.get("retries", {}),
         )
         # Load concepts configuration from YAML
         concepts_config = yaml_config.get("concepts", {})
@@ -415,6 +441,7 @@ class aclaraiConfig:
             postgres=postgres,
             neo4j=neo4j,
             embedding=embedding,
+            processing=processing,
             concepts=concepts,
             noun_phrase_extraction=noun_phrase_extraction,
             threshold=threshold,

@@ -1,27 +1,49 @@
-# Core tool configuration
 tools:
+  # --- Tool Definitions ---
+  # These sections define the parameters for initializing each type of tool.
   neo4j:
     enabled: true
     retry_attempts: 3
     timeout_seconds: 30
-    uri: bolt://localhost:7687
-    username: neo4j
-    password: # Set in user's config
+    # URI, user, and password are read from the main `databases.neo4j` section.
   
   vector_search:
     enabled: true
-    collections:
-      - utterances
-      - concepts
+    # Default parameters for any vector search tool instance.
+    # Specific collections are defined per-agent in the mapping below.
     similarity_threshold: 0.7
     max_results: 5
   
   web_search:
-    enabled: false  # Default to disabled for safety
-    provider: "tavily"  # Current options: tavily
-    api_key_env_var: "TAVILY_API_KEY"
+    enabled: false  # Default to disabled for safety and to avoid API key errors.
+    provider: "tavily"  # Default provider. Options: "tavily", "brave", etc.
+    api_key_env_var: "TAVILY_API_KEY" # The environment variable holding the API key.
     timeout_seconds: 30
     max_results: 5
+
+  # --- Agent-to-Tool Mapping ---
+  # This section defines which tools are provided to each agent.
+  # The ToolFactory will use this mapping to build the tool list.
+  agent_tool_mappings:
+    decontextualization_agent:
+      - name: "VectorSearchTool"
+        # Tool-specific parameters go here
+        params:
+          collection: "utterances"
+          # Metadata for the agent's prompt
+          metadata:
+            name: "vector_search_utterances"
+            description: >
+              Searches for similar utterances in the knowledge base.
+              Use this tool to find existing utterances that are semantically
+              similar to the input claim. This helps determine if the claim
+              is ambiguous or relies on unstated context by checking if
+              very similar phrases appear in diverse contexts.
+    
+    # Example for another agent that might need multiple tools:
+    # some_other_agent:
+    #   - name: "Neo4jQueryTool"
+    #   - name: "WebSearchTool"
 
 # aclarai Default Configuration File
 # This file contains the default values for all configurable parameters in the aclarai system

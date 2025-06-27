@@ -49,6 +49,7 @@ embedding:
     merge_colon_endings: true
     merge_short_prefixes: true
     min_chunk_tokens: 5
+
 noun_phrase_extraction:
   spacy_model: en_core_web_sm
   min_phrase_length: 2
