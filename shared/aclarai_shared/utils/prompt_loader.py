@@ -4,12 +4,16 @@ Implements the LLM interaction strategy for loading prompt templates
 from external YAML files at runtime, as defined in docs/arch/on-llm_interaction_strategy.md
 """
 
+import copy
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+
+# Import the single, shared helper function
+from .prompt_installer import _get_user_prompts_dir
 
 logger = logging.getLogger(__name__)
 
@@ -42,60 +46,21 @@ class PromptLoader:
             prompts_dir: Directory containing built-in prompt YAML files.
                         Defaults to shared/aclarai_shared/prompts/
             user_prompts_dir: Directory containing user-customized prompt files.
-                             Defaults to settings/prompts/
+                             Defaults to the path resolved by the config.
         """
         if prompts_dir is None:
-            # Default to the prompts directory in aclarai_shared
+            # Default to the prompts directory in acla_shared
             current_file = Path(__file__)
             self.prompts_dir = current_file.parent.parent / "prompts"
         else:
             self.prompts_dir = Path(prompts_dir)
+
+        # Use the single, DRY helper function to resolve the user prompts directory
         if user_prompts_dir is None:
-            # Default to prompts directory in settings (accessible to users in Docker)
-            # Fallback to relative settings path for local development
-            try:
-                # Try relative import first (when imported as part of package)
-                from ..config import load_config
-
-                config = load_config(validate=False)
-                settings_prompts_dir = Path(config.settings_path) / "prompts"
-                # Use settings/prompts if vault path exists, otherwise fallback to relative path
-                if Path(config.settings_path).exists():
-                    self.user_prompts_dir = settings_prompts_dir
-                else:
-                    # Fallback to relative settings path for local development
-                    self.user_prompts_dir = Path.cwd() / "settings" / "prompts"
-            except (ImportError, ValueError):
-                # Try absolute import (when imported directly)
-                try:
-                    import importlib.util
-
-                    # Find the config module
-                    current_file = Path(__file__)
-                    config_path = current_file.parent.parent / "config.py"
-                    if config_path.exists():
-                        spec = importlib.util.spec_from_file_location(
-                            "config", config_path
-                        )
-                        if spec is None or spec.loader is None:
-                            raise ImportError(f"Could not load spec for {config_path}")
-                        config_module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(config_module)
-                        config = config_module.load_config(validate=False)
-                        settings_prompts_dir = Path(config.settings_path) / "prompts"
-                        # Use settings/prompts if vault path exists, otherwise fallback to relative path
-                        if Path(config.settings_path).exists():
-                            self.user_prompts_dir = settings_prompts_dir
-                        else:
-                            # Fallback to relative settings path for local development
-                            self.user_prompts_dir = Path.cwd() / "settings" / "prompts"
-                    else:
-                        raise ImportError("Config module not found")
-                except Exception:
-                    # Fallback to relative settings path if config loading fails
-                    self.user_prompts_dir = Path.cwd() / "settings" / "prompts"
+            self.user_prompts_dir = _get_user_prompts_dir()
         else:
             self.user_prompts_dir = Path(user_prompts_dir)
+
         if not self.prompts_dir.exists():
             logger.warning(
                 f"Built-in prompts directory does not exist: {self.prompts_dir}"
@@ -142,8 +107,6 @@ class PromptLoader:
         Returns:
             Merged configuration dictionary
         """
-        import copy
-
         result = copy.deepcopy(default)
 
         def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
