@@ -12,23 +12,25 @@ This evaluation produces a `decontextualization_score`, a float between 0.0 and 
 1.  **Input**: The agent receives a `claim_text` (the factual statement to evaluate) and its original `source_text` (the surrounding context or document from which the claim was derived).
 2.  **LLM-Powered Analysis**: The agent utilizes a configured Large Language Model (LLM) to perform the core analysis. It employs a sophisticated prompt (see below) designed to guide the LLM in its assessment.
 3.  **Contextual Ambiguity Check (Vector Search)**:
-    *   To aid its evaluation, the agent is equipped with a `VectorSearchTool` provided by the `ToolFactory`.
-    *   The LLM is instructed in the prompt that it can use this tool to query the `claim_text` against a vector store of "utterances" (a collection of sentences/text segments from the knowledge base).
+    *   To aid its evaluation, the agent requests its toolset from the `ToolFactory` by its role name (`decontextualization_agent`).
+    *   The factory consults the `tools.agent_tool_mappings` section in the system configuration. For this agent, it is configured to receive a `VectorSearchTool` pointed at the `utterances` vector collection.
+    *   The configuration also specifies the tool's metadata, giving it the specific name `vector_search_utterances` and a description that is injected into the agent's prompt.
+    *   This allows the LLM to use the tool to query the `claim_text` against a vector store of "utterances" (a collection of sentences/text segments from the knowledge base).
     *   If semantically similar phrases to the claim appear in highly diverse and unrelated contexts within the vector store, it can indicate that the claim, as stated, is too generic, ambiguous, or relies on implicit context not present within the claim itself. This helps the LLM gauge if the claim is truly standalone.
 4.  **Scoring**: Based on its analysis of the claim's language (pronouns, ambiguous references, missing essential qualifiers like time/location/scope) and the optional insights from the vector search, the LLM generates a `decontextualization_score` between 0.0 (completely context-dependent) and 1.0 (perfectly self-contained).
-5.  **Output**: The agent returns this float score.
+5.  **Output**: The agent returns a tuple containing the float score (or `None` on failure) and a status message (e.g., `'success'` or an error description).
 
 ### Retry and Error Handling
 *   The agent incorporates a retry mechanism (with exponential backoff) for LLM API calls, configured via `processing.retries.max_attempts` in the system configuration.
-*   If the LLM fails to produce a valid score after all retries, or if any other persistent error occurs during evaluation, the agent returns `null` (represented as `None` in Python) for the score.
+*   If the LLM fails to produce a valid score after all retries, or if any other persistent error occurs during evaluation, the agent returns `None` for the score.
 
 ## 🧩 Integration and Configuration
 
 *   **Instantiation**: The agent is typically instantiated by an orchestrating service, which provides it with:
     *   A pre-configured LLM instance (selected based on `model.claimify.decontextualization` from the system configuration).
-    *   A `ToolFactory` instance, used by the agent to acquire the `VectorSearchTool` for the `utterances` collection.
+    *   A `ToolFactory` instance, from which the agent requests its tools by its role name (`decontextualization_agent`).
     *   A `ConfigManager` instance for accessing system configurations (e.g., retry attempts).
-*   **Tool Usage**: The agent specifically requests and uses the `VectorSearchTool` configured for the `utterances` vector collection. The `ToolFactory` is responsible for providing this tool.
+*   **Tool Usage**: The agent's toolset is defined in the `tools.agent_tool_mappings` section of `aclarai.config.yaml`. The `ToolFactory` reads this configuration to provide the agent with a `VectorSearchTool` specifically configured for the `utterances` vector collection and named `vector_search_utterances` for the prompt.
 *   **LLM Model**: The choice of LLM (e.g., GPT-3.5, Claude, etc.) is determined by the `model.claimify.decontextualization` setting in `aclarai.config.yaml`.
 
 ## 📝 Prompt Structure (Conceptual)
@@ -78,7 +80,6 @@ Output only the float score. For example: 0.75
 *   **0.7 - 0.9**: Generally good. The claim is largely self-contained but might have very minor ambiguities or could benefit from slight contextual additions that don't significantly hinder understanding for verification.
 *   **0.4 - 0.6**: Moderately decontextualized. The claim likely has some unresolved pronouns, ambiguous terms, or is missing some context that would make independent verification difficult.
 *   **0.0 - 0.3**: Poorly decontextualized. The claim is heavily reliant on its original source, likely uninterpretable or unverifiable in isolation.
-*   **null**: The evaluation failed after retries. Claims with `null` scores are typically excluded from further processing like concept linking or promotion.
+*   **null**: The evaluation failed after retries, or a persistent error (like a malformed response from the LLM) occurred. The agent's evaluation method returns `None` for the score in this case, along with an error message. Claims with `null` scores are typically excluded from further processing like concept linking or promotion.
 
 The `decontextualization_score`, along with `entailed_score` and `coverage_score`, contributes to an overall quality assessment of the claim (often via a geometric mean), which then informs how the claim is used within the aclarai system.
-```

@@ -52,7 +52,7 @@ This agent uses a configured LLM and a set of tools to assess a claim's semantic
 
 ### Key Behaviors
 
--   **Tool-Driven:** The agent uses a `VectorSearchTool` (provided by the `ToolFactory`) to check if a claim's text appears in diverse contexts across the vault. Highly diverse results suggest the claim is ambiguous and needs more context.
+-   **Tool-Driven:** The agent is provided its tools by the `ToolFactory` based on its role name in the system configuration. For this workflow, it uses a configured `VectorSearchTool` to check if a claim's text appears in diverse contexts across the vault. Highly diverse results suggest the claim is ambiguous and needs more context.
 -   **Configurable:** The agent's LLM and retry behavior are configured in `settings/aclarai.config.yaml`.
 -   **Prompt-Managed:** The agent's reasoning is guided by the `decontextualization_evaluation.yaml` prompt template, which can be customized by users.
 -   **Resilient:** It includes retry logic for transient LLM errors and returns `None` for the score if evaluation fails permanently.
