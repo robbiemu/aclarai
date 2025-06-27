@@ -13,6 +13,39 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _get_user_prompts_dir() -> Path:
+    """
+    Determines the correct directory for user-customizable prompts.
+
+    It first tries to use the path defined in the main configuration.
+    If that fails or is not found, it falls back to a relative path
+    from the current working directory, which is useful for testing
+    and local development.
+    """
+    try:
+        # Try relative import first (when imported as part of package)
+        from ..config import load_config
+
+        config = load_config(validate=False)
+        # This is the ideal path, defined by the central config
+        settings_prompts_dir = Path(config.settings_path) / "prompts"
+
+        # Use the configured path if it exists, otherwise fall back.
+        # This handles cases where the settings/ dir might not be created yet.
+        if Path(config.settings_path).exists():
+            return settings_prompts_dir
+        else:
+            # Fallback for environments where settings/ might not be present
+            # but we still want a predictable location.
+            return Path.cwd() / "settings" / "prompts"
+    except (ImportError, ValueError, FileNotFoundError):
+        # This except block catches:
+        # - ImportError: if aclarai_shared is not installed correctly.
+        # - ValueError/FileNotFoundError: if load_config fails.
+        # In all these cases, we fall back to a predictable relative path.
+        return Path.cwd() / "settings" / "prompts"
+
+
 def install_default_prompt(
     template_name: str = "conversation_extraction",
     force: bool = False,
@@ -26,55 +59,19 @@ def install_default_prompt(
     Args:
         template_name: Name of the template to install (without .yaml extension)
         force: If True, overwrites existing file; if False, only creates if missing
-        prompts_dir: Target directory for user prompts. Defaults to ./prompts/
+        prompts_dir: Target directory for user prompts. Defaults to the configured path.
     Returns:
         bool: True if file was installed/updated, False if it already existed and force=False
     Raises:
         FileNotFoundError: If the built-in template doesn't exist
         PermissionError: If unable to create the target directory or file
     """
+    # Use the helper function to resolve the directory if not provided
     if prompts_dir is None:
-        # Default to prompts directory in settings (accessible to users in Docker)
-        # Fallback to project root for local development
-        try:
-            # Try relative import first (when imported as part of package)
-            from ..config import load_config
+        prompts_dir = _get_user_prompts_dir()
 
-            config = load_config(validate=False)
-            settings_prompts_dir = Path(config.settings_path) / "prompts"
-            # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-            if Path(config.settings_path).exists():
-                prompts_dir = settings_prompts_dir
-            else:
-                prompts_dir = Path.cwd() / "prompts"
-        except (ImportError, ValueError):
-            # Try absolute import (when imported directly)
-            try:
-                import importlib.util
-
-                # Find the config module
-                current_file = Path(__file__)
-                config_path = current_file.parent.parent / "config.py"
-                if config_path.exists():
-                    spec = importlib.util.spec_from_file_location("config", config_path)
-                    if spec is None or spec.loader is None:
-                        raise ImportError(f"Could not load spec for {config_path}")
-                    config_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(config_module)
-                    config = config_module.load_config(validate=False)
-                    settings_prompts_dir = Path(config.settings_path) / "prompts"
-                    # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-                    if Path(config.settings_path).exists():
-                        prompts_dir = settings_prompts_dir
-                    else:
-                        prompts_dir = Path.cwd() / "prompts"
-                else:
-                    raise ImportError("Config module not found")
-            except Exception:
-                # Fallback to original behavior if config loading fails
-                prompts_dir = Path.cwd() / "prompts"
     # Ensure prompts directory exists
-    prompts_dir.mkdir(exist_ok=True)
+    prompts_dir.mkdir(parents=True, exist_ok=True)
     target_file = prompts_dir / f"{template_name}.yaml"
     # Check if file already exists and force=False
     if target_file.exists() and not force:
@@ -82,7 +79,7 @@ def install_default_prompt(
         return False
     # Find the built-in template using robust path handling
     current_file = Path(__file__)
-    # First try: prompts at shared package level (shared/prompts/)
+    # First try: prompts at shared package level (shared/aclarai_shared/prompts/)
     builtin_template = current_file.parent.parent / "prompts" / f"{template_name}.yaml"
     # If not found, try project root level (for development/testing)
     if not builtin_template.exists():
@@ -107,50 +104,14 @@ def install_all_default_prompts(
     Install all available default prompt templates.
     Args:
         force: If True, overwrites existing files; if False, only creates missing files
-        prompts_dir: Target directory for user prompts. Defaults to ./prompts/
+        prompts_dir: Target directory for user prompts. Defaults to the configured path.
     Returns:
         int: Number of prompt files installed/updated
     """
+    # Use the helper function to resolve the directory if not provided
     if prompts_dir is None:
-        # Default to prompts directory in settings (accessible to users in Docker)
-        # Fallback to project root for local development
-        try:
-            # Try relative import first (when imported as part of package)
-            from ..config import load_config
+        prompts_dir = _get_user_prompts_dir()
 
-            config = load_config(validate=False)
-            settings_prompts_dir = Path(config.settings_path) / "prompts"
-            # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-            if Path(config.settings_path).exists():
-                prompts_dir = settings_prompts_dir
-            else:
-                prompts_dir = Path.cwd() / "prompts"
-        except (ImportError, ValueError):
-            # Try absolute import (when imported directly)
-            try:
-                import importlib.util
-
-                # Find the config module
-                current_file = Path(__file__)
-                config_path = current_file.parent.parent / "config.py"
-                if config_path.exists():
-                    spec = importlib.util.spec_from_file_location("config", config_path)
-                    if spec is None or spec.loader is None:
-                        raise ImportError(f"Could not load spec for {config_path}")
-                    config_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(config_module)
-                    config = config_module.load_config(validate=False)
-                    settings_prompts_dir = Path(config.settings_path) / "prompts"
-                    # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-                    if Path(config.settings_path).exists():
-                        prompts_dir = settings_prompts_dir
-                    else:
-                        prompts_dir = Path.cwd() / "prompts"
-                else:
-                    raise ImportError("Config module not found")
-            except Exception:
-                # Fallback to original behavior if config loading fails
-                prompts_dir = Path.cwd() / "prompts"
     # Find all built-in templates
     current_file = Path(__file__)
     builtin_prompts_dir = current_file.parent.parent / "prompts"
@@ -184,45 +145,8 @@ def ensure_prompt_exists(template_name: str = "conversation_extraction") -> Path
         FileNotFoundError: If the built-in template doesn't exist
         PermissionError: If unable to create the file
     """
-    # Default to prompts directory in settings (accessible to users in Docker)
-    # Fallback to project root for local development
-    try:
-        # Try relative import first (when imported as part of package)
-        from ..config import load_config
-
-        config = load_config(validate=False)
-        settings_prompts_dir = Path(config.settings_path) / "prompts"
-        # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-        if Path(config.settings_path).exists():
-            prompts_dir = settings_prompts_dir
-        else:
-            prompts_dir = Path.cwd() / "prompts"
-    except (ImportError, ValueError):
-        # Try absolute import (when imported directly)
-        try:
-            import importlib.util
-
-            # Find the config module
-            current_file = Path(__file__)
-            config_path = current_file.parent.parent / "config.py"
-            if config_path.exists():
-                spec = importlib.util.spec_from_file_location("config", config_path)
-                if spec is None or spec.loader is None:
-                    raise ImportError(f"Could not load spec for {config_path}")
-                config_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(config_module)
-                config = config_module.load_config(validate=False)
-                settings_prompts_dir = Path(config.settings_path) / "prompts"
-                # Use settings/prompts if vault path exists, otherwise fallback to ./prompts
-                if Path(config.settings_path).exists():
-                    prompts_dir = settings_prompts_dir
-                else:
-                    prompts_dir = Path.cwd() / "prompts"
-            else:
-                raise ImportError("Config module not found")
-        except Exception:
-            # Fallback to original behavior if config loading fails
-            prompts_dir = Path.cwd() / "prompts"
+    # Use the helper function to resolve the directory
+    prompts_dir = _get_user_prompts_dir()
     prompt_file = prompts_dir / f"{template_name}.yaml"
     if not prompt_file.exists():
         install_default_prompt(template_name, force=False, prompts_dir=prompts_dir)
