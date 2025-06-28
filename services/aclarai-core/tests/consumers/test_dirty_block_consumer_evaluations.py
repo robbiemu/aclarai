@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from aclarai_core.dirty_block_consumer import DirtyBlockConsumer  # Corrected
+from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.tools.factory import ToolFactory

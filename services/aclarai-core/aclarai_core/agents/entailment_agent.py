@@ -10,7 +10,7 @@ from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.utils.prompt_loader import load_prompt_template
 
 # Using CodeActAgent as suggested by the issue's technical details for multi-step reasoning
-from llama_index.core.agent import CodeActAgent
+from llama_index.core.agent.workflow import CodeActAgent
 from llama_index.core.llms.llm import LLM
 from llama_index.core.tools import BaseTool
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential

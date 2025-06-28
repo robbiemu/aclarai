@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch  # Added call for retry check
 
 import pytest
-from aclarai_core.agents.entailment_agent import EntailmentAgent  # Corrected
+from aclarai_core.agents.entailment_agent import EntailmentAgent
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.tools.factory import ToolFactory
 from llama_index.core.base.response.schema import Response as LlamaResponse
