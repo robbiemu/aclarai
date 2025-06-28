@@ -39,6 +39,24 @@ tools:
               similar to the input claim. This helps determine if the claim
               is ambiguous or relies on unstated context by checking if
               very similar phrases appear in diverse contexts.
+    entailment_agent:
+      - name: "Neo4jQueryTool"
+        params: {} # Uses default Neo4j connection
+        metadata:
+          name: "neo4j_query_tool"
+          description: >
+            Executes Cypher queries on the knowledge graph. Use this to
+            retrieve contextual information, such as surrounding conversation
+            blocks or related concepts, to better assess entailment.
+      - name: "VectorSearchTool"
+        params:
+          collection: "utterances" # Or another relevant collection
+        metadata:
+          name: "vector_search_utterances"
+          description: >
+            Searches for similar utterances or text segments in the knowledge base.
+            Use this to find supporting or contradictory evidence or to understand
+            the typical usage of phrases found in the source or claim.
     
     # Example for another agent that might need multiple tools:
     # some_other_agent:
@@ -86,6 +104,7 @@ model:
     selection: null      # Uses default if not specified
     disambiguation: null # Uses default if not specified  
     decomposition: null  # Uses default if not specified
+    entailment: null     # Uses default if not specified (e.g., gpt-3.5-turbo)
   concept_linker: "gpt-3.5-turbo"
   concept_summary: "gpt-4"
   subject_summary: "gpt-3.5-turbo"
