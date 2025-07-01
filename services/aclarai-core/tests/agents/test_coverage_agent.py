@@ -32,9 +32,7 @@ def mock_tool_factory():
 
 @pytest.fixture
 def coverage_agent_instance(mock_llm, mock_tool_factory, mock_config):
-    with patch(
-        "aclarai_core.agents.coverage_agent.CodeActAgent"
-    ) as MockCodeActAgent:
+    with patch("aclarai_core.agents.coverage_agent.CodeActAgent") as MockCodeActAgent:
         mock_agent_internal_instance = MockCodeActAgent.from_tools.return_value
         agent_under_test = CoverageAgent(
             llm=mock_llm, tool_factory=mock_tool_factory, config=mock_config
@@ -53,23 +51,29 @@ class TestCoverageAgent:
             "template": "user_prompt",
             "system_prompt": "system_prompt",
         }
-        
+
         # Mock response with coverage score and omitted elements
         response_json = {
             "coverage_score": 0.7,
             "omitted_elements": [
-                {"text": "European Commission", "significance": "Key organization responsible for policy"},
-                {"text": "2023", "significance": "Specific timeframe for the action"}
+                {
+                    "text": "European Commission",
+                    "significance": "Key organization responsible for policy",
+                },
+                {"text": "2023", "significance": "Specific timeframe for the action"},
             ],
-            "reasoning": "Claim captures main point but omits key details"
+            "reasoning": "Claim captures main point but omits key details",
         }
-        
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
 
         score, elements, msg = coverage_agent_instance.evaluate_coverage(
-            "claim1", "EU approved funding", "src1", "In 2023, the European Commission approved funding"
+            "claim1",
+            "EU approved funding",
+            "src1",
+            "In 2023, the European Commission approved funding",
         )
 
         assert score == 0.7
@@ -92,13 +96,13 @@ class TestCoverageAgent:
             "template": "user_prompt",
             "system_prompt": "system_prompt",
         }
-        
+
         response_json = {
             "coverage_score": 1.0,
             "omitted_elements": [],
-            "reasoning": "Claim captures all verifiable elements from source"
+            "reasoning": "Claim captures all verifiable elements from source",
         }
-        
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
@@ -154,12 +158,9 @@ class TestCoverageAgent:
     ):
         """Test handling of response missing coverage_score."""
         mock_load_prompt.return_value = {"template": "user_prompt"}
-        
-        response_json = {
-            "omitted_elements": [],
-            "reasoning": "Some reasoning"
-        }
-        
+
+        response_json = {"omitted_elements": [], "reasoning": "Some reasoning"}
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
@@ -178,13 +179,13 @@ class TestCoverageAgent:
     ):
         """Test handling of coverage score above 1.0."""
         mock_load_prompt.return_value = {"template": "user_prompt"}
-        
+
         response_json = {
             "coverage_score": 1.5,
             "omitted_elements": [],
-            "reasoning": "Invalid high score"
+            "reasoning": "Invalid high score",
         }
-        
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
@@ -204,13 +205,13 @@ class TestCoverageAgent:
     ):
         """Test handling of coverage score below 0.0."""
         mock_load_prompt.return_value = {"template": "user_prompt"}
-        
+
         response_json = {
             "coverage_score": -0.3,
             "omitted_elements": [],
-            "reasoning": "Invalid low score"
+            "reasoning": "Invalid low score",
         }
-        
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
@@ -230,17 +231,17 @@ class TestCoverageAgent:
     ):
         """Test handling of invalid omitted_elements format."""
         mock_load_prompt.return_value = {"template": "user_prompt"}
-        
+
         response_json = {
             "coverage_score": 0.8,
             "omitted_elements": [
                 {"text": "Valid element"},
                 "invalid element format",  # This should be a dict
-                {"missing_text_field": "value"}  # Missing required 'text' field
+                {"missing_text_field": "value"},  # Missing required 'text' field
             ],
-            "reasoning": "Mixed valid and invalid elements"
+            "reasoning": "Mixed valid and invalid elements",
         }
-        
+
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
         coverage_agent_instance.agent.chat.return_value = mock_chat_response
@@ -300,7 +301,7 @@ class TestCoverageAgent:
             "template": "user_prompt_content",
             "system_prompt": "custom_system_prompt",
         }
-        
+
         response_json = {"coverage_score": 0.9, "omitted_elements": []}
         mock_chat_response = MagicMock(spec=LlamaResponse)
         mock_chat_response.response = json.dumps(response_json)
@@ -339,4 +340,6 @@ class TestCoverageAgent:
 
         mock_logger.warning.assert_called_once()
         assert "No system_prompt found" in mock_logger.warning.call_args[0][0]
-        coverage_agent_instance.agent.chat.assert_called_once_with("user_prompt_content_2")
+        coverage_agent_instance.agent.chat.assert_called_once_with(
+            "user_prompt_content_2"
+        )

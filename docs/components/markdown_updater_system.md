@@ -25,7 +25,7 @@ graph TD
     C --> |Block Not Found| D[Log Warning & Return False];
     C --> |Block Found| E[Modify Content in Memory];
     E --> F[1. Increment `ver=N` in `aclarai:id` comment];
-    F --> G[2. Add/Update Score Comment e.g., `<!-- aclarai:decontextualization_score=... -->` or `<!-- aclarai:entailed_score=... -->`];
+    F --> G[2. Add/Update Score Comment e.g., `<!-- aclarai:coverage_score=... -->`];
     G --> H{Write Atomically};
     H --> I[Write to `.tmp` file];
     I --> J[fsync() to disk];
@@ -36,40 +36,53 @@ graph TD
 
 ## 🐍 Usage Example
 
-Any service needing to update a Markdown file can use the `MarkdownUpdaterService`. Here is how the `DecontextualizationAgent` would use it to persist a score:
+Any service needing to update a Markdown file can use the `MarkdownUpdaterService`. The evaluation agents are the primary consumers of this service.
 
-*(Note: The following example illustrates usage of a dedicated `MarkdownUpdaterService`. While this service provides the ideal abstraction, similar update logic might also be directly implemented within calling services like `DirtyBlockConsumer` while adhering to the same principles of atomic writes, version incrementing, and metadata comment standards described here. The `EntailmentAgent`'s score, for example, is also persisted using this pattern.)*
+The `add_or_update_score` method provides a generic interface for persisting any evaluation score.
 
 ```python
 from aclarai_core.markdown import MarkdownUpdaterService
 
-# Assume 'score' and other variables are defined
-# score = 0.88
-# block_id_to_update = "blk_abc123" # The aclarai:id of the block whose metadata is updated
-# file_path_of_block = "/path/to/vault/tier1/conversation.md"
+# Assume the following variables are defined from an agent's evaluation
+claim_id = "claim_123"
+source_block_id = "blk_abc123"
+file_path = "/path/to/vault/tier1/conversation.md"
+
+entailment_score = 0.91
+coverage_score = 0.77
+decon_score = 0.88
 
 # Instantiate the service
 updater = MarkdownUpdaterService()
 
-# Call the specific update method
-success = updater.add_or_update_decontextualization_score(
-    filepath_str=file_path_of_block, # Corrected variable name
-    block_id=block_id_to_update,
-    score=score
+# Example 1: The EntailmentAgent persists its score
+success1 = updater.add_or_update_score(
+    filepath_str=file_path,
+    block_id=source_block_id,
+    score_name="entailed_score",
+    score=entailment_score
 )
 
-# Similarly, for an entailment score:
-# success_entailment = updater.add_or_update_entailment_score(
-#     filepath_str=file_path_of_block,
-#     block_id=source_block_id, # The ID of the source block for the claim
-#     score=entailment_score
-# )
+# Example 2: The CoverageAgent persists its score
+success2 = updater.add_or_update_score(
+    filepath_str=file_path,
+    block_id=source_block_id,
+    score_name="coverage_score",
+    score=coverage_score
+)
 
-if success:
-    print(f"Successfully updated block {block_id_to_update} in {file_path_of_block}.")
+# Example 3: The DecontextualizationAgent persists its score
+success3 = updater.add_or_update_score(
+    filepath_str=file_path,
+    block_id=source_block_id,
+    score_name="decontextualization_score",
+    score=decon_score
+)
+
+if all([success1, success2, success3]):
+    print(f"Successfully updated all scores for block {source_block_id}.")
 else:
-    print(f"Failed to update block {block_id_to_update}.")
-
+    print("One or more score updates failed.")
 ```
 
 ## 🧩 Integration Points

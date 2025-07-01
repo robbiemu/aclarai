@@ -245,9 +245,7 @@ class ClaimEvaluationGraphService:
             return False
 
     def create_element_nodes_and_omits_relationships(
-        self,
-        claim_id: str,
-        omitted_elements: List[Dict[str, str]]
+        self, claim_id: str, omitted_elements: List[Dict[str, str]]
     ) -> bool:
         """
         Creates Element nodes for omitted verifiable elements and establishes OMITS relationships
@@ -267,7 +265,7 @@ class ClaimEvaluationGraphService:
                     "service": "aclarai-core",
                     "filename_function_name": "claim_evaluation_graph_service.ClaimEvaluationGraphService.create_element_nodes_and_omits_relationships",
                     "aclarai_id_claim": claim_id,
-                }
+                },
             )
             return True
 
@@ -280,10 +278,7 @@ class ClaimEvaluationGraphService:
         RETURN count(e) AS created_elements
         """
 
-        parameters = {
-            "claim_id": claim_id,
-            "elements": omitted_elements
-        }
+        parameters = {"claim_id": claim_id, "elements": omitted_elements}
 
         log_details = {
             "service": "aclarai-core",
@@ -335,4 +330,6 @@ class ClaimEvaluationGraphService:
         Returns:
             True if the update was successful, False otherwise.
         """
-        return self.update_relationship_score(claim_id, block_id, "coverage_score", score)
+        return self.update_relationship_score(
+            claim_id, block_id, "coverage_score", score
+        )

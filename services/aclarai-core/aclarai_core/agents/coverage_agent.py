@@ -177,7 +177,9 @@ class CoverageAgent:
 
                 # Extract coverage score
                 coverage_score = response_data.get("coverage_score")
-                if coverage_score is None or not isinstance(coverage_score, (int, float)):
+                if coverage_score is None or not isinstance(
+                    coverage_score, (int, float)
+                ):
                     raise ValueError("Missing or invalid coverage_score in response")
 
                 coverage_score = float(coverage_score)
@@ -199,10 +201,12 @@ class CoverageAgent:
                 validated_elements = []
                 for element in omitted_elements:
                     if isinstance(element, dict) and "text" in element:
-                        validated_elements.append({
-                            "text": str(element["text"]),
-                            "significance": str(element.get("significance", ""))
-                        })
+                        validated_elements.append(
+                            {
+                                "text": str(element["text"]),
+                                "significance": str(element.get("significance", "")),
+                            }
+                        )
                     else:
                         logger.warning(
                             f"Invalid omitted element format: {element}. Skipping.",
@@ -211,7 +215,11 @@ class CoverageAgent:
 
                 logger.info(
                     f"Successfully evaluated coverage for claim_id: {claim_id}. Score: {coverage_score}, Omitted elements: {len(validated_elements)}",
-                    extra={**log_details, "coverage_score": coverage_score, "omitted_elements_count": len(validated_elements)},
+                    extra={
+                        **log_details,
+                        "coverage_score": coverage_score,
+                        "omitted_elements_count": len(validated_elements),
+                    },
                 )
                 return coverage_score, validated_elements, "success"
 
