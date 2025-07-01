@@ -21,6 +21,8 @@ from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 from aclarai_shared.vault import BlockParser
 from llama_index.core.llms.llm import LLM as LlamaLLM
 
+from .agents.coverage_agent import CoverageAgent
+from .agents.decontextualization_agent import DecontextualizationAgent
 from .agents.entailment_agent import EntailmentAgent
 from .concept_processor import ConceptProcessor
 from .graph.claim_evaluation_graph_service import ClaimEvaluationGraphService
@@ -62,14 +64,22 @@ class DirtyBlockConsumer:
             )
         self.tool_factory = ToolFactory(tool_factory_config, self.vector_store_manager)
 
-        if self.llm:  # Only initialize agent if LLM loaded successfully
+        if self.llm:  # Only initialize agents if LLM loaded successfully
             self.entailment_agent: Optional[EntailmentAgent] = EntailmentAgent(
+                self.llm, self.tool_factory, self.config
+            )
+            self.coverage_agent: Optional[CoverageAgent] = CoverageAgent(
+                self.llm, self.tool_factory, self.config
+            )
+            self.decontextualization_agent: Optional[DecontextualizationAgent] = DecontextualizationAgent(
                 self.llm, self.tool_factory, self.config
             )
         else:
             self.entailment_agent = None  # Explicitly set to None if LLM fails
+            self.coverage_agent = None
+            self.decontextualization_agent = None
             logger.error(
-                "EntailmentAgent could not be initialized because LLM failed to load."
+                "Evaluation agents could not be initialized because LLM failed to load."
             )
 
         # Initialize generic services for score updates
@@ -87,6 +97,8 @@ class DirtyBlockConsumer:
                 "queue_name": self.queue_name,
                 "llm_initialized": self.llm is not None,
                 "entailment_agent_initialized": self.entailment_agent is not None,
+                "coverage_agent_initialized": self.coverage_agent is not None,
+                "decontextualization_agent_initialized": self.decontextualization_agent is not None,
             },
         )
 
@@ -290,9 +302,22 @@ class DirtyBlockConsumer:
                 return False
 
             if sync_success and change_type in ("created", "modified"):
-                if not self.entailment_agent:
+                # Check if all evaluation agents are initialized
+                agents_available = (
+                    self.entailment_agent and self.coverage_agent and self.decontextualization_agent
+                )
+                
+                if not agents_available:
+                    missing_agents = []
+                    if not self.entailment_agent:
+                        missing_agents.append("EntailmentAgent")
+                    if not self.coverage_agent:
+                        missing_agents.append("CoverageAgent")
+                    if not self.decontextualization_agent:
+                        missing_agents.append("DecontextualizationAgent")
+                    
                     logger.error(
-                        f"EntailmentAgent not initialized, skipping evaluation for block {aclarai_id}.",
+                        f"Evaluation agents not initialized ({', '.join(missing_agents)}), skipping evaluation for block {aclarai_id}.",
                         extra={"aclarai_id": aclarai_id},
                     )
                 else:
@@ -320,6 +345,8 @@ class DirtyBlockConsumer:
                                 "aclarai_id_source": source_id,
                             },
                         )
+                        
+                        # Entailment evaluation
                         entailment_score, err_msg_ent = (
                             self.entailment_agent.evaluate_entailment(
                                 claim_id=claim_id,
@@ -344,17 +371,94 @@ class DirtyBlockConsumer:
                                 "entailed_score": entailment_score,
                             },
                         )
-                        # Update Neo4j using generic method
+                        
+                        # Coverage evaluation
+                        coverage_score, omitted_elements, err_msg_cov = (
+                            self.coverage_agent.evaluate_coverage(
+                                claim_id=claim_id,
+                                claim_text=claim_text,
+                                source_id=source_id,
+                                source_text=source_text,
+                            )
+                        )
+                        if err_msg_cov != "success":
+                            logger.warning(
+                                f"Coverage evaluation failed for claim {claim_id}: {err_msg_cov}",
+                                extra={
+                                    "aclarai_id_claim": claim_id,
+                                    "error": err_msg_cov,
+                                },
+                            )
+
+                        logger.info(
+                            f"Claim {claim_id} coverage_score: {coverage_score}",
+                            extra={
+                                "aclarai_id_claim": claim_id,
+                                "coverage_score": coverage_score,
+                            },
+                        )
+                        
+                        # Decontextualization evaluation
+                        decontextualization_score, err_msg_decon = (
+                            self.decontextualization_agent.evaluate_claim_decontextualization(
+                                claim_id=claim_id,
+                                claim_text=claim_text,
+                                source_id=source_id,
+                                source_text=source_text,
+                            )
+                        )
+                        if err_msg_decon != "success":
+                            logger.warning(
+                                f"Decontextualization evaluation failed for claim {claim_id}: {err_msg_decon}",
+                                extra={
+                                    "aclarai_id_claim": claim_id,
+                                    "error": err_msg_decon,
+                                },
+                            )
+
+                        logger.info(
+                            f"Claim {claim_id} decontextualization_score: {decontextualization_score}",
+                            extra={
+                                "aclarai_id_claim": claim_id,
+                                "decontextualization_score": decontextualization_score,
+                            },
+                        )
+                        
+                        # Update Neo4j with all scores
                         self.graph_service.update_relationship_score(
                             claim_id, source_id, "entailed_score", entailment_score
                         )
-                        # Update Markdown using generic method
+                        self.graph_service.update_relationship_score(
+                            claim_id, source_id, "coverage_score", coverage_score
+                        )
+                        self.graph_service.update_relationship_score(
+                            claim_id, source_id, "decontextualization_score", decontextualization_score
+                        )
+                        
+                        # Update Markdown with all scores
+                        # Only update markdown if score is not None (per architecture requirements)
                         if entailment_score is not None:
                             self.markdown_service.add_or_update_score(
                                 source_filepath_str,
                                 source_id,
                                 "entailed_score",
                                 entailment_score,
+                            )
+                        
+                        if coverage_score is not None:
+                            self.markdown_service.add_or_update_score(
+                                source_filepath_str,
+                                source_id,
+                                "coverage_score",
+                                coverage_score,
+                            )
+                        
+                        if decontextualization_score is not None:
+                            self.markdown_service.add_or_update_score(
+                                source_filepath_str,
+                                source_id,
+                                "decontextualization_score",
+                                decontextualization_score,
                             )
 
             if sync_success and change_type in ("created", "modified"):

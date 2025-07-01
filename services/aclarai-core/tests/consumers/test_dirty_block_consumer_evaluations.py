@@ -61,11 +61,15 @@ def mock_tool_factory_fixture():
 @patch("aclarai_core.dirty_block_consumer.RabbitMQManager")
 @patch("aclarai_core.dirty_block_consumer.BlockParser")
 @patch("aclarai_core.dirty_block_consumer.ConceptProcessor")
+@patch("aclarai_core.dirty_block_consumer.DecontextualizationAgent")
+@patch("aclarai_core.dirty_block_consumer.CoverageAgent")
 @patch("aclarai_core.dirty_block_consumer.EntailmentAgent")
 @patch("aclarai_shared.tools.vector_store_manager.aclaraiVectorStoreManager")
 def consumer_instance(
     MockVectorStoreManager,
     MockEntailmentAgent,
+    MockCoverageAgent,
+    MockDecontextualizationAgent,
     MockConceptProcessor,
     MockBlockParser,
     MockRabbitMQManager,
@@ -94,6 +98,8 @@ def consumer_instance(
 
         # Assign other mocked dependencies
         consumer.entailment_agent = MockEntailmentAgent()
+        consumer.coverage_agent = MockCoverageAgent()
+        consumer.decontextualization_agent = MockDecontextualizationAgent()
         MockBlockParser.return_value.extract_aclarai_blocks.return_value = []
         consumer.rabbitmq_manager = MockRabbitMQManager()
         consumer.block_parser = MockBlockParser()
@@ -159,7 +165,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
     @patch.object(DirtyBlockConsumer, "_read_block_from_file")
     @patch.object(DirtyBlockConsumer, "_sync_block_with_graph")
     @patch.object(DirtyBlockConsumer, "_get_claims_for_evaluation")
-    def test_process_block_success_flow(
+    def test_process_block_success_flow_all_agents(
         self,
         mock_get_claims,
         mock_sync_graph,
@@ -181,8 +187,19 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block.return_value = mock_block_data
         mock_sync_graph.return_value = True
         mock_get_claims.return_value = mock_claim_data
+        
+        # Mock all three evaluation agents
         consumer_instance.entailment_agent.evaluate_entailment.return_value = (
             0.9,
+            "success",
+        )
+        consumer_instance.coverage_agent.evaluate_coverage.return_value = (
+            0.8,
+            [],  # omitted_elements
+            "success",
+        )
+        consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
+            0.7,
             "success",
         )
 
@@ -192,19 +209,112 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block.assert_called_once_with(Path("test_file.md"), "s1")
         mock_sync_graph.assert_called_once_with(mock_block_data, Path("test_file.md"))
         mock_get_claims.assert_called_once_with("s1")
+        
+        # Verify all three agents are called
         consumer_instance.entailment_agent.evaluate_entailment.assert_called_once_with(
             claim_id="c1",
             claim_text="claim text",
             source_id="s1",
             source_text="source text",
         )
-        consumer_instance.graph_service.update_relationship_score.assert_called_once_with(
+        consumer_instance.coverage_agent.evaluate_coverage.assert_called_once_with(
+            claim_id="c1",
+            claim_text="claim text",
+            source_id="s1",
+            source_text="source text",
+        )
+        consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.assert_called_once_with(
+            claim_id="c1",
+            claim_text="claim text",
+            source_id="s1",
+            source_text="source text",
+        )
+        
+        # Verify all three scores are updated in graph
+        assert consumer_instance.graph_service.update_relationship_score.call_count == 3
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
             "c1", "s1", "entailed_score", 0.9
         )
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
+            "c1", "s1", "coverage_score", 0.8
+        )
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
+            "c1", "s1", "decontextualization_score", 0.7
+        )
+        
+        # Verify all three scores are updated in markdown
         expected_filepath = str(Path(consumer_instance.vault_path) / "test_file.md")
-        consumer_instance.markdown_service.add_or_update_score.assert_called_once_with(
+        assert consumer_instance.markdown_service.add_or_update_score.call_count == 3
+        consumer_instance.markdown_service.add_or_update_score.assert_any_call(
             expected_filepath, "s1", "entailed_score", 0.9
         )
+        consumer_instance.markdown_service.add_or_update_score.assert_any_call(
+            expected_filepath, "s1", "coverage_score", 0.8
+        )
+        consumer_instance.markdown_service.add_or_update_score.assert_any_call(
+            expected_filepath, "s1", "decontextualization_score", 0.7
+        )
+
+    @patch.object(DirtyBlockConsumer, "_read_block_from_file")
+    @patch.object(DirtyBlockConsumer, "_sync_block_with_graph")
+    @patch.object(DirtyBlockConsumer, "_get_claims_for_evaluation")
+    def test_process_block_null_scores_not_written_to_markdown(
+        self,
+        mock_get_claims,
+        mock_sync_graph,
+        mock_read_block,
+        consumer_instance,
+    ):
+        """Test that null scores are stored in graph but not written to markdown."""
+        message = {
+            "aclarai_id": "s1",
+            "file_path": "test_file.md",
+            "change_type": "modified",
+        }
+        mock_block_data = {
+            "aclarai_id": "s1",
+            "semantic_text": "source text",
+            "version": 1,
+        }
+        mock_claim_data = [{"id": "c1", "text": "claim text"}]
+
+        mock_read_block.return_value = mock_block_data
+        mock_sync_graph.return_value = True
+        mock_get_claims.return_value = mock_claim_data
+        
+        # All agents return null scores
+        consumer_instance.entailment_agent.evaluate_entailment.return_value = (
+            None,
+            "LLM error",
+        )
+        consumer_instance.coverage_agent.evaluate_coverage.return_value = (
+            None,
+            None,  # omitted_elements
+            "LLM timeout",
+        )
+        consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
+            None,
+            "Parse error",
+        )
+
+        result = consumer_instance._process_dirty_block(message)
+
+        assert result is True
+        
+        # Verify all scores are still updated in graph (even null ones)
+        assert consumer_instance.graph_service.update_relationship_score.call_count == 3
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
+            "c1", "s1", "entailed_score", None
+        )
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
+            "c1", "s1", "coverage_score", None
+        )
+        consumer_instance.graph_service.update_relationship_score.assert_any_call(
+            "c1", "s1", "decontextualization_score", None
+        )
+        
+        # Verify NO scores are written to markdown (per architecture requirements)
+        consumer_instance.markdown_service.add_or_update_score.assert_not_called()
 
     @patch.object(DirtyBlockConsumer, "_read_block_from_file")
     @patch.object(DirtyBlockConsumer, "_sync_block_with_graph")
@@ -216,6 +326,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block,
         consumer_instance,
     ):
+        """Test backward compatibility - old test behavior still works."""
         message = {
             "aclarai_id": "s1",
             "file_path": "test_file.md",
@@ -231,17 +342,34 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block.return_value = mock_block_data
         mock_sync_graph.return_value = True
         mock_get_claims.return_value = mock_claim_data
+        
+        # Entailment fails, but other agents succeed
         consumer_instance.entailment_agent.evaluate_entailment.return_value = (
             None,
             "LLM error",
         )
+        consumer_instance.coverage_agent.evaluate_coverage.return_value = (
+            0.8,
+            [],
+            "success",
+        )
+        consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
+            0.7,
+            "success",
+        )
 
         result = consumer_instance._process_dirty_block(message)
         assert result is True
-        consumer_instance.graph_service.update_relationship_score.assert_called_once_with(
-            "c1", "s1", "entailed_score", None
+        
+        # Only the non-null scores should be written to markdown
+        assert consumer_instance.markdown_service.add_or_update_score.call_count == 2
+        expected_filepath = str(Path(consumer_instance.vault_path) / "test_file.md")
+        consumer_instance.markdown_service.add_or_update_score.assert_any_call(
+            expected_filepath, "s1", "coverage_score", 0.8
         )
-        consumer_instance.markdown_service.add_or_update_score.assert_not_called()
+        consumer_instance.markdown_service.add_or_update_score.assert_any_call(
+            expected_filepath, "s1", "decontextualization_score", 0.7
+        )
 
     @patch.object(DirtyBlockConsumer, "_read_block_from_file")
     @patch.object(DirtyBlockConsumer, "_sync_block_with_graph")
@@ -334,8 +462,15 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block,
         consumer_instance,
     ):
-        original_agent = consumer_instance.entailment_agent
+        # Save original agents
+        original_entailment_agent = consumer_instance.entailment_agent
+        original_coverage_agent = consumer_instance.coverage_agent
+        original_decontextualization_agent = consumer_instance.decontextualization_agent
+        
+        # Set all agents to None to simulate missing LLM
         consumer_instance.entailment_agent = None
+        consumer_instance.coverage_agent = None
+        consumer_instance.decontextualization_agent = None
 
         message = {
             "aclarai_id": "s1",
@@ -354,7 +489,10 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
 
         assert result is True
         mock_logger.error.assert_called_with(
-            "EntailmentAgent not initialized, skipping evaluation for block s1.",
+            "Evaluation agents not initialized (EntailmentAgent, CoverageAgent, DecontextualizationAgent), skipping evaluation for block s1.",
             extra={"aclarai_id": "s1"},
         )
-        original_agent.evaluate_entailment.assert_not_called()
+        # Verify no agent methods were called
+        original_entailment_agent.evaluate_entailment.assert_not_called()
+        original_coverage_agent.evaluate_coverage.assert_not_called()
+        original_decontextualization_agent.evaluate_claim_decontextualization.assert_not_called()
