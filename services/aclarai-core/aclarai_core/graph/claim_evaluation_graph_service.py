@@ -243,3 +243,93 @@ class ClaimEvaluationGraphService:
                 extra=log_details,
             )
             return False
+
+    def create_element_nodes_and_omits_relationships(
+        self, claim_id: str, omitted_elements: List[Dict[str, str]]
+    ) -> bool:
+        """
+        Creates Element nodes for omitted verifiable elements and establishes OMITS relationships
+        between a claim and these elements.
+
+        Args:
+            claim_id: The unique ID of the claim that omits these elements.
+            omitted_elements: List of dictionaries with 'text' and 'significance' keys.
+
+        Returns:
+            True if all operations were successful, False otherwise.
+        """
+        if not omitted_elements:
+            logger.info(
+                f"No omitted elements to create for claim {claim_id}.",
+                extra={
+                    "service": "aclarai-core",
+                    "filename_function_name": "claim_evaluation_graph_service.ClaimEvaluationGraphService.create_element_nodes_and_omits_relationships",
+                    "aclarai_id_claim": claim_id,
+                },
+            )
+            return True
+
+        # Create Element nodes and OMITS relationships in a single transaction
+        query = """
+        MATCH (c:Claim {id: $claim_id})
+        UNWIND $elements AS element
+        CREATE (e:Element {text: element.text, significance: element.significance})
+        CREATE (c)-[:OMITS]->(e)
+        RETURN count(e) AS created_elements
+        """
+
+        parameters = {"claim_id": claim_id, "elements": omitted_elements}
+
+        log_details = {
+            "service": "aclarai-core",
+            "filename_function_name": "claim_evaluation_graph_service.ClaimEvaluationGraphService.create_element_nodes_and_omits_relationships",
+            "aclarai_id_claim": claim_id,
+            "elements_count": len(omitted_elements),
+        }
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, parameters)
+                record = result.single()
+                created_count = record["created_elements"] if record else 0
+
+                if created_count == len(omitted_elements):
+                    logger.info(
+                        f"Successfully created {created_count} Element nodes and OMITS relationships for claim {claim_id}.",
+                        extra=log_details,
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Created {created_count} Element nodes but expected {len(omitted_elements)} for claim {claim_id}.",
+                        extra=log_details,
+                    )
+                    return False
+        except Exception as e:
+            logger.error(
+                f"Error creating Element nodes and OMITS relationships for claim {claim_id} in Neo4j: {e}",
+                exc_info=True,
+                extra=log_details,
+            )
+            return False
+
+    def update_coverage_score(
+        self, claim_id: str, block_id: str, score: Optional[float]
+    ) -> bool:
+        """
+        Updates the coverage score for a claim's relationship in Neo4j.
+
+        The score is stored on the [:ORIGINATES_FROM] relationship between
+        the (:Claim {id: claim_id}) and its (:Block {id: block_id}).
+
+        Args:
+            claim_id: The unique ID of the claim.
+            block_id: The unique ID of the block from which the claim originates.
+            score: The coverage score (float or None for null).
+
+        Returns:
+            True if the update was successful, False otherwise.
+        """
+        return self.update_relationship_score(
+            claim_id, block_id, "coverage_score", score
+        )
