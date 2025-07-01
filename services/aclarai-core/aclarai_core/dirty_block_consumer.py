@@ -7,7 +7,6 @@ from vault-watcher and updates graph nodes with proper version checking.
 import json
 import logging
 import os
-import re
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,7 +15,6 @@ from typing import Any, Dict, List, Optional
 from aclarai_shared import load_config
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
-from aclarai_shared.import_system import write_file_atomically
 from aclarai_shared.mq import RabbitMQManager
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
@@ -25,6 +23,8 @@ from llama_index.core.llms.llm import LLM as LlamaLLM
 
 from .agents.entailment_agent import EntailmentAgent
 from .concept_processor import ConceptProcessor
+from .graph.claim_evaluation_graph_service import ClaimEvaluationGraphService
+from .markdown.markdown_updater_service import MarkdownUpdaterService
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,12 @@ class DirtyBlockConsumer:
             logger.error(
                 "EntailmentAgent could not be initialized because LLM failed to load."
             )
+
+        # Initialize generic services for score updates
+        self.graph_service = ClaimEvaluationGraphService(
+            self.graph_manager.driver, self.config
+        )
+        self.markdown_service = MarkdownUpdaterService()
 
         logger.info(
             "DirtyBlockConsumer: Initialized consumer.",
@@ -338,16 +344,17 @@ class DirtyBlockConsumer:
                                 "entailed_score": entailment_score,
                             },
                         )
+                        # Update Neo4j using generic method
+                        self.graph_service.update_relationship_score(
+                            claim_id, source_id, "entailed_score", entailment_score
+                        )
+                        # Update Markdown using generic method
                         if entailment_score is not None:
-                            self._update_entailment_score_in_neo4j(
-                                claim_id, source_id, entailment_score
-                            )
-                            self._update_markdown_with_entailment_score(
-                                source_filepath_str, source_id, entailment_score
-                            )
-                        else:
-                            self._update_entailment_score_in_neo4j(
-                                claim_id, source_id, None
+                            self.markdown_service.add_or_update_score(
+                                source_filepath_str,
+                                source_id,
+                                "entailed_score",
+                                entailment_score,
                             )
 
             if sync_success and change_type in ("created", "modified"):
@@ -548,127 +555,3 @@ class DirtyBlockConsumer:
                 extra={"source_block_id": source_block_id, "error": str(e)},
             )
             return []
-
-    def _update_entailment_score_in_neo4j(
-        self, claim_id: str, source_id: str, score: Optional[float]
-    ):
-        log_details = {
-            "claim_id": claim_id,
-            "source_id": source_id,
-            "entailed_score": score,
-        }
-        logger.info("Attempting to update Neo4j entailment score.", extra=log_details)
-        query = """
-        MATCH (claim:Claim {id: $claim_id})-[rel:ORIGINATES_FROM]->(block:Block {id: $source_id})
-        SET rel.entailed_score = $entailed_score
-        RETURN claim.id AS claimId, rel.entailed_score AS updatedScore
-        """.strip()
-        params = {"claim_id": claim_id, "source_id": source_id, "entailed_score": score}
-        try:
-            results = self.graph_manager.execute_query(query, parameters=params)
-            if results and len(results) > 0:
-                logger.info(
-                    f"Successfully updated Neo4j entailment score to {results[0].get('updatedScore')}.",
-                    extra=log_details,
-                )
-            else:
-                logger.warning(
-                    "Neo4j update for entailment score did not return results. Relationship or nodes might be missing.",
-                    extra=log_details,
-                )
-        except Exception as e:
-            logger.error(
-                f"Failed to update entailment score in Neo4j: {e}",
-                exc_info=True,
-                extra=log_details,
-            )
-
-    def _update_markdown_with_entailment_score(
-        self, source_filepath: str, source_block_id: str, score: float
-    ):
-        log_details = {
-            "source_block_id": source_block_id,
-            "entailed_score": score,
-            "filepath": source_filepath,
-        }
-        logger.info(
-            "Attempting to update Markdown with entailment score.", extra=log_details
-        )
-        try:
-            markdown_path = Path(source_filepath)
-            if not markdown_path.exists():
-                logger.error(
-                    f"Markdown file not found: {source_filepath}", extra=log_details
-                )
-                return
-
-            content = markdown_path.read_text(encoding="utf-8")
-            original_content = content
-
-            block_id_pattern_str = rf"(<!--\s*aclarai:id={re.escape(source_block_id)}(?:[^\S\n]+[^<>]*?)?\s+ver=)(\d+)(\s*[^<>]*?-->)"
-            block_id_match = re.search(block_id_pattern_str, content)
-
-            if not block_id_match:
-                logger.warning(
-                    f"Could not find aclarai:id comment for block {source_block_id} in {source_filepath}.",
-                    extra=log_details,
-                )
-                return
-
-            main_id_comment_full = block_id_match.group(0)
-            pre_ver_part, current_version_str, post_ver_part = block_id_match.groups()
-            current_version = int(current_version_str)
-            new_version = current_version + 1
-            updated_main_id_comment = f"{pre_ver_part}{new_version}{post_ver_part}"
-            content_after_ver_update = content.replace(
-                main_id_comment_full, updated_main_id_comment, 1
-            )
-
-            score_comment_str = f"<!-- aclarai:entailed_score={score:.2f} -->"
-            lines = content_after_ver_update.splitlines()
-            main_id_comment_line_index = -1
-            for i, line in enumerate(lines):
-                if updated_main_id_comment.splitlines()[0] in line:
-                    main_id_comment_line_index = i
-                    break
-
-            if main_id_comment_line_index == -1:
-                logger.error(
-                    "Could not re-locate main ID comment line after version increment.",
-                    extra=log_details,
-                )
-                return
-
-            existing_score_pattern = re.compile(
-                r"^\s*<!--\s*aclarai:entailed_score=[\d.]+\s*-->\s*$"
-            )
-            score_insertion_point_index = main_id_comment_line_index + 1
-            found_and_updated_existing_score = False
-
-            if score_insertion_point_index < len(
-                lines
-            ) and existing_score_pattern.match(lines[score_insertion_point_index]):
-                lines[score_insertion_point_index] = score_comment_str
-                found_and_updated_existing_score = True
-
-            if not found_and_updated_existing_score:
-                lines.insert(score_insertion_point_index, score_comment_str)
-
-            updated_content = "\n".join(lines)
-            if updated_content != original_content:
-                write_file_atomically(markdown_path, updated_content)
-                logger.info(
-                    f"Successfully updated Markdown with score and new version {new_version}.",
-                    extra=log_details,
-                )
-            else:
-                logger.info(
-                    "Markdown content did not change. Score/version might be identical.",
-                    extra=log_details,
-                )
-        except Exception as e:
-            logger.error(
-                f"Failed to update Markdown for entailment score: {e}",
-                exc_info=True,
-                extra=log_details,
-            )
