@@ -179,7 +179,9 @@ class ClaimConceptLinker:
                         "entailed_score": entailed_score,
                         "coverage_score": coverage_score,
                         "decontextualization_score": decontextualization_score,
-                        "quality_threshold": self.config.threshold.claim_quality,
+                        "quality_threshold": self.config.threshold.claim_quality
+                        if self.config and self.config.threshold
+                        else None,
                     },
                 )
 
@@ -199,7 +201,9 @@ class ClaimConceptLinker:
                             entailed_score,
                             coverage_score,
                             decontextualization_score,
-                            self.config.threshold.claim_quality,
+                            self.config.threshold.claim_quality
+                            if self.config and self.config.threshold
+                            else 0.5,
                             relationship_type,
                         )
 
@@ -212,7 +216,9 @@ class ClaimConceptLinker:
                                     "claim_id": claim.get("id"),
                                     "concept_id": candidate.concept_id,
                                     "relationship_type": relationship_type,
-                                    "quality_threshold": self.config.threshold.claim_quality,
+                                    "quality_threshold": self.config.threshold.claim_quality
+                                    if self.config and self.config.threshold
+                                    else None,
                                 },
                             )
                             continue

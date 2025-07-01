@@ -33,9 +33,10 @@ def compute_geometric_mean(
         Geometric mean as float, or None if any score is null/missing
     """
     # If any score is null, return None (claim is excluded)
-    if any(
-        score is None
-        for score in [entailed_score, coverage_score, decontextualization_score]
+    if (
+        entailed_score is None
+        or coverage_score is None
+        or decontextualization_score is None
     ):
         logger.debug(
             f"Cannot compute geometric mean: null scores present "
@@ -59,7 +60,7 @@ def compute_geometric_mean(
     try:
         # Compute geometric mean: (a * b * c) ** (1/3)
         product = entailed_score * coverage_score * decontextualization_score
-        geomean = product ** (1 / 3)
+        geomean: float = product ** (1 / 3)
 
         logger.debug(
             f"Computed geometric mean: {geomean:.3f} from scores "
