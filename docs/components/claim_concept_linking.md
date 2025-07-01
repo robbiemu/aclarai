@@ -10,6 +10,20 @@ The claim-concept linking system establishes semantic relationships between (:Cl
 - `MENTIONS_CONCEPT`: The claim is related to the concept but does not affirm or refute it  
 - `CONTRADICTS_CONCEPT`: The claim contradicts the concept
 
+### Quality Filtering for Concept Linking
+
+To ensure the integrity of the knowledge graph, the linking process incorporates a quality filtering step based on claim evaluation scores. This gatekeeps the creation of strong semantic relationships.
+
+-   **Geometric Mean:** The system first calculates a geometric mean from the claim's `entailed_score`, `coverage_score`, and `decontextualization_score` to produce a single quality metric.
+-   **Quality Threshold:** This mean is compared against a configurable `threshold.claim_quality` (default: 0.7).
+-   **Relationship-Specific Logic:**
+    -   **`SUPPORTS_CONCEPT` / `CONTRADICTS_CONCEPT`:** These strong semantic links are only created if the claim's quality score meets or exceeds the threshold.
+    -   **`MENTIONS_CONCEPT`:** This weaker, associative link is permitted even if a claim's quality score is below the threshold, as long as its evaluation scores are not `null`.
+-   **Null Score Handling:** Any claim with a `null` value for any of the three evaluation scores is automatically excluded from all types of concept linking.
+
+This ensures that only high-quality, well-vetted claims form the strong evidentiary backbone of the knowledge graph.
+
+
 ## Architecture
 
 The system consists of several key components:
