@@ -356,7 +356,7 @@ class Tier2SummaryAgent:
             # Sort by computed quality (geometric mean) in descending order and limit
             from ..evaluation_thresholds import compute_geometric_mean
 
-            def compute_claim_quality(claim):
+            def compute_claim_quality(claim) -> float:
                 geomean = compute_geometric_mean(
                     claim["entailed_score"],
                     claim["coverage_score"],
