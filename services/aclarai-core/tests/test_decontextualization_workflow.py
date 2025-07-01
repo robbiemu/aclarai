@@ -726,7 +726,7 @@ def test_graph_service_generic_update_relationship_score(
     service = ClaimEvaluationGraphService(
         neo4j_driver=driver, config=mock_graph_service_config
     )
-    
+
     # Test valid score names
     valid_scores = ["entailed_score", "decontextualization_score", "coverage_score"]
     for score_name in valid_scores:
@@ -742,7 +742,9 @@ def test_graph_service_generic_update_relationship_score(
         )
 
 
-def test_markdown_service_generic_add_or_update_score(markdown_service, temp_markdown_file):
+def test_markdown_service_generic_add_or_update_score(
+    markdown_service, temp_markdown_file
+):
     """Test the generic add_or_update_score method with different score types."""
     # Test entailed_score
     success = markdown_service.add_or_update_score(
