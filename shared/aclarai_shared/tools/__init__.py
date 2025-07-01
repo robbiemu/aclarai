@@ -8,7 +8,7 @@ from .implementations.neo4j_tool import Neo4jQueryTool
 from .implementations.vector_search_tool import VectorSearchTool
 from .implementations.web_search.base import WebSearchTool
 from .implementations.web_search.provider import register_provider
-from .vector_store_manager import VectorStoreManager
+from .vector_store_manager import aclaraiVectorStoreManager
 
 __all__ = [
     "ToolFactory",
@@ -17,5 +17,5 @@ __all__ = [
     "VectorSearchTool",
     "WebSearchTool",
     "register_provider",
-    "VectorStoreManager",  # And add it to __all__
+    "aclaraiVectorStoreManager",
 ]

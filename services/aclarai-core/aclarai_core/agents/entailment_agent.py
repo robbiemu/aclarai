@@ -3,7 +3,7 @@ Agent for evaluating the entailment of a claim by its source.
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.tools.factory import ToolFactory
@@ -13,7 +13,18 @@ from aclarai_shared.utils.prompt_loader import load_prompt_template
 from llama_index.core.agent.workflow import CodeActAgent
 from llama_index.core.llms.llm import LLM
 from llama_index.core.tools import BaseTool
+from llama_index.core.base.agent.code_executor import CodeExecutorComponent  # type: ignore
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
+
+
+class DummyCodeExecutor(CodeExecutorComponent):
+    def __init__(self):
+        pass
+
+    def execute_code(self, code_string: str) -> Tuple[str, Any]:
+        logger.warning(f"CodeActAgent attempted to execute code: {code_string}")
+        return "Code execution not supported by this agent.", {}
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,27 +41,21 @@ class EntailmentAgent:
         """
         self.llm = llm
         self.config = config
-        self.tools: list[BaseTool] = tool_factory.get_tools_for_agent(
+        # Cast the return type to match the expected type for CodeActAgent
+        self.tools: list[BaseTool | Callable[..., Any]] = list(tool_factory.get_tools_for_agent(
             "entailment_agent"
-        )
+        ))
 
-        # As per on-llm_interaction_strategy.md, agents can be CodeActAgent
-        # The issue also specifically mentions CodeActAgent for multi-step reasoning.
-        # CodeActAgent expects async tools if it's run in async mode.
-        # For simplicity in this synchronous agent, we'll ensure tools are adaptable.
-        # However, CodeActAgent itself is often used in an async context with agent_worker.arun
-        # For a synchronous evaluate_entailment, we might need to adjust or use ReActAgent
-        # if CodeActAgent proves difficult to run synchronously without an event loop.
-        # Let's try with CodeActAgent first as specified.
-        # If using synchronous `agent.chat()`, tools don't strictly need to be async.
-        self.agent = CodeActAgent.from_tools(
-            tools=self.tools,
+        # The synchronous `agent.chat()` method is used here, which works well with
+        # both synchronous and asynchronous tools.
+        self.agent = CodeActAgent(
             llm=self.llm,
-            verbose=True,
+            tools=self.tools,
+            code_execute_fn=DummyCodeExecutor().execute_code,
             # system_prompt will be part of the loaded prompt template
         )
         self.max_retries = self.config.processing.retries.get("max_attempts", 3)
-        self.tool_names = ", ".join([tool.metadata.name for tool in self.tools])
+        self.tool_names = ", ".join([tool.metadata.name for tool in self.tools if isinstance(tool, BaseTool) and tool.metadata.name is not None])
 
     def evaluate_entailment(
         self,

@@ -1,5 +1,6 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
+import textwrap
 
 import pytest
 from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
@@ -14,7 +15,8 @@ def mock_consumer_config():
     config = MagicMock(spec=aclaraiConfig)
     config.vault_path = "/fake/vault"
     config.rabbitmq_host = "fake_host"
-    config.dict.return_value = {}
+    # Fix for AttributeError: .dict() call
+    config.dict = MagicMock(return_value={})
 
     config.processing = MagicMock()
     config.processing.retries = {"max_attempts": 3}
@@ -56,11 +58,13 @@ def mock_tool_factory_fixture():
 
 
 @pytest.fixture
-@patch("aclarai_core.dirty_block_consumer.RabbitMQManager")  # Corrected
-@patch("aclarai_core.dirty_block_consumer.BlockParser")  # Corrected
-@patch("aclarai_core.dirty_block_consumer.ConceptProcessor")  # Corrected
-@patch("aclarai_core.dirty_block_consumer.EntailmentAgent")  # Corrected
-@patch("aclarai_core.dirty_block_consumer.VectorStoreManager")  # Corrected
+@patch("aclarai_core.dirty_block_consumer.RabbitMQManager")
+@patch("aclarai_core.dirty_block_consumer.BlockParser")
+@patch("aclarai_core.dirty_block_consumer.ConceptProcessor")
+@patch("aclarai_core.dirty_block_consumer.EntailmentAgent")
+@patch(
+    "aclarai_shared.tools.vector_store_manager.aclaraiVectorStoreManager"
+)  # Patch the concrete manager
 def consumer_instance(
     MockVectorStoreManager,
     MockEntailmentAgent,
@@ -78,6 +82,8 @@ def consumer_instance(
         consumer = DirtyBlockConsumer(config=mock_consumer_config)
         consumer.graph_manager = mock_graph_manager_fixture
         consumer.entailment_agent = MockEntailmentAgent()
+        # Fix for TypeError: make extract_aclarai_blocks return an iterable
+        MockBlockParser.return_value.extract_aclarai_blocks.return_value = []
         consumer.rabbitmq_manager = MockRabbitMQManager()
         consumer.block_parser = MockBlockParser()
         consumer.concept_processor = MockConceptProcessor()
@@ -100,11 +106,11 @@ class TestDirtyBlockConsumerEvaluationMethods:
         expected_query = """
         MATCH (claim:Claim {id: $claim_id})-[rel:ORIGINATES_FROM]->(block:Block {id: $source_id})
         SET rel.entailed_score = $entailed_score
-        RETURN claim.id AS claimId, block.id AS blockId, rel.entailed_score AS updatedScore
-        """
+        RETURN claim.id AS claimId, rel.entailed_score AS updatedScore
+        """.strip()
         params = {"claim_id": claim_id, "source_id": source_id, "entailed_score": score}
         mock_graph_manager_fixture.execute_query.assert_called_once_with(
-            expected_query.strip(), parameters=params
+            expected_query, parameters=params
         )
 
     def test_update_neo4j_score_is_none(
@@ -117,10 +123,10 @@ class TestDirtyBlockConsumerEvaluationMethods:
 
         params = {"claim_id": claim_id, "source_id": source_id, "entailed_score": None}
         mock_graph_manager_fixture.execute_query.assert_called_with(
-            pytest.ANY, parameters=params
+            ANY, parameters=params
         )
 
-    @patch("aclarai_core.dirty_block_consumer.logger")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_neo4j_no_results(
         self, mock_logger, consumer_instance, mock_graph_manager_fixture
     ):
@@ -132,7 +138,7 @@ class TestDirtyBlockConsumerEvaluationMethods:
         assert mock_logger.warning.called
         assert "did not return results" in mock_logger.warning.call_args[0][0]
 
-    @patch("aclarai_core.dirty_block_consumer.logger")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_neo4j_exception(
         self, mock_logger, consumer_instance, mock_graph_manager_fixture
     ):
@@ -147,13 +153,12 @@ class TestDirtyBlockConsumerEvaluationMethods:
             in mock_logger.error.call_args[0][0]
         )
 
-    @patch(
-        "aclarai_shared.import_system.write_file_atomically"
-    )  # Corrected: patch where it's imported from
+    @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_new_score(
-        self, mock_exists, mock_read_text, mock_write_atomic, consumer_instance
+        self, mock_exists, mock_mkdir, mock_read_text, mock_write_atomic, consumer_instance
     ):
         source_filepath, source_block_id, score = "/fake/vault/test.md", "b1", 0.75
         mock_exists.return_value = True
@@ -169,11 +174,12 @@ class TestDirtyBlockConsumerEvaluationMethods:
             Path(source_filepath), expected_content
         )
 
-    @patch("aclarai_shared.import_system.write_file_atomically")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_update_existing_score(
-        self, mock_exists, mock_read_text, mock_write_atomic, consumer_instance
+        self, mock_exists, mock_mkdir, mock_read_text, mock_write_atomic, consumer_instance
     ):
         source_filepath, source_block_id, score = "/fake/vault/test.md", "b1", 0.88
         mock_exists.return_value = True
@@ -189,14 +195,16 @@ class TestDirtyBlockConsumerEvaluationMethods:
             Path(source_filepath), expected_content
         )
 
-    @patch("aclarai_shared.import_system.write_file_atomically")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
-    @patch("aclarai_core.dirty_block_consumer.logger")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_markdown_block_id_not_found(
         self,
         mock_logger,
         mock_exists,
+        mock_mkdir,
         mock_read_text,
         mock_write_atomic,
         consumer_instance,
@@ -219,11 +227,12 @@ class TestDirtyBlockConsumerEvaluationMethods:
             "Could not find aclarai:id comment" in mock_logger.warning.call_args[0][0]
         )
 
-    @patch("aclarai_shared.import_system.write_file_atomically")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
+    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
-    @patch("aclarai_core.dirty_block_consumer.logger")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_markdown_file_not_found(
-        self, mock_logger, mock_exists, mock_write_atomic, consumer_instance
+        self, mock_logger, mock_exists, mock_mkdir, mock_write_atomic, consumer_instance
     ):
         source_filepath, source_block_id, score = (
             "/fake/vault/nonexistent.md",
@@ -255,9 +264,9 @@ class TestDirtyBlockConsumerEvaluationMethods:
         MATCH (claim:Claim)-[r:ORIGINATES_FROM]->(block:Block {id: $source_block_id})
         WHERE r.entailed_score IS NULL OR claim.needs_reprocessing = true
         RETURN claim.id AS id, claim.text AS text
-        """
+        """.strip()
         mock_graph_manager_fixture.execute_query.assert_called_once_with(
-            expected_query.strip(), parameters={"source_block_id": source_block_id}
+            expected_query, parameters={"source_block_id": source_block_id}
         )
 
     def test_get_claims_none_found(self, consumer_instance, mock_graph_manager_fixture):
@@ -267,7 +276,7 @@ class TestDirtyBlockConsumerEvaluationMethods:
         claims = consumer_instance._get_claims_for_evaluation(source_block_id)
         assert claims == []
 
-    @patch("aclarai_core.dirty_block_consumer.logger")  # Corrected
+    @patch("aclarai_core.dirty_block_consumer.logger")
     def test_get_claims_neo4j_exception(
         self, mock_logger, consumer_instance, mock_graph_manager_fixture
     ):

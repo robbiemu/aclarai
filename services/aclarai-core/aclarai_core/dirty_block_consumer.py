@@ -12,16 +12,18 @@ import os
 import re  # For markdown update
 from datetime import datetime, timezone
 from pathlib import Path
+from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 from unittest.mock import (
     MagicMock,
 )  # For fallback non-functional mock in _initialize_llm
 
 from aclarai_shared import load_config
-from aclarai_shared.embedding.storage import VectorStoreManager
+from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.import_system import write_file_atomically
 from aclarai_shared.mq import RabbitMQManager
+from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.vault import BlockParser
 from llama_index.core.llms.llm import LLM as LlamaLLM
@@ -41,7 +43,7 @@ class DirtyBlockConsumer:
 
     def __init__(self, config: Optional[Any] = None):
         """Initialize the dirty block consumer."""
-        self.config = config or load_config(validate=True)
+        self.config: aclaraiConfig = config or load_config(validate=True)
         self.graph_manager = Neo4jGraphManager(self.config)
         self.block_parser = BlockParser()
         self.concept_processor = ConceptProcessor(self.config)
@@ -51,21 +53,14 @@ class DirtyBlockConsumer:
 
         self.llm = self._initialize_llm()  # self.llm can be Optional[LlamaLLM]
 
-        # Ensure ToolFactory gets a valid LLM or handles None if llm init fails
-        # For now, assuming ToolFactory might not strictly need an LLM for all tool types,
-        # or that the tools for entailment_agent don't need one at factory init time.
-        # If llm is None here and ToolFactory requires it, this could be an issue.
-        # However, EntailmentAgent itself receives self.llm, so if it's None, agent will fail.
-        self.vector_store_manager = VectorStoreManager(
-            self.config
-        )  # ToolFactory needs this
-        tool_factory_config = self.config.dict(
-            exclude_unset=True
-        )  # Pass config as dict
+        # Instantiate the concrete VectorStoreManager
+        self.vector_store_manager = aclaraiVectorStoreManager(self.config)
+
+        tool_factory_config = asdict(self.config) # Use asdict for dataclasses
         self.tool_factory = ToolFactory(tool_factory_config, self.vector_store_manager)
 
         if self.llm:  # Only initialize agent if LLM loaded successfully
-            self.entailment_agent = EntailmentAgent(
+            self.entailment_agent: Optional[EntailmentAgent] = EntailmentAgent(
                 self.llm, self.tool_factory, self.config
             )
         else:
@@ -88,8 +83,8 @@ class DirtyBlockConsumer:
         )
 
     def _initialize_llm(self) -> Optional[LlamaLLM]:
-        llm_model_name_entailment = self.config.model.claimify.get("entailment")
-        llm_model_name_default = self.config.model.claimify.get("default")
+        llm_model_name_entailment = self.config.llm.model_params.get("claimify", {}).get("entailment")
+        llm_model_name_default = self.config.llm.model_params.get("claimify", {}).get("default")
 
         llm_model_name = llm_model_name_entailment or llm_model_name_default
 
@@ -127,8 +122,8 @@ class DirtyBlockConsumer:
                         spec=LlamaLLM, name=f"UninitializedOpenAI_{llm_model_name}"
                     )
 
-                temperature_str = self.config.processing.get("temperature", "0.1")
-                max_tokens_str = self.config.processing.get("max_tokens", "1000")
+                temperature_str = self.config.processing.temperature
+                max_tokens_str = self.config.processing.max_tokens
 
                 try:
                     temperature = float(temperature_str)
@@ -538,7 +533,7 @@ class DirtyBlockConsumer:
         MATCH (claim:Claim)-[r:ORIGINATES_FROM]->(block:Block {id: $source_block_id})
         WHERE r.entailed_score IS NULL OR claim.needs_reprocessing = true
         RETURN claim.id AS id, claim.text AS text
-        """
+        """.strip()
         params = {"source_block_id": source_block_id}
         try:
             results = self.graph_manager.execute_query(query, parameters=params)
@@ -567,7 +562,7 @@ class DirtyBlockConsumer:
         MATCH (claim:Claim {id: $claim_id})-[rel:ORIGINATES_FROM]->(block:Block {id: $source_id})
         SET rel.entailed_score = $entailed_score
         RETURN claim.id AS claimId, rel.entailed_score AS updatedScore
-        """
+        """.strip()
         params = {"claim_id": claim_id, "source_id": source_id, "entailed_score": score}
         try:
             results = self.graph_manager.execute_query(query, parameters=params)
