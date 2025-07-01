@@ -16,6 +16,7 @@ from llama_index.llms.openai import OpenAI
 from ..claim_concept_linking.neo4j_operations import ClaimConceptNeo4jManager
 from ..config import aclaraiConfig
 from ..embedding.storage import aclaraiVectorStore
+from ..evaluation_thresholds import should_include_in_summaries
 from ..graph.neo4j_manager import Neo4jGraphManager
 from ..import_system import write_file_atomically
 from .data_models import SummaryBlock, SummaryInput, SummaryResult, generate_summary_id
@@ -285,32 +286,28 @@ class Tier2SummaryAgent:
     def _get_high_quality_claims(self) -> List[Dict[str, Any]]:
         """
         Retrieve high-quality Claim nodes from Neo4j to use as seeds.
-        High-quality claims are those with good evaluation scores that can
-        serve as seeds for finding semantically related content.
+        High-quality claims are those that meet the evaluation threshold
+        defined in docs/arch/on-evaluation_agents.md using geometric mean.
         """
         assert self.neo4j_manager is not None, "Neo4j manager is not initialized"
         try:
-            # Get claims with high evaluation scores
-            # These serve as "seeds" for finding semantic neighborhoods
+            # Get claims with all evaluation scores present
+            # The filtering will be done in Python using the threshold logic
             query = """
             MATCH (c:Claim)-[:REFERENCES]->(b:Block)
             WHERE c.entailed_score IS NOT NULL
               AND c.coverage_score IS NOT NULL
               AND c.decontextualization_score IS NOT NULL
-              AND c.entailed_score > 0.7
-              AND c.coverage_score > 0.7
-              AND c.decontextualization_score > 0.7
             RETURN c.id as id, c.text as text, c.entailed_score as entailed_score,
                    c.coverage_score as coverage_score, c.decontextualization_score as decontextualization_score,
                    c.version as version, c.timestamp as timestamp,
                    b.aclarai_id as source_block_id, b.text as source_block_text
-            ORDER BY (c.entailed_score + c.coverage_score + c.decontextualization_score) DESC
-            LIMIT 50
+            ORDER BY c.timestamp DESC
             """
             result = self.neo4j_manager.execute_query(query)
-            claims = []
+            all_claims = []
             for record in result:
-                claims.append(
+                all_claims.append(
                     {
                         "id": record["id"],
                         "text": record["text"],
@@ -326,15 +323,61 @@ class Tier2SummaryAgent:
                         "node_type": "claim",
                     }
                 )
+
+            # Apply evaluation threshold filtering using geometric mean
+            quality_threshold = self.config.threshold.claim_quality
+            high_quality_claims = []
+
+            for claim in all_claims:
+                # Check if claim meets quality threshold for summary inclusion
+                if should_include_in_summaries(
+                    claim["entailed_score"],
+                    claim["coverage_score"],
+                    claim["decontextualization_score"],
+                    quality_threshold,
+                ):
+                    high_quality_claims.append(claim)
+                else:
+                    logger.debug(
+                        "Excluding claim from summary: does not meet quality threshold",
+                        extra={
+                            "service": "aclarai",
+                            "filename.function_name": "agent._get_high_quality_claims",
+                            "claim_id": claim["id"],
+                            "entailed_score": claim["entailed_score"],
+                            "coverage_score": claim["coverage_score"],
+                            "decontextualization_score": claim[
+                                "decontextualization_score"
+                            ],
+                            "quality_threshold": quality_threshold,
+                        },
+                    )
+
+            # Sort by computed quality (geometric mean) in descending order and limit
+            from ..evaluation_thresholds import compute_geometric_mean
+
+            def compute_claim_quality(claim):
+                geomean = compute_geometric_mean(
+                    claim["entailed_score"],
+                    claim["coverage_score"],
+                    claim["decontextualization_score"],
+                )
+                return geomean if geomean is not None else 0.0
+
+            high_quality_claims.sort(key=compute_claim_quality, reverse=True)
+            high_quality_claims = high_quality_claims[:50]  # Limit to top 50
+
             logger.info(
                 "Retrieved high-quality claims as seeds",
                 extra={
                     "service": "aclarai",
                     "filename.function_name": "agent._get_high_quality_claims",
-                    "claims_count": len(claims),
+                    "total_claims": len(all_claims),
+                    "high_quality_claims": len(high_quality_claims),
+                    "quality_threshold": quality_threshold,
                 },
             )
-            return claims
+            return high_quality_claims
         except Exception as e:
             logger.error(
                 "Failed to retrieve high-quality claims from Neo4j",

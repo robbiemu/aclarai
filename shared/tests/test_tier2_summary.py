@@ -212,6 +212,9 @@ class TestTier2SummaryAgent:
         # Add threshold configuration
         config.threshold = Mock()
         config.threshold.summary_grouping_similarity = 0.80
+        config.threshold.claim_quality = (
+            0.7  # Add quality threshold for evaluation filtering
+        )
         # Add processing configuration for retries
         config.processing = {
             "retries": {"max_attempts": 3, "backoff_factor": 2, "max_wait_time": 60}
@@ -287,15 +290,15 @@ class TestTier2SummaryAgent:
                 )
 
     def test_get_high_quality_claims(self, mock_config, mock_neo4j_manager, mock_llm):
-        """Test retrieval of high-quality claims from Neo4j."""
-        # Mock high-quality claims response
+        """Test retrieval of high-quality claims from Neo4j with threshold filtering."""
+        # Mock response with mixed quality claims
         mock_neo4j_manager.execute_query.return_value = [
             {
                 "id": "claim1",
                 "text": "High quality claim 1",
-                "entailed_score": 0.8,
+                "entailed_score": 0.85,
                 "coverage_score": 0.9,
-                "decontextualization_score": 0.85,
+                "decontextualization_score": 0.88,  # Geomean ≈ 0.876 > 0.7
                 "version": 1,
                 "timestamp": "2024-01-01T10:00:00Z",
                 "source_block_id": "blk_001",
@@ -306,28 +309,48 @@ class TestTier2SummaryAgent:
                 "text": "High quality claim 2",
                 "entailed_score": 0.75,
                 "coverage_score": 0.8,
-                "decontextualization_score": 0.78,
+                "decontextualization_score": 0.78,  # Geomean ≈ 0.776 > 0.7
                 "version": 1,
                 "timestamp": "2024-01-01T11:00:00Z",
                 "source_block_id": "blk_002",
                 "source_block_text": "Original utterance text 2",
+            },
+            {
+                "id": "claim3",
+                "text": "Low quality claim",
+                "entailed_score": 0.5,
+                "coverage_score": 0.6,
+                "decontextualization_score": 0.4,  # Geomean ≈ 0.492 < 0.7
+                "version": 1,
+                "timestamp": "2024-01-01T12:00:00Z",
+                "source_block_id": "blk_003",
+                "source_block_text": "Original utterance text 3",
             },
         ]
         agent = Tier2SummaryAgent(
             config=mock_config, neo4j_manager=mock_neo4j_manager, llm=mock_llm
         )
         claims = agent._get_high_quality_claims()
+
+        # Should only return 2 claims that meet the threshold (claim1 and claim2)
         assert len(claims) == 2
-        assert claims[0]["id"] == "claim1"
+        # Claims should be sorted by quality (highest geometric mean first)
+        assert claims[0]["id"] == "claim1"  # Highest quality
         assert claims[0]["text"] == "High quality claim 1"
         assert claims[0]["source_block_id"] == "blk_001"
         assert claims[0]["node_type"] == "claim"
-        assert claims[1]["id"] == "claim2"
-        # Verify Neo4j query was called
+        assert claims[1]["id"] == "claim2"  # Second highest quality
+
+        # Verify Neo4j query was called with new structure
         mock_neo4j_manager.execute_query.assert_called_once()
         call_args = mock_neo4j_manager.execute_query.call_args[0]
         assert "MATCH (c:Claim)-[:REFERENCES]->(b:Block)" in call_args[0]
-        assert "entailed_score > 0.7" in call_args[0]
+        # New query should not have hardcoded thresholds
+        assert "entailed_score > 0.7" not in call_args[0]
+        assert "coverage_score > 0.7" not in call_args[0]
+        assert "decontextualization_score > 0.7" not in call_args[0]
+        # Should check for non-null scores
+        assert "IS NOT NULL" in call_args[0]
 
     def test_get_high_quality_claims_error_handling(self, mock_config, mock_llm):
         """Test error handling in high-quality claim retrieval."""
