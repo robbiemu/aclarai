@@ -115,7 +115,7 @@ class TestClaimConceptLinkerOrchestrator:
         )
         # Test finding candidates
         candidates = linker.find_candidate_concepts(
-            query_text="An error related to CUDA occurred",
+            query_text="CUDA Error",
             top_k=5,
             similarity_threshold=0.1,
         )
@@ -129,6 +129,36 @@ class TestClaimConceptLinkerOrchestrator:
         assert "text" in candidate
         assert isinstance(similarity, float)
         assert 0.0 <= similarity <= 1.0
+
+    def test_find_candidate_concepts_semantic_similarity(self):
+        """Test vector-based candidate finding with a semantically similar query."""
+        neo4j_manager, vector_store = get_seeded_mock_services()
+        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        linker = ClaimConceptLinker(
+            neo4j_manager=mock_claim_concept_manager,
+            vector_store=vector_store,
+        )
+        # Use a query that is semantically similar but not an exact match.
+        # The enhanced mock embedding should handle this.
+        candidates = linker.find_candidate_concepts(
+            query_text="An error related to CUDA",  # Non-exact match
+            top_k=5,
+            similarity_threshold=0.8,  # Use a realistic threshold
+        )
+        assert isinstance(candidates, list)
+        # Should find "CUDA Error" from the golden dataset
+        assert len(candidates) > 0
+
+        # Verify that the top match is indeed "CUDA Error"
+        found_texts = [c[0].get("text") for c in candidates]
+        assert "cuda error" in found_texts
+
+        # Verify the structure of the top result
+        top_candidate, top_similarity = candidates[0]
+        assert isinstance(top_candidate, dict)
+        assert "id" in top_candidate
+        assert "text" in top_candidate
+        assert top_similarity > 0.8  # Should be high similarity
 
     def test_create_claim_concept_pair(self):
         """Test claim-concept pair creation."""

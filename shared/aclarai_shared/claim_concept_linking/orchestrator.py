@@ -5,7 +5,9 @@ the full linking process, from fetching claims to updating Markdown files.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
+
+from llama_index.core.vector_stores.types import VectorStoreQuery
 
 from ..config import aclaraiConfig, load_config
 from .agent import ClaimConceptLinkerAgent
@@ -18,18 +20,6 @@ from .models import (
 from .neo4j_operations import ClaimConceptNeo4jManager
 
 logger = logging.getLogger(__name__)
-
-
-class LinkStats(TypedDict):
-    claims_fetched: int
-    claims_processed: int
-    concepts_available: int
-    pairs_analyzed: int
-    links_created: int
-    relationships_created: int
-    files_updated: int
-    markdown_files_updated: int
-    errors: list[str]
 
 
 class ClaimConceptLinker:
@@ -115,7 +105,7 @@ class ClaimConceptLinker:
                 "strength_threshold": strength_threshold,
             },
         )
-        stats: LinkStats = {
+        stats: Dict[str, Any] = {
             "claims_fetched": 0,
             "claims_processed": 0,  # For test compatibility
             "concepts_available": 0,
@@ -126,6 +116,7 @@ class ClaimConceptLinker:
             "markdown_files_updated": 0,  # For test compatibility
             "errors": [],
         }
+
         try:
             # Step 1: Fetch unlinked claims
             claims = self.neo4j_manager.fetch_unlinked_claims(limit=max_claims)
@@ -253,11 +244,21 @@ class ClaimConceptLinker:
         claim_text = claim["text"]
         try:
             # Use vector store to find similar concepts
-            similar_concepts = self.vector_store.find_similar_candidates(
-                query_text=claim_text,
-                top_k=10,  # Get top 10 candidates
-                similarity_threshold=threshold,
-            )
+            from llama_index.core.vector_stores.types import VectorStoreQuery
+
+            query_obj = VectorStoreQuery(query_str=claim_text, similarity_top_k=10)
+            query_result = self.vector_store.query(query_obj)
+
+            similar_concepts = []
+            if query_result.nodes and query_result.similarities:
+                for node, similarity in zip(
+                    query_result.nodes, query_result.similarities, strict=False
+                ):
+                    if similarity >= threshold:
+                        metadata = node.metadata
+                        metadata["id"] = node.node_id
+                        similar_concepts.append((metadata, similarity))
+
             # Convert results to ConceptCandidate objects
             for concept_metadata, similarity_score in similar_concepts:
                 candidate = ConceptCandidate(
@@ -377,12 +378,21 @@ class ClaimConceptLinker:
             )
             return []
         try:
-            result = self.vector_store.find_similar_candidates(
-                query_text=query_text,
-                top_k=top_k,
-                similarity_threshold=similarity_threshold,
-            )
-            return list(result)
+            query_obj = VectorStoreQuery(query_str=query_text, similarity_top_k=top_k)
+            query_result = self.vector_store.query(query_obj)
+            results = []
+            if query_result.nodes and query_result.similarities:
+                for node, similarity in zip(
+                    query_result.nodes, query_result.similarities, strict=False
+                ):
+                    if (
+                        similarity_threshold is None
+                        or similarity >= similarity_threshold
+                    ):
+                        candidate_data = node.metadata.copy()
+                        candidate_data["text"] = node.get_content()
+                        results.append((candidate_data, similarity))
+            return results
         except Exception as e:
             logger.error(
                 f"Error finding candidate concepts: {e}",

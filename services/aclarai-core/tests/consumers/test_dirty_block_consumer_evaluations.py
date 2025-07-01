@@ -156,7 +156,6 @@ class TestDirtyBlockConsumerEvaluationMethods:
 
     @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
-    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_new_score(
         self,
@@ -181,7 +180,6 @@ class TestDirtyBlockConsumerEvaluationMethods:
 
     @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
-    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_update_existing_score(
         self,
@@ -206,7 +204,6 @@ class TestDirtyBlockConsumerEvaluationMethods:
 
     @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
     @patch("pathlib.Path.read_text")
-    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_markdown_block_id_not_found(
@@ -236,7 +233,6 @@ class TestDirtyBlockConsumerEvaluationMethods:
         )
 
     @patch("aclarai_core.dirty_block_consumer.write_file_atomically")
-    @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_markdown_file_not_found(
