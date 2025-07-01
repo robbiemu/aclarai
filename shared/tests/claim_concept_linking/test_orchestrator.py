@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from aclarai_shared.claim_concept_linking.models import (
+    AgentClassificationResult,
     ClaimConceptLinkResult,
     ClaimConceptPair,
     ConceptCandidate,
@@ -15,57 +16,8 @@ from aclarai_shared.claim_concept_linking.models import (
 )
 from aclarai_shared.claim_concept_linking.orchestrator import ClaimConceptLinker
 
+from shared.tests.mocks import MockNeo4jGraphManager
 from shared.tests.utils import get_seeded_mock_services
-
-
-class MockClaimConceptNeo4jManager:
-    """Mock ClaimConceptNeo4jManager for testing."""
-
-    def __init__(self, base_manager=None):
-        self.base_manager = base_manager
-
-    def fetch_unlinked_claims(self, limit=100):
-        """Return mock claims data."""
-        claims_data = [
-            {
-                "id": "claim_gpu_error_1",
-                "text": "CUDA runtime error occurred during training",
-                "entailed_score": 0.92,
-                "coverage_score": 0.88,
-                "decontextualization_score": 0.85,
-            },
-            {
-                "id": "claim_memory_issue_1",
-                "text": "Out of memory error in GPU processing",
-                "entailed_score": 0.89,
-                "coverage_score": 0.91,
-                "decontextualization_score": 0.83,
-            },
-        ]
-        return claims_data[:limit]
-
-    def fetch_all_concepts(self):
-        """Return mock concepts data."""
-        return [
-            {"id": "concept_gpu_error", "text": "GPU Error"},
-            {"id": "concept_memory_error", "text": "Memory Error"},
-            {"id": "concept_cuda_error", "text": "CUDA Error"},
-        ]
-
-    def get_claim_context(self, claim_id):
-        """Return mock context."""
-        return {
-            "source_block_text": f"Source text for {claim_id}",
-            "summary_text": f"Summary for {claim_id}",
-        }
-
-    def create_claim_concept_relationship(self, _link_result):
-        """Mock relationship creation - always succeeds."""
-        return True
-
-    def get_claims_source_files(self, claim_ids):
-        """Return mock file mappings."""
-        return {claim_id: f"/mock/vault/file_{claim_id}.md" for claim_id in claim_ids}
 
 
 class TestClaimConceptLinkerOrchestrator:
@@ -74,7 +26,7 @@ class TestClaimConceptLinkerOrchestrator:
     def test_init_with_mock_services(self):
         """Test ClaimConceptLinker initialization with mock services."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -108,14 +60,14 @@ class TestClaimConceptLinkerOrchestrator:
     def test_find_candidate_concepts_vector(self):
         """Test vector-based candidate concept finding."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
         )
         # Test finding candidates
         candidates = linker.find_candidate_concepts(
-            query_text="An error related to CUDA occurred",
+            query_text="CUDA Error",
             top_k=5,
             similarity_threshold=0.1,
         )
@@ -130,10 +82,40 @@ class TestClaimConceptLinkerOrchestrator:
         assert isinstance(similarity, float)
         assert 0.0 <= similarity <= 1.0
 
+    def test_find_candidate_concepts_semantic_similarity(self):
+        """Test vector-based candidate finding with a semantically similar query."""
+        neo4j_manager, vector_store = get_seeded_mock_services()
+        mock_claim_concept_manager = MockNeo4jGraphManager()
+        linker = ClaimConceptLinker(
+            neo4j_manager=mock_claim_concept_manager,
+            vector_store=vector_store,
+        )
+        # Use a query that is semantically similar but not an exact match.
+        # The enhanced mock embedding should handle this.
+        candidates = linker.find_candidate_concepts(
+            query_text="An error related to CUDA",  # Non-exact match
+            top_k=5,
+            similarity_threshold=0.8,  # Use a realistic threshold
+        )
+        assert isinstance(candidates, list)
+        # Should find "CUDA Error" from the golden dataset
+        assert len(candidates) > 0
+
+        # Verify that the top match is indeed "CUDA Error"
+        found_texts = [c[0].get("text") for c in candidates]
+        assert "cuda error" in found_texts
+
+        # Verify the structure of the top result
+        top_candidate, top_similarity = candidates[0]
+        assert isinstance(top_candidate, dict)
+        assert "id" in top_candidate
+        assert "text" in top_candidate
+        assert top_similarity > 0.8  # Should be high similarity
+
     def test_create_claim_concept_pair(self):
         """Test claim-concept pair creation."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -163,7 +145,7 @@ class TestClaimConceptLinkerOrchestrator:
     def test_create_link_result(self):
         """Test link result creation from classification."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -203,7 +185,7 @@ class TestClaimConceptLinkerOrchestrator:
     def test_find_candidate_concepts_api(self):
         """Test the public find_candidate_concepts API."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -227,11 +209,11 @@ class TestClaimConceptLinkerOrchestrator:
         neo4j_manager, vector_store = get_seeded_mock_services()
 
         # Create mock manager with no claims
-        class EmptyMockClaimConceptNeo4jManager(MockClaimConceptNeo4jManager):
+        class EmptyMockNeo4jManager(MockNeo4jGraphManager):
             def fetch_unlinked_claims(self, _limit=100):
                 return []  # No claims
 
-        mock_claim_concept_manager = EmptyMockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = EmptyMockNeo4jManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -247,14 +229,12 @@ class TestClaimConceptLinkerOrchestrator:
         """Test linking process with no concepts available."""
         neo4j_manager, vector_store = get_seeded_mock_services()
 
-        # Create mock manager with no concepts
-        class NoConceptsMockClaimConceptNeo4jManager(MockClaimConceptNeo4jManager):
+        # Create mock manager and override the method to return no concepts
+        class NoConceptsMockNeo4jManager(MockNeo4jGraphManager):
             def fetch_all_concepts(self):
                 return []  # No concepts
 
-        mock_claim_concept_manager = NoConceptsMockClaimConceptNeo4jManager(
-            neo4j_manager
-        )
+        mock_claim_concept_manager = NoConceptsMockNeo4jManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -266,17 +246,30 @@ class TestClaimConceptLinkerOrchestrator:
         assert results["links_created"] == 0
 
     @pytest.mark.integration
-    def test_link_claims_to_concepts_full_process(self):
+    def test_link_claims_to_concepts_full_process(self, mock_agent_class):
         """Integration test for the full claim-concept linking process."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
+
+        # Mock the agent and its response
+        mock_agent_instance = mock_agent_class.return_value
+        mock_classification_result = AgentClassificationResult(
+            relation="SUPPORTS_CONCEPT", strength=0.8
+        )
+        mock_agent_instance.classify_relationship.return_value = (
+            mock_classification_result
+        )
+
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
+            agent=mock_agent_instance,  # Inject the mocked agent
         )
+
         results = linker.link_claims_to_concepts(
             max_claims=2, similarity_threshold=0.1, strength_threshold=0.5
         )
+
         # Verify results structure
         assert isinstance(results, dict)
         expected_keys = [
@@ -287,11 +280,14 @@ class TestClaimConceptLinkerOrchestrator:
             "links_created",
             "relationships_created",
             "files_updated",
-            "markdown_files_updated",
             "errors",
         ]
         for key in expected_keys:
             assert key in results
+
+        # Verify the agent was called
+        assert mock_agent_instance.classify_relationship.call_count > 0
+
         # Should have processed some claims and concepts
         assert results["claims_fetched"] > 0
         assert results["concepts_available"] > 0
@@ -309,13 +305,40 @@ class TestClaimConceptLinkerOrchestrator:
             for error in results["errors"]:
                 assert "Fatal error" not in error
 
-    def test_link_claims_to_concepts_with_high_thresholds(self):
-        """Test linking process with high similarity/strength thresholds."""
+    def test_link_claims_to_concepts_no_agent(self):
+        """Test that the linking process is skipped if no agent is available."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
+
+        # Initialize linker without an agent
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
+            agent=None,
+        )
+
+        results = linker.link_claims_to_concepts()
+        assert results["links_created"] == 0
+
+    @patch("aclarai_shared.claim_concept_linking.orchestrator.ClaimConceptLinkerAgent")
+    def test_link_claims_to_concepts_with_high_thresholds(self, mock_agent_class):
+        """Test linking process with high similarity/strength thresholds."""
+        neo4j_manager, vector_store = get_seeded_mock_services()
+
+        # Mock the agent to return a low-strength classification
+        mock_agent_instance = mock_agent_class.return_value
+        mock_classification_result = AgentClassificationResult(
+            relation="SUPPORTS_CONCEPT",
+            strength=0.4,  # Below the 0.95 threshold
+        )
+        mock_agent_instance.classify_relationship.return_value = (
+            mock_classification_result
+        )
+
+        linker = ClaimConceptLinker(
+            neo4j_manager=neo4j_manager,  # Use the seeded manager
+            vector_store=vector_store,
+            agent=mock_agent_instance,
         )
         # Use very high thresholds that should prevent most matches
         results = linker.link_claims_to_concepts(
@@ -330,7 +353,7 @@ class TestClaimConceptLinkerOrchestrator:
     def test_error_handling_in_linking_process(self):
         """Test error handling during the linking process."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         # Create a linker that will have an error in vector search
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
@@ -351,7 +374,7 @@ class TestClaimConceptLinkerOrchestrator:
     def test_find_candidate_concepts_no_vector_store(self):
         """Test candidate finding when vector store is not available."""
         neo4j_manager, _ = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=None,  # No vector store
@@ -368,7 +391,7 @@ class TestClaimConceptLinkerEdgeCases:
     def test_create_link_result_invalid_relationship(self):
         """Test error handling for invalid relationship types."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,
@@ -396,7 +419,7 @@ class TestClaimConceptLinkerEdgeCases:
     def test_null_evaluation_scores_handling(self):
         """Test proper handling of null evaluation scores."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockClaimConceptNeo4jManager(neo4j_manager)
+        mock_claim_concept_manager = MockNeo4jGraphManager()
         linker = ClaimConceptLinker(
             neo4j_manager=mock_claim_concept_manager,
             vector_store=vector_store,

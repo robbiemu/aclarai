@@ -5,7 +5,9 @@ the full linking process, from fetching claims to updating Markdown files.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
+
+from llama_index.core.vector_stores.types import VectorStoreQuery
 
 from ..config import aclaraiConfig, load_config
 from .agent import ClaimConceptLinkerAgent
@@ -18,18 +20,6 @@ from .models import (
 from .neo4j_operations import ClaimConceptNeo4jManager
 
 logger = logging.getLogger(__name__)
-
-
-class LinkStats(TypedDict):
-    claims_fetched: int
-    claims_processed: int
-    concepts_available: int
-    pairs_analyzed: int
-    links_created: int
-    relationships_created: int
-    files_updated: int
-    markdown_files_updated: int
-    errors: list[str]
 
 
 class ClaimConceptLinker:
@@ -49,6 +39,7 @@ class ClaimConceptLinker:
         neo4j_manager=None,
         vector_store=None,
         agent=None,
+        markdown_updater=None,
     ):
         """
         Initialize the claim-concept linker.
@@ -57,6 +48,7 @@ class ClaimConceptLinker:
             neo4j_manager: Optional Neo4j manager for dependency injection
             vector_store: Optional vector store for dependency injection
             agent: Optional agent for dependency injection
+            markdown_updater: Optional updater for dependency injection
         """
         self.config = config
         if not config:
@@ -78,7 +70,9 @@ class ClaimConceptLinker:
             except Exception:
                 # For testing without full config, agent can be None
                 self.agent = None
-        self.markdown_updater = Tier2MarkdownUpdater(self.config, self.neo4j_manager)
+        self.markdown_updater = markdown_updater or Tier2MarkdownUpdater(
+            self.config, self.neo4j_manager
+        )
         logger.info(
             "Initialized ClaimConceptLinker",
             extra={
@@ -87,6 +81,7 @@ class ClaimConceptLinker:
                 "has_vector_store": self.vector_store is not None,
                 "has_custom_neo4j": neo4j_manager is not None,
                 "has_custom_agent": agent is not None,
+                "has_custom_updater": markdown_updater is not None,
             },
         )
 
@@ -115,17 +110,28 @@ class ClaimConceptLinker:
                 "strength_threshold": strength_threshold,
             },
         )
-        stats: LinkStats = {
+
+        stats: Dict[str, Any] = {
             "claims_fetched": 0,
-            "claims_processed": 0,  # For test compatibility
+            "claims_processed": 0,
             "concepts_available": 0,
             "pairs_analyzed": 0,
             "links_created": 0,
-            "relationships_created": 0,  # For test compatibility
+            "relationships_created": 0,
             "files_updated": 0,
-            "markdown_files_updated": 0,  # For test compatibility
             "errors": [],
         }
+
+        if self.agent is None:
+            logger.warning(
+                "ClaimConceptLinker has no agent; skipping relationship classification.",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
+                },
+            )
+            return stats
+
         try:
             # Step 1: Fetch unlinked claims
             claims = self.neo4j_manager.fetch_unlinked_claims(limit=max_claims)
@@ -138,7 +144,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return dict(stats)
+                return stats
             # Step 2: Fetch available concepts
             concepts = self.neo4j_manager.fetch_all_concepts()
             stats["concepts_available"] = len(concepts)
@@ -150,7 +156,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return dict(stats)
+                return stats
             # Step 3: Process claim-concept pairs
             successful_links = []
             for claim in claims:
@@ -163,25 +169,7 @@ class ClaimConceptLinker:
                 for candidate in candidate_concepts:
                     pair = self._create_claim_concept_pair(claim, candidate)
                     stats["pairs_analyzed"] += 1
-                    # Get LLM classification
-                    if self.agent is None:
-                        # For testing without agent, create a mock classification
-                        from .models import RelationshipType
-
-                        class MockClassification:
-                            def __init__(self):
-                                self.relation = "SUPPORTS_CONCEPT"
-                                self.strength = 0.8
-                                self.reasoning = "Mock classification for testing"
-
-                            def to_relationship_type(
-                                self,
-                            ) -> Optional[RelationshipType]:
-                                return RelationshipType.SUPPORTS_CONCEPT
-
-                        classification = MockClassification()
-                    else:
-                        classification = self.agent.classify_relationship(pair)
+                    classification = self.agent.classify_relationship(pair)
                     if classification and classification.strength >= strength_threshold:
                         # Convert to link result
                         link_result = self._create_link_result(pair, classification)
@@ -234,7 +222,7 @@ class ClaimConceptLinker:
                     "error": str(e),
                 },
             )
-        return dict(stats)
+        return stats
 
     def _find_candidate_concepts_vector(
         self, claim: Dict[str, Any], threshold: float
@@ -253,11 +241,21 @@ class ClaimConceptLinker:
         claim_text = claim["text"]
         try:
             # Use vector store to find similar concepts
-            similar_concepts = self.vector_store.find_similar_candidates(
-                query_text=claim_text,
-                top_k=10,  # Get top 10 candidates
-                similarity_threshold=threshold,
-            )
+            from llama_index.core.vector_stores.types import VectorStoreQuery
+
+            query_obj = VectorStoreQuery(query_str=claim_text, similarity_top_k=10)
+            query_result = self.vector_store.query(query_obj)
+
+            similar_concepts = []
+            if query_result.nodes and query_result.similarities:
+                for node, similarity in zip(
+                    query_result.nodes, query_result.similarities, strict=False
+                ):
+                    if similarity >= threshold:
+                        metadata = node.metadata
+                        metadata["id"] = node.node_id
+                        similar_concepts.append((metadata, similarity))
+
             # Convert results to ConceptCandidate objects
             for concept_metadata, similarity_score in similar_concepts:
                 candidate = ConceptCandidate(
@@ -377,12 +375,21 @@ class ClaimConceptLinker:
             )
             return []
         try:
-            result = self.vector_store.find_similar_candidates(
-                query_text=query_text,
-                top_k=top_k,
-                similarity_threshold=similarity_threshold,
-            )
-            return list(result)
+            query_obj = VectorStoreQuery(query_str=query_text, similarity_top_k=top_k)
+            query_result = self.vector_store.query(query_obj)
+            results = []
+            if query_result.nodes and query_result.similarities:
+                for node, similarity in zip(
+                    query_result.nodes, query_result.similarities, strict=False
+                ):
+                    if (
+                        similarity_threshold is None
+                        or similarity >= similarity_threshold
+                    ):
+                        candidate_data = node.metadata.copy()
+                        candidate_data["text"] = node.get_content()
+                        results.append((candidate_data, similarity))
+            return results
         except Exception as e:
             logger.error(
                 f"Error finding candidate concepts: {e}",

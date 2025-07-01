@@ -25,7 +25,7 @@ graph TD
     C --> |Block Not Found| D[Log Warning & Return False];
     C --> |Block Found| E[Modify Content in Memory];
     E --> F[1. Increment `ver=N` in `aclarai:id` comment];
-    F --> G[2. Add/Update Score Comment e.g., `<!-- aclarai:score=... -->`];
+    F --> G[2. Add/Update Score Comment e.g., `<!-- aclarai:decontextualization_score=... -->` or `<!-- aclarai:entailed_score=... -->`];
     G --> H{Write Atomically};
     H --> I[Write to `.tmp` file];
     I --> J[fsync() to disk];
@@ -38,28 +38,37 @@ graph TD
 
 Any service needing to update a Markdown file can use the `MarkdownUpdaterService`. Here is how the `DecontextualizationAgent` would use it to persist a score:
 
+*(Note: The following example illustrates usage of a dedicated `MarkdownUpdaterService`. While this service provides the ideal abstraction, similar update logic might also be directly implemented within calling services like `DirtyBlockConsumer` while adhering to the same principles of atomic writes, version incrementing, and metadata comment standards described here. The `EntailmentAgent`'s score, for example, is also persisted using this pattern.)*
+
 ```python
 from aclarai_core.markdown import MarkdownUpdaterService
 
 # Assume 'score' and other variables are defined
 # score = 0.88
-# claim_id = "blk_abc123"
-# file_path_of_claim = "/path/to/vault/tier1/conversation.md"
+# block_id_to_update = "blk_abc123" # The aclarai:id of the block whose metadata is updated
+# file_path_of_block = "/path/to/vault/tier1/conversation.md"
 
 # Instantiate the service
 updater = MarkdownUpdaterService()
 
 # Call the specific update method
 success = updater.add_or_update_decontextualization_score(
-    filepath_str=file_path_of_claim,
-    block_id=claim_id,
+    filepath_str=file_path_of_block, # Corrected variable name
+    block_id=block_id_to_update,
     score=score
 )
 
+# Similarly, for an entailment score:
+# success_entailment = updater.add_or_update_entailment_score(
+#     filepath_str=file_path_of_block,
+#     block_id=source_block_id, # The ID of the source block for the claim
+#     score=entailment_score
+# )
+
 if success:
-    print(f"Successfully updated block {claim_id} in {file_path_of_claim}.")
+    print(f"Successfully updated block {block_id_to_update} in {file_path_of_block}.")
 else:
-    print(f"Failed to update block {claim_id}.")
+    print(f"Failed to update block {block_id_to_update}.")
 
 ```
 

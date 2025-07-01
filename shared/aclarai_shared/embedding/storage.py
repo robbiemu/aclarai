@@ -18,7 +18,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from llama_index.core import Settings, VectorStoreIndex
-from llama_index.core.schema import Document
+from llama_index.core.schema import BaseNode, Document
+from llama_index.core.vector_stores.types import (
+    VectorStore,
+    VectorStoreQuery,
+    VectorStoreQueryResult,
+)
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import (
     create_engine,
@@ -42,7 +47,7 @@ class VectorStoreMetrics:
     query_time_ms: Optional[float] = None
 
 
-class aclaraiVectorStore:
+class aclaraiVectorStore(VectorStore):
     """
     PostgreSQL vector store for aclarai utterance embeddings using PGVectorStore.
     This class provides a high-level interface for storing and querying utterance
@@ -73,6 +78,10 @@ class aclaraiVectorStore:
         )
         # Initialize PGVectorStore
         self.vector_store = self._initialize_pgvector_store()
+
+        self.stores_text = self.vector_store.stores_text
+
+        self._client = self.vector_store.client
         # Initialize embedding generator with configured model
         self.embedding_generator = EmbeddingGenerator(config=config)
         # Set LlamaIndex global embedding model IMMEDIATELY to prevent default OpenAI dependency
@@ -88,6 +97,27 @@ class aclaraiVectorStore:
             f"Initialized aclaraiVectorStore with collection: {config.embedding.collection_name}, "
             f"dimension: {config.embedding.embed_dim}"
         )
+
+    @property
+    def client(self) -> Any:
+        """Get client."""
+        return self._client
+
+    def add(
+        self,
+        nodes: List[BaseNode],
+        **kwargs: Any,
+    ) -> List[str]:
+        """Add nodes to index."""
+        return self.vector_store.add(nodes, **kwargs)
+
+    def delete(self, ref_doc_id: str, **kwargs: Any) -> None:
+        """Delete nodes using ref_doc_id."""
+        self.vector_store.delete(ref_doc_id, **kwargs)
+
+    def query(self, query: VectorStoreQuery, **kwargs: Any) -> VectorStoreQueryResult:
+        """Query vector store."""
+        return self.vector_store.query(query, **kwargs)
 
     def _validate_table_name(self, table_name: str) -> str:
         """

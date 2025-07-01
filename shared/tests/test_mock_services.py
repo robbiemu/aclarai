@@ -5,6 +5,7 @@ to ensure they provide a stable environment for claim-concept linking developmen
 """
 
 from aclarai_shared.claim_concept_linking.orchestrator import ClaimConceptLinker
+from aclarai_shared.embedding.storage import VectorStoreQuery
 from aclarai_shared.graph.models import ClaimInput, ConceptInput
 from aclarai_shared.noun_phrase_extraction.models import NounPhraseCandidate
 
@@ -80,12 +81,16 @@ class TestMockServices:
         assert len(store.documents) == 2
         assert len(store.embeddings) == 2
         # Test similarity search
-        results = store.find_similar_candidates("machine learning", top_k=5)
-        assert len(results) > 0
+        query = VectorStoreQuery(
+            query_str="machine learning",
+            similarity_top_k=5,
+        )
+        results = store.query(query)
+        assert len(results.nodes) > 0
         # Should find the exact match with high similarity
-        best_match = results[0]
-        assert best_match[0]["text"] == "machine learning"
-        assert best_match[1] > 0.8  # High similarity for exact match
+        best_match_node = results.nodes[0]
+        assert best_match_node.get_content() == "machine learning"
+        assert results.similarities[0] > 0.8  # High similarity for exact match
 
     def test_seeded_mock_services(self):
         """Test the seeded mock services utility."""
@@ -98,8 +103,12 @@ class TestMockServices:
         assert len(vector_store.documents) > 0
         assert len(vector_store.embeddings) == len(vector_store.documents)
         # Test that we can find similar concepts
-        results = vector_store.find_similar_candidates("machine learning", top_k=3)
-        assert len(results) > 0
+        query = VectorStoreQuery(
+            query_str="machine learning",
+            similarity_top_k=3,
+        )
+        results = vector_store.query(query)
+        assert len(results.nodes) > 0
         # Test that concepts exist in Neo4j
         counts = neo4j_manager.count_nodes()
         assert counts["Concept"] > 0
@@ -122,7 +131,7 @@ class TestMockServices:
         assert isinstance(results, dict)
         assert "claims_processed" in results
         assert "relationships_created" in results
-        assert "markdown_files_updated" in results
+        assert "files_updated" in results
 
     def test_claim_concept_linker_find_candidate_concepts(self):
         """Test ClaimConceptLinker can find candidate concepts using mock vector store."""

@@ -178,6 +178,41 @@ class MockNeo4jGraphManager:
         )
         return created_concepts
 
+    def fetch_unlinked_claims(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Return mock claims data."""
+        claims_data = [
+            {
+                "id": "claim_gpu_error_1",
+                "text": "CUDA runtime error occurred during training",
+                "entailed_score": 0.92,
+                "coverage_score": 0.88,
+                "decontextualization_score": 0.85,
+            },
+            {
+                "id": "claim_memory_issue_1",
+                "text": "Out of memory error in GPU processing",
+                "entailed_score": 0.89,
+                "coverage_score": 0.91,
+                "decontextualization_score": 0.83,
+            },
+        ]
+        return claims_data[:limit]
+
+    def fetch_all_concepts(self) -> List[Dict[str, Any]]:
+        """Return mock concepts data."""
+        return list(self.concepts.values())
+
+    def get_claim_context(self, claim_id: str) -> Dict[str, Any]:
+        """Return mock context."""
+        return {
+            "source_block_text": f"Source text for {claim_id}",
+            "summary_text": f"Summary for {claim_id}",
+        }
+
+    def create_claim_concept_relationship(self, _link_result: Any) -> bool:
+        """Mock relationship creation - always succeeds."""
+        return True
+
     def get_claim_by_id(self, claim_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve a claim by ID.

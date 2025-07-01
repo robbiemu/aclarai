@@ -6,10 +6,15 @@ that simulates vector similarity search using simple in-memory operations.
 
 import logging
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.noun_phrase_extraction.models import NounPhraseCandidate
+from llama_index.core.schema import TextNode
+from llama_index.core.vector_stores.types import (
+    VectorStoreQuery,
+    VectorStoreQueryResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,9 @@ class MockVectorStore:
         """
         stored_count = 0
         for candidate in candidates:
+            candidate_id = getattr(
+                candidate, "candidate_id", f"cand_{hash(candidate.text)}"
+            )
             # Generate mock embedding if not provided
             if candidate.embedding is None:
                 embedding = self._generate_mock_embedding(candidate.normalized_text)
@@ -59,11 +67,10 @@ class MockVectorStore:
                 embedding = candidate.embedding
             # Create document entry
             doc = {
-                "id": getattr(
-                    candidate, "candidate_id", f"cand_{hash(candidate.text)}"
-                ),
+                "id": candidate_id,
                 "text": candidate.normalized_text,
                 "metadata": {
+                    "id": candidate_id,
                     "source_node_id": candidate.source_node_id,
                     "source_node_type": candidate.source_node_type,
                     "aclarai_id": candidate.aclarai_id,
@@ -84,48 +91,37 @@ class MockVectorStore:
         )
         return stored_count
 
-    def find_similar_candidates(
-        self,
-        query_text: str,
-        top_k: int = 10,
-        similarity_threshold: Optional[float] = None,
-    ) -> List[Tuple[Dict[str, Any], float]]:
-        """
-        Find similar candidates using cosine similarity.
-        Args:
-            query_text: Text to search for similar candidates
-            top_k: Maximum number of results to return
-            similarity_threshold: Minimum similarity score to include
-        Returns:
-            List of tuples containing (document, similarity_score)
-        """
+    def query(self, query: VectorStoreQuery, **_kwargs: Any) -> VectorStoreQueryResult:
+        """Mock query method to conform to the VectorStore interface."""
         if not self.documents:
-            return []
-        # Generate embedding for query
-        query_embedding = self._generate_mock_embedding(query_text)
-        # Calculate similarities
+            return VectorStoreQueryResult(nodes=[], similarities=[])
+
+        query_embedding = self._generate_mock_embedding(query.query_str)
+
         similarities = []
         for i, doc_embedding in enumerate(self.embeddings):
             similarity = self._cosine_similarity(query_embedding, doc_embedding)
-            # Apply threshold filter if specified
-            if similarity_threshold is None or similarity >= similarity_threshold:
-                similarities.append((self.documents[i], similarity))
-        # Sort by similarity (descending) and limit to top_k
+            similarities.append((i, similarity))
+
         similarities.sort(key=lambda x: x[1], reverse=True)
-        results = similarities[:top_k]
-        logger.debug(
-            f"mock_vector_store.MockVectorStore.find_similar_candidates: "
-            f"Found {len(results)} similar candidates for query",
-            extra={
-                "service": "aclarai-test",
-                "filename.function_name": "mock_vector_store.MockVectorStore.find_similar_candidates",
-                "query_text": query_text,
-                "results_count": len(results),
-                "top_k": top_k,
-                "similarity_threshold": similarity_threshold,
-            },
-        )
-        return results
+
+        top_k = query.similarity_top_k
+        top_results = similarities[:top_k]
+
+        nodes: List[TextNode] = []
+        scores: List[float] = []
+        for doc_index, score in top_results:
+            doc = self.documents[doc_index]
+            # The real store returns nodes with metadata. We simulate that.
+            node = TextNode(
+                text=doc.get("text", ""),
+                id_=doc.get("id", ""),
+                metadata=doc.get("metadata", {}),
+            )
+            nodes.append(node)
+            scores.append(score)
+
+        return VectorStoreQueryResult(nodes=nodes, similarities=scores)
 
     def update_candidate_status(
         self,
@@ -217,15 +213,35 @@ class MockVectorStore:
         Returns:
             List of floats representing the embedding
         """
-        # Simple hash-based embedding generation
-        # This ensures similar texts get similar embeddings
-        embedding = []
-        text_lower = text.lower()
-        for i in range(self.embed_dim):
-            # Use character positions and a simple hash function
-            seed = hash(text_lower + str(i)) % 10000
-            value = math.sin(seed * 0.001) * 0.5  # Normalize to reasonable range
-            embedding.append(value)
+        # A robust mock embedding based on word sets.
+        # This ignores word order and common stop words, providing a better
+        # simulation of semantic similarity for testing.
+        stop_words = {
+            "a",
+            "an",
+            "the",
+            "is",
+            "in",
+            "on",
+            "of",
+            "for",
+            "with",
+            "to",
+            "related",
+        }
+        words = set(text.lower().split()) - stop_words
+
+        # Create a "vocabulary" of all possible words to ensure consistent vector dimensions
+        # For a real test suite, this vocab could be pre-built from all test data.
+        # Here, we'll use a simple hashing approach for each word.
+        embedding = [0.0] * self.embed_dim
+        if not words:
+            return embedding
+        for word in words:
+            # Use a hash to get a consistent index for each word
+            index = hash(word) % self.embed_dim
+            embedding[index] = 1.0  # Set the feature for this word to 1.0
+
         # Normalize the embedding vector
         norm = math.sqrt(sum(x * x for x in embedding))
         if norm > 0:

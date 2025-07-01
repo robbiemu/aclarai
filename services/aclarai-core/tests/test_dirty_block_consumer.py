@@ -1,8 +1,12 @@
+(
+    """
 """
+    """
 Tests for the dirty block consumer functionality.
 These tests validate the reactive sync loop implementation including
 version checking, conflict detection, and proper graph updates.
 """
+)
 
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -23,6 +27,10 @@ class TestDirtyBlockConsumer:
         config.rabbitmq_user = None
         config.rabbitmq_password = None
         config.vault_path = "/test/vault"
+        # Provide a dictionary for the ToolFactory via the mocked .dict() method
+        config.dict = Mock(
+            return_value={"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
+        )
         return config
 
     @pytest.fixture
@@ -31,8 +39,36 @@ class TestDirtyBlockConsumer:
         with (
             patch("aclarai_core.dirty_block_consumer.Neo4jGraphManager"),
             patch("aclarai_core.dirty_block_consumer.ConceptProcessor"),
+            patch("aclarai_core.agents.entailment_agent.CodeActAgent"),
+            patch("aclarai_core.dirty_block_consumer.BlockParser"),
+            # Patch the LLM initialization to avoid real model loading
+            patch(
+                "aclarai_core.dirty_block_consumer.DirtyBlockConsumer._initialize_llm",
+                return_value=Mock(),
+            ),
+            patch(
+                "aclarai_shared.tools.vector_store_manager.aclaraiVectorStoreManager"
+            ),
         ):
-            return DirtyBlockConsumer(mock_config)
+            consumer_instance = DirtyBlockConsumer(mock_config)
+            consumer_instance.entailment_agent = Mock()
+            consumer_instance.entailment_agent.evaluate_entailment.return_value = (
+                None,
+                "success",
+            )
+            consumer_instance.block_parser = Mock()
+            consumer_instance.block_parser.extract_aclarai_blocks.return_value = []
+            consumer_instance.block_parser.calculate_content_hash.side_effect = (
+                lambda text: f"hash_for_{' '.join(text.split())}"
+            )
+            consumer_instance.block_parser.find_block_by_id.return_value = {
+                "aclarai_id": "clm_target",
+                "version": 2,
+                "semantic_text": "This is the target claim.",
+                "content_hash": "hash_for_This is the target claim.",
+            }
+
+            return consumer_instance
 
     @pytest.fixture
     def sample_message(self):
@@ -62,6 +98,24 @@ Another claim here. <!-- aclarai:id=clm_def456 ver=1 -->
 Some content for the whole file.
 <!-- aclarai:id=file_summary ver=3 -->
 """
+        consumer.block_parser.extract_aclarai_blocks.return_value = [
+            {
+                "aclarai_id": "clm_abc123",
+                "version": 2,
+                "semantic_text": "This is a claim.",
+            },
+            {
+                "aclarai_id": "clm_def456",
+                "version": 1,
+                "semantic_text": "Another claim here.",
+            },
+            {
+                "aclarai_id": "file_summary",
+                "version": 3,
+                "semantic_text": "File-level document",
+            },
+        ]
+
         blocks = consumer.block_parser.extract_aclarai_blocks(content)
         assert len(blocks) == 3
         # Check first inline block
@@ -189,10 +243,12 @@ Another claim. <!-- aclarai:id=clm_other ver=1 -->
         # Should call update since vault is newer
         consumer._update_block_in_graph.assert_called_once()
 
-    @patch("aclarai_core.dirty_block_consumer.datetime")
-    def test_update_block_increments_version(self, mock_datetime, consumer):
+    @patch("datetime.datetime")
+    def test_update_block_increments_version(self, mock_datetime_class, consumer):
         """Test that updating a block increments the graph version."""
-        mock_datetime.utcnow.return_value.isoformat.return_value = "2024-01-01T00:00:00"
+        mock_datetime_class.now.return_value.isoformat.return_value = (
+            "2024-01-01T00:00:00"
+        )
         block = {
             "aclarai_id": "clm_increment",
             "semantic_text": "Updated text",
@@ -259,3 +315,6 @@ Another claim. <!-- aclarai:id=clm_other ver=1 -->
         }
         result = consumer._process_dirty_block(message)
         assert result is False
+
+
+""
