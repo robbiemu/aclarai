@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from llama_index.core.vector_stores.types import VectorStoreQuery
 
 from ..config import aclaraiConfig, load_config
+from ..evaluation_thresholds import should_allow_concept_linking
 from .agent import ClaimConceptLinkerAgent
 from .markdown_updater import Tier2MarkdownUpdater
 from .models import (
@@ -161,6 +162,27 @@ class ClaimConceptLinker:
             successful_links = []
             for claim in claims:
                 stats["claims_processed"] += 1  # Track claims processed
+                
+                # Check if claim meets quality threshold for concept linking
+                # Extract evaluation scores from claim (may be None)
+                entailed_score = claim.get("entailed_score")
+                coverage_score = claim.get("coverage_score") 
+                decontextualization_score = claim.get("decontextualization_score")
+                
+                # Log threshold check details
+                logger.debug(
+                    f"Checking quality threshold for claim {claim.get('id', 'unknown')}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
+                        "claim_id": claim.get('id'),
+                        "entailed_score": entailed_score,
+                        "coverage_score": coverage_score,
+                        "decontextualization_score": decontextualization_score,
+                        "quality_threshold": self.config.threshold.claim_quality,
+                    },
+                )
+                
                 # Find candidate concepts using vector search
                 candidate_concepts = self._find_candidate_concepts_vector(
                     claim, similarity_threshold
@@ -171,6 +193,31 @@ class ClaimConceptLinker:
                     stats["pairs_analyzed"] += 1
                     classification = self.agent.classify_relationship(pair)
                     if classification and classification.strength >= strength_threshold:
+                        
+                        # Apply evaluation threshold logic before creating relationship
+                        relationship_type = classification.relationship.value
+                        can_link = should_allow_concept_linking(
+                            entailed_score,
+                            coverage_score,
+                            decontextualization_score,
+                            self.config.threshold.claim_quality,
+                            relationship_type
+                        )
+                        
+                        if not can_link:
+                            logger.debug(
+                                f"Skipping link creation: claim does not meet quality threshold",
+                                extra={
+                                    "service": "aclarai",
+                                    "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
+                                    "claim_id": claim.get('id'),
+                                    "concept_id": candidate.concept_id,
+                                    "relationship_type": relationship_type,
+                                    "quality_threshold": self.config.threshold.claim_quality,
+                                },
+                            )
+                            continue
+                            
                         # Convert to link result
                         link_result = self._create_link_result(pair, classification)
                         # Create Neo4j relationship
@@ -181,6 +228,17 @@ class ClaimConceptLinker:
                             stats["links_created"] += 1
                             stats["relationships_created"] += (
                                 1  # For test compatibility
+                            )
+                            logger.debug(
+                                f"Created concept link: {claim.get('id')} -> {candidate.concept_id} ({relationship_type})",
+                                extra={
+                                    "service": "aclarai",
+                                    "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
+                                    "claim_id": claim.get('id'),
+                                    "concept_id": candidate.concept_id,
+                                    "relationship_type": relationship_type,
+                                    "strength": classification.strength,
+                                },
                             )
                         else:
                             stats["errors"].append(

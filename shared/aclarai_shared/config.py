@@ -107,6 +107,8 @@ class ThresholdConfig:
     claim_link_strength: float = 0.60
     # Cosine similarity for grouping utterances for Tier 2 summaries
     summary_grouping_similarity: float = 0.80
+    # Quality threshold for claim promotion and linking (geometric mean of evaluation scores)
+    claim_quality: float = 0.70
 
 
 @dataclass
@@ -372,6 +374,7 @@ class aclaraiConfig:
             summary_grouping_similarity=threshold_config.get(
                 "summary_grouping_similarity", 0.80
             ),
+            claim_quality=threshold_config.get("claim_quality", 0.70),
         )
         # Load paths configuration from YAML
         paths_config = yaml_config.get("paths", {})
