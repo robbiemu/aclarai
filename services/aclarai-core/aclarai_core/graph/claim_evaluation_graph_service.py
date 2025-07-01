@@ -18,6 +18,13 @@ class ClaimEvaluationGraphService:
     Manages graph database updates for claim evaluation scores.
     """
 
+    # Valid score property names to prevent Cypher injection
+    VALID_SCORE_NAMES = {
+        "decontextualization_score",
+        "entailed_score",
+        "coverage_score",
+    }
+
     def __init__(self, neo4j_driver: Driver, config: aclaraiConfig):
         """
         Initializes the ClaimEvaluationGraphService.
@@ -157,5 +164,82 @@ class ClaimEvaluationGraphService:
                 f"General error during batch update of decontextualization_scores in Neo4j: {e}",
                 exc_info=True,
                 extra=log_details_base,
+            )
+            return False
+
+    def update_relationship_score(
+        self,
+        claim_id: str,
+        block_id: str,
+        score_name: str,
+        score_value: Optional[float],
+    ) -> bool:
+        """
+        Updates any score on the [:ORIGINATES_FROM] relationship between a claim and block.
+
+        This is a generic method that can update any score type (entailed_score,
+        decontextualization_score, coverage_score, etc.) on the relationship.
+
+        Args:
+            claim_id: The unique ID of the claim.
+            block_id: The unique ID of the block from which the claim originates.
+            score_name: The name of the score property to update (e.g., "entailed_score").
+            score_value: The score value (float or None for null).
+
+        Returns:
+            True if the update was successful, False otherwise.
+
+        Raises:
+            ValueError: If score_name is not in the list of valid score names.
+        """
+        # Validate score_name to prevent Cypher injection
+        if score_name not in self.VALID_SCORE_NAMES:
+            raise ValueError(
+                f"Invalid score_name '{score_name}'. Must be one of: {self.VALID_SCORE_NAMES}"
+            )
+
+        # Build query with validated score_name
+        query = f"""
+        MATCH (c:Claim {{id: $claim_id}})-[r:ORIGINATES_FROM]->(b:Block {{id: $block_id}})
+        SET r.{score_name} = $score_value
+        RETURN count(r) AS updated_count
+        """
+        parameters = {
+            "claim_id": claim_id,
+            "block_id": block_id,
+            "score_value": score_value,  # Neo4j driver handles None as null
+        }
+        log_details = {
+            "service": "aclarai-core",
+            "filename_function_name": "claim_evaluation_graph_service.ClaimEvaluationGraphService.update_relationship_score",
+            "aclarai_id_claim": claim_id,
+            "aclarai_id_block": block_id,
+            "score_name": score_name,
+            "score_value": score_value,
+        }
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, parameters)
+                record = result.single()
+                updated_count = record["updated_count"] if record else 0
+
+                if updated_count > 0:
+                    logger.info(
+                        f"Successfully updated {score_name} for claim {claim_id} on relationship to block {block_id}.",
+                        extra=log_details,
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Failed to update {score_name}: No relationship found for claim {claim_id} and block {block_id}.",
+                        extra=log_details,
+                    )
+                    return False
+        except Exception as e:
+            logger.error(
+                f"Error updating {score_name} for claim {claim_id} in Neo4j: {e}",
+                exc_info=True,
+                extra=log_details,
             )
             return False

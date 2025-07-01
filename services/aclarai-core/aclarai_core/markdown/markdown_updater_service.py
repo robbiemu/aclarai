@@ -234,8 +234,90 @@ class MarkdownUpdaterService:
                 f"Atomic write failed for {filepath_str} while updating block {block_id}.",
                 extra=log_details,
             )
-            # Attempt to restore original content if possible? This is complex.
             # For now, the error is logged by _atomic_write.
+            return False
+
+    def add_or_update_score(
+        self,
+        filepath_str: str,
+        block_id: str,
+        score_name: str,
+        score: Optional[float],
+    ) -> bool:
+        """
+        Generic method to add or update any score for a block in a Markdown file.
+
+        This method can handle any score type (decontextualization_score, entailed_score,
+        coverage_score, etc.) by delegating to the internal _find_block_and_update_score method.
+
+        Args:
+            filepath_str: Path to the Markdown file to update.
+            block_id: The aclarai:id of the block to update.
+            score_name: The name of the score (e.g., "entailed_score", "decontextualization_score").
+            score: The score value to set (float or None for null).
+
+        Returns:
+            True if the update was successful, False otherwise.
+        """
+        filepath = Path(filepath_str)
+        log_details = {
+            "service": "aclarai-core",
+            "filename_function_name": "markdown_updater_service.MarkdownUpdaterService.add_or_update_score",
+            "block_id": block_id,
+            "score_name": score_name,
+            "score_value": score,
+            "filepath": filepath_str,
+        }
+        logger.info(
+            f"Attempting to update {score_name} for block {block_id} in {filepath_str}.",
+            extra=log_details,
+        )
+
+        if not filepath.exists():
+            logger.error(f"Markdown file not found: {filepath_str}", extra=log_details)
+            return False
+
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                original_content = f.read()
+        except Exception as e:
+            logger.error(
+                f"Error reading Markdown file {filepath_str}: {e}",
+                exc_info=True,
+                extra=log_details,
+            )
+            return False
+
+        new_content, status_msg = self._find_block_and_update_score(
+            original_content, block_id, score_name, score
+        )
+
+        if new_content is None:
+            logger.warning(
+                f"Failed to update Markdown for block {block_id} in {filepath_str}: {status_msg}",
+                extra=log_details,
+            )
+            return False
+
+        if new_content == original_content:
+            logger.info(
+                f"No changes required for {score_name} for block {block_id} in {filepath_str}. Content is identical.",
+                extra=log_details,
+            )
+            # If no changes needed, this is still considered a success
+            pass
+
+        if self._atomic_write(filepath, new_content):
+            logger.info(
+                f"Successfully updated {score_name} for block {block_id} in {filepath_str}.",
+                extra=log_details,
+            )
+            return True
+        else:
+            logger.error(
+                f"Atomic write failed for {filepath_str} while updating block {block_id}.",
+                extra=log_details,
+            )
             return False
 
 

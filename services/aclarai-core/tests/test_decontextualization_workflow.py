@@ -712,3 +712,66 @@ def test_markdown_updater_preserves_other_blocks(markdown_service, temp_markdown
         in content_after_second_update
     )
     assert "<!-- aclarai:id=blk_another ver=5 -->" in content_after_second_update
+
+
+def test_graph_service_generic_update_relationship_score(
+    mock_neo4j_driver, mock_graph_service_config
+):
+    """Test the generic update_relationship_score method."""
+    driver, mock_session = mock_neo4j_driver
+    mock_result = MagicMock()
+    mock_result.single.return_value = {"updated_count": 1}
+    mock_session.run.return_value = mock_result
+
+    service = ClaimEvaluationGraphService(
+        neo4j_driver=driver, config=mock_graph_service_config
+    )
+
+    # Test valid score names
+    valid_scores = ["entailed_score", "decontextualization_score", "coverage_score"]
+    for score_name in valid_scores:
+        success = service.update_relationship_score(
+            "claim_test", "block_test", score_name, 0.85
+        )
+        assert success is True  # Mock always returns success
+
+    # Test invalid score name
+    with pytest.raises(ValueError, match="Invalid score_name"):
+        service.update_relationship_score(
+            "claim_test", "block_test", "invalid_score", 0.85
+        )
+
+
+def test_markdown_service_generic_add_or_update_score(
+    markdown_service, temp_markdown_file
+):
+    """Test the generic add_or_update_score method with different score types."""
+    # Test entailed_score
+    success = markdown_service.add_or_update_score(
+        str(temp_markdown_file), "blk_abc123", "entailed_score", 0.78
+    )
+    assert success is True
+
+    content = temp_markdown_file.read_text(encoding="utf-8")
+    assert "<!-- aclarai:entailed_score=0.78 -->" in content
+    assert "<!-- aclarai:id=blk_abc123 ver=2 -->" in content
+
+    # Test coverage_score on same block
+    success = markdown_service.add_or_update_score(
+        str(temp_markdown_file), "blk_abc123", "coverage_score", 0.92
+    )
+    assert success is True
+
+    content = temp_markdown_file.read_text(encoding="utf-8")
+    assert "<!-- aclarai:coverage_score=0.92 -->" in content
+    assert "<!-- aclarai:id=blk_abc123 ver=3 -->" in content
+
+    # Test null score
+    success = markdown_service.add_or_update_score(
+        str(temp_markdown_file), "blk_abc123", "decontextualization_score", None
+    )
+    assert success is True
+
+    content = temp_markdown_file.read_text(encoding="utf-8")
+    assert "<!-- aclarai:decontextualization_score=null -->" in content
+    assert "<!-- aclarai:id=blk_abc123 ver=4 -->" in content
