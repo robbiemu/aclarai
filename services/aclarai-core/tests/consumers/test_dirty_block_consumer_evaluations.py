@@ -1,6 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch, ANY
-import textwrap
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
@@ -15,8 +14,10 @@ def mock_consumer_config():
     config = MagicMock(spec=aclaraiConfig)
     config.vault_path = "/fake/vault"
     config.rabbitmq_host = "fake_host"
-    # Fix for AttributeError: .dict() call
-    config.dict = MagicMock(return_value={})
+    # Provide a dictionary for the ToolFactory via the mocked .dict() method
+    config.dict = MagicMock(
+        return_value={"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
+    )
 
     config.processing = MagicMock()
     config.processing.retries = {"max_attempts": 3}
@@ -158,7 +159,11 @@ class TestDirtyBlockConsumerEvaluationMethods:
     @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_new_score(
-        self, mock_exists, mock_mkdir, mock_read_text, mock_write_atomic, consumer_instance
+        self,
+        mock_exists,
+        mock_read_text,
+        mock_write_atomic,
+        consumer_instance,
     ):
         source_filepath, source_block_id, score = "/fake/vault/test.md", "b1", 0.75
         mock_exists.return_value = True
@@ -179,7 +184,11 @@ class TestDirtyBlockConsumerEvaluationMethods:
     @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.exists")
     def test_update_markdown_update_existing_score(
-        self, mock_exists, mock_mkdir, mock_read_text, mock_write_atomic, consumer_instance
+        self,
+        mock_exists,
+        mock_read_text,
+        mock_write_atomic,
+        consumer_instance,
     ):
         source_filepath, source_block_id, score = "/fake/vault/test.md", "b1", 0.88
         mock_exists.return_value = True
@@ -204,7 +213,6 @@ class TestDirtyBlockConsumerEvaluationMethods:
         self,
         mock_logger,
         mock_exists,
-        mock_mkdir,
         mock_read_text,
         mock_write_atomic,
         consumer_instance,
@@ -232,7 +240,7 @@ class TestDirtyBlockConsumerEvaluationMethods:
     @patch("pathlib.Path.exists")
     @patch("aclarai_core.dirty_block_consumer.logger")
     def test_update_markdown_file_not_found(
-        self, mock_logger, mock_exists, mock_mkdir, mock_write_atomic, consumer_instance
+        self, mock_logger, mock_exists, mock_write_atomic, consumer_instance
     ):
         source_filepath, source_block_id, score = (
             "/fake/vault/nonexistent.md",

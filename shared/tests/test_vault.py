@@ -1,5 +1,6 @@
 from aclarai_shared.vault import BlockParser
 
+
 def test_extract_aclarai_blocks():
     """Test extraction of aclarai blocks from markdown content."""
     content = """
@@ -28,6 +29,7 @@ Some content for the whole file.
     assert blocks[2]["version"] == 3
     # File-level block should contain most of the content before the comment
     assert "File-level document" in blocks[2]["semantic_text"]
+
 
 def test_calculate_content_hash():
     """Test content hash calculation."""

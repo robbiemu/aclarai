@@ -18,13 +18,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from llama_index.core import Settings, VectorStoreIndex
-from llama_index.core.schema import Document, BaseNode
-from llama_index.vector_stores.postgres import PGVectorStore
+from llama_index.core.schema import BaseNode, Document
 from llama_index.core.vector_stores.types import (
     VectorStore,
     VectorStoreQuery,
     VectorStoreQueryResult,
 )
+from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import (
     create_engine,
     text,

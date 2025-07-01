@@ -1,13 +1,14 @@
-from abc import ABC, abstractmethod
 import copy
+from abc import ABC, abstractmethod
 from typing import Dict, Optional
+
+from llama_index.core.vector_stores.types import VectorStore
 
 # Re-export VectorStore from its canonical location. This provides a single
 # point of import for components that need it and establishes the type
 # contract for the manager.
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.embedding.storage import aclaraiVectorStore
-from llama_index.core.vector_stores.types import VectorStore
 
 
 class VectorStoreManager(ABC):

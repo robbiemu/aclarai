@@ -6,13 +6,11 @@ from vault-watcher and updates graph nodes with proper version checking.
 
 import json
 import logging
-
-# Actual LLM provider imports would go into _initialize_llm or a factory
 import os
-import re  # For markdown update
+import re
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 from unittest.mock import (
     MagicMock,
@@ -23,8 +21,8 @@ from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.import_system import write_file_atomically
 from aclarai_shared.mq import RabbitMQManager
-from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 from aclarai_shared.tools.factory import ToolFactory
+from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 from aclarai_shared.vault import BlockParser
 from llama_index.core.llms.llm import LLM as LlamaLLM
 
@@ -56,7 +54,15 @@ class DirtyBlockConsumer:
         # Instantiate the concrete VectorStoreManager
         self.vector_store_manager = aclaraiVectorStoreManager(self.config)
 
-        tool_factory_config = asdict(self.config) # Use asdict for dataclasses
+        tool_factory_config: Dict[str, Any]
+        if is_dataclass(self.config):
+            tool_factory_config = asdict(self.config)
+        else:
+            tool_factory_config = (
+                self.config.dict()
+                if hasattr(self.config, "dict") and callable(self.config.dict)
+                else {}
+            )
         self.tool_factory = ToolFactory(tool_factory_config, self.vector_store_manager)
 
         if self.llm:  # Only initialize agent if LLM loaded successfully
@@ -83,8 +89,12 @@ class DirtyBlockConsumer:
         )
 
     def _initialize_llm(self) -> Optional[LlamaLLM]:
-        llm_model_name_entailment = self.config.llm.model_params.get("claimify", {}).get("entailment")
-        llm_model_name_default = self.config.llm.model_params.get("claimify", {}).get("default")
+        llm_model_name_entailment = self.config.llm.model_params.get(
+            "claimify", {}
+        ).get("entailment")
+        llm_model_name_default = self.config.llm.model_params.get("claimify", {}).get(
+            "default"
+        )
 
         llm_model_name = llm_model_name_entailment or llm_model_name_default
 

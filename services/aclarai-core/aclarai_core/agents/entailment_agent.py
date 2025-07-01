@@ -13,11 +13,10 @@ from aclarai_shared.utils.prompt_loader import load_prompt_template
 from llama_index.core.agent.workflow import CodeActAgent
 from llama_index.core.llms.llm import LLM
 from llama_index.core.tools import BaseTool
-from llama_index.core.base.agent.code_executor import CodeExecutorComponent  # type: ignore
 from tenacity import RetryError, retry, stop_after_attempt, wait_exponential
 
 
-class DummyCodeExecutor(CodeExecutorComponent):
+class DummyCodeExecutor:
     def __init__(self):
         pass
 
@@ -42,9 +41,9 @@ class EntailmentAgent:
         self.llm = llm
         self.config = config
         # Cast the return type to match the expected type for CodeActAgent
-        self.tools: list[BaseTool | Callable[..., Any]] = list(tool_factory.get_tools_for_agent(
-            "entailment_agent"
-        ))
+        self.tools: list[BaseTool | Callable[..., Any]] = list(
+            tool_factory.get_tools_for_agent("entailment_agent")
+        )
 
         # The synchronous `agent.chat()` method is used here, which works well with
         # both synchronous and asynchronous tools.
@@ -55,7 +54,13 @@ class EntailmentAgent:
             # system_prompt will be part of the loaded prompt template
         )
         self.max_retries = self.config.processing.retries.get("max_attempts", 3)
-        self.tool_names = ", ".join([tool.metadata.name for tool in self.tools if isinstance(tool, BaseTool) and tool.metadata.name is not None])
+        self.tool_names = ", ".join(
+            [
+                tool.metadata.name
+                for tool in self.tools
+                if isinstance(tool, BaseTool) and tool.metadata.name is not None
+            ]
+        )
 
     def evaluate_entailment(
         self,
