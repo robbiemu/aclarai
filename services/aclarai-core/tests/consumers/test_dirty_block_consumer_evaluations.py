@@ -472,3 +472,43 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
 
         result = consumer_instance._process_dirty_block(message)
         assert result is False
+
+    @patch.object(DirtyBlockConsumer, "_read_block_from_file")
+    @patch.object(DirtyBlockConsumer, "_sync_block_with_graph")
+    @patch("aclarai_core.dirty_block_consumer.logger")
+    def test_process_block_no_llm_skips_evaluation(
+        self,
+        mock_logger,
+        mock_sync_graph,
+        mock_read_block,
+        consumer_instance,
+    ):
+        # Arrange: Simulate that the LLM failed to initialize, so the agent is None.
+        # The consumer_instance fixture gives us a fully mocked agent, which we'll use
+        # to verify it was NOT called.
+        original_agent = consumer_instance.entailment_agent
+        consumer_instance.entailment_agent = None
+
+        message = {
+            "aclarai_id": "s1",
+            "file_path": "test_file.md",
+            "change_type": "modified",
+        }
+        mock_block_data = {
+            "aclarai_id": "s1",
+            "semantic_text": "source text",
+            "version": 1,
+        }
+        mock_read_block.return_value = mock_block_data
+        mock_sync_graph.return_value = True
+
+        # Act
+        result = consumer_instance._process_dirty_block(message)
+
+        # Assert
+        assert result is True  # Should still be a success, just skips evaluation
+        mock_logger.error.assert_called_with(
+            "EntailmentAgent not initialized, skipping evaluation for block s1.",
+            extra={"aclarai_id": "s1"},
+        )
+        original_agent.evaluate_entailment.assert_not_called()

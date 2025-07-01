@@ -39,6 +39,7 @@ class ClaimConceptLinker:
         neo4j_manager=None,
         vector_store=None,
         agent=None,
+        markdown_updater=None,
     ):
         """
         Initialize the claim-concept linker.
@@ -47,6 +48,7 @@ class ClaimConceptLinker:
             neo4j_manager: Optional Neo4j manager for dependency injection
             vector_store: Optional vector store for dependency injection
             agent: Optional agent for dependency injection
+            markdown_updater: Optional updater for dependency injection
         """
         self.config = config
         if not config:
@@ -68,7 +70,9 @@ class ClaimConceptLinker:
             except Exception:
                 # For testing without full config, agent can be None
                 self.agent = None
-        self.markdown_updater = Tier2MarkdownUpdater(self.config, self.neo4j_manager)
+        self.markdown_updater = markdown_updater or Tier2MarkdownUpdater(
+            self.config, self.neo4j_manager
+        )
         logger.info(
             "Initialized ClaimConceptLinker",
             extra={
@@ -77,6 +81,7 @@ class ClaimConceptLinker:
                 "has_vector_store": self.vector_store is not None,
                 "has_custom_neo4j": neo4j_manager is not None,
                 "has_custom_agent": agent is not None,
+                "has_custom_updater": markdown_updater is not None,
             },
         )
 
@@ -105,17 +110,27 @@ class ClaimConceptLinker:
                 "strength_threshold": strength_threshold,
             },
         )
+
         stats: Dict[str, Any] = {
             "claims_fetched": 0,
-            "claims_processed": 0,  # For test compatibility
+            "claims_processed": 0,
             "concepts_available": 0,
             "pairs_analyzed": 0,
             "links_created": 0,
-            "relationships_created": 0,  # For test compatibility
+            "relationships_created": 0,
             "files_updated": 0,
-            "markdown_files_updated": 0,  # For test compatibility
             "errors": [],
         }
+
+        if self.agent is None:
+            logger.warning(
+                "ClaimConceptLinker has no agent; skipping relationship classification.",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
+                },
+            )
+            return stats
 
         try:
             # Step 1: Fetch unlinked claims
@@ -129,7 +144,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return dict(stats)
+                return stats
             # Step 2: Fetch available concepts
             concepts = self.neo4j_manager.fetch_all_concepts()
             stats["concepts_available"] = len(concepts)
@@ -141,7 +156,7 @@ class ClaimConceptLinker:
                         "filename.function_name": "claim_concept_linking.ClaimConceptLinker.link_claims_to_concepts",
                     },
                 )
-                return dict(stats)
+                return stats
             # Step 3: Process claim-concept pairs
             successful_links = []
             for claim in claims:
@@ -154,25 +169,7 @@ class ClaimConceptLinker:
                 for candidate in candidate_concepts:
                     pair = self._create_claim_concept_pair(claim, candidate)
                     stats["pairs_analyzed"] += 1
-                    # Get LLM classification
-                    if self.agent is None:
-                        # For testing without agent, create a mock classification
-                        from .models import RelationshipType
-
-                        class MockClassification:
-                            def __init__(self):
-                                self.relation = "SUPPORTS_CONCEPT"
-                                self.strength = 0.8
-                                self.reasoning = "Mock classification for testing"
-
-                            def to_relationship_type(
-                                self,
-                            ) -> Optional[RelationshipType]:
-                                return RelationshipType.SUPPORTS_CONCEPT
-
-                        classification = MockClassification()
-                    else:
-                        classification = self.agent.classify_relationship(pair)
+                    classification = self.agent.classify_relationship(pair)
                     if classification and classification.strength >= strength_threshold:
                         # Convert to link result
                         link_result = self._create_link_result(pair, classification)
@@ -225,7 +222,7 @@ class ClaimConceptLinker:
                     "error": str(e),
                 },
             )
-        return dict(stats)
+        return stats
 
     def _find_candidate_concepts_vector(
         self, claim: Dict[str, Any], threshold: float

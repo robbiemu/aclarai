@@ -131,7 +131,7 @@ class TestMockServices:
         assert isinstance(results, dict)
         assert "claims_processed" in results
         assert "relationships_created" in results
-        assert "markdown_files_updated" in results
+        assert "files_updated" in results
 
     def test_claim_concept_linker_find_candidate_concepts(self):
         """Test ClaimConceptLinker can find candidate concepts using mock vector store."""

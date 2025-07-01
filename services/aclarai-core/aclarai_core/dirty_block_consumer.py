@@ -12,9 +12,6 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from unittest.mock import (
-    MagicMock,
-)  # For fallback non-functional mock in _initialize_llm
 
 from aclarai_shared import load_config
 from aclarai_shared.config import aclaraiConfig
@@ -82,8 +79,7 @@ class DirtyBlockConsumer:
                 "filename.function_name": "dirty_block_consumer.__init__",
                 "rabbitmq_host": self.config.rabbitmq_host,
                 "queue_name": self.queue_name,
-                "llm_initialized": self.llm is not None
-                and not isinstance(self.llm, MagicMock),
+                "llm_initialized": self.llm is not None,
                 "entailment_agent_initialized": self.entailment_agent is not None,
             },
         )
@@ -128,9 +124,7 @@ class DirtyBlockConsumer:
                         f"OPENAI_API_KEY not set. Cannot initialize OpenAI model '{llm_model_name}'. Returning non-functional mock.",
                         extra=log_details,
                     )
-                    return MagicMock(
-                        spec=LlamaLLM, name=f"UninitializedOpenAI_{llm_model_name}"
-                    )
+                    return None
 
                 temperature_str = self.config.processing.temperature
                 max_tokens_str = self.config.processing.max_tokens
@@ -164,25 +158,21 @@ class DirtyBlockConsumer:
                     f"Unsupported or unknown LLM model configured: {llm_model_name}. Cannot initialize. Returning non-functional mock.",
                     extra=log_details,
                 )
-                return MagicMock(
-                    spec=LlamaLLM, name=f"UninitializedUnknownModel_{llm_model_name}"
-                )
+                return None
 
         except ImportError as ie:
             logger.error(
                 f"Failed to import LLM library for model {llm_model_name}: {ie}. Please ensure necessary packages are installed. Returning non-functional mock.",
                 extra=log_details,
             )
-            return MagicMock(spec=LlamaLLM, name=f"ImportError_{llm_model_name}")
+            return None
         except Exception as e:
             logger.error(
                 f"Failed to initialize LLM model {llm_model_name}: {e}. Returning non-functional mock.",
                 exc_info=True,
                 extra=log_details,
             )
-            return MagicMock(
-                spec=LlamaLLM, name=f"InitializationError_{llm_model_name}"
-            )
+            return None
 
     def connect(self):
         """Establish connection to RabbitMQ."""
