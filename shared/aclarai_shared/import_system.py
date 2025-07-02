@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from .config import aclaraiConfig, load_config
 from .plugin_interface import MarkdownOutput, Plugin, UnknownFormatError
+from .plugin_manager import ImportOrchestrator, ImportStatus, PluginManager
 from .plugins.default_plugin import DefaultPlugin
 
 logger = logging.getLogger(__name__)
@@ -289,10 +290,10 @@ class Tier1ImportSystem:
     Main import system for creating Tier 1 Markdown files.
     This class orchestrates the complete import pipeline:
     1. Hash calculation and duplicate detection
-    2. Plugin-based format conversion
+    2. Plugin-based format conversion via ImportOrchestrator
     3. Tier 1 Markdown formatting
     4. Atomic file writing to vault
-    5. Import logging
+    5. Import logging with enhanced status tracking
     """
 
     def __init__(self, config: Optional[aclaraiConfig] = None):
@@ -304,11 +305,13 @@ class Tier1ImportSystem:
         self.config = config or load_config(validate=False)
         self.vault_path = Path(self.config.vault_path)
         self.import_log_dir = self.vault_path / self.config.paths.logs
-        # Initialize plugin registry
-        self.plugin_registry: List[Plugin] = [
-            DefaultPlugin(),  # Always include default plugin as fallback
-        ]
+        
+        # Initialize plugin manager and orchestrator
+        self.plugin_manager = PluginManager()
+        self.orchestrator = ImportOrchestrator(self.plugin_manager)
+        
         logger.info(f"Initialized Tier1ImportSystem with vault: {self.vault_path}")
+        logger.info(f"Plugin manager loaded {self.plugin_manager.get_plugin_count()} plugins")
 
     def add_plugin(self, plugin: Plugin):
         """
@@ -316,13 +319,24 @@ class Tier1ImportSystem:
         Args:
             plugin: Plugin instance to add
         """
-        # Insert before default plugin to give precedence
-        self.plugin_registry.insert(-1, plugin)
+        self.plugin_manager.register_plugin(plugin)
         logger.debug(f"Added plugin: {type(plugin).__name__}")
+
+    def get_plugin_info(self) -> Dict[str, Any]:
+        """
+        Get information about loaded plugins.
+        Returns:
+            Dictionary with plugin information
+        """
+        return self.orchestrator.get_plugin_info()
 
     def import_file(self, source_path: Path) -> List[Path]:
         """
         Import a single file into the vault as Tier 1 Markdown.
+        
+        This method now uses the ImportOrchestrator for plugin management
+        and enhanced status tracking, while maintaining the same interface.
+        
         Args:
             source_path: Path to the file to import
         Returns:
@@ -334,52 +348,84 @@ class Tier1ImportSystem:
         source_path = Path(source_path)
         if not source_path.exists():
             raise ImportSystemError(f"Source file does not exist: {source_path}")
+        
         logger.info(f"Starting import of {source_path}")
+        
         # Step 1: Calculate hash for duplicate detection
         file_hash = calculate_file_hash(source_path)
         logger.debug(f"File hash: {file_hash}")
+        
         # Step 2: Check for duplicates
         if is_duplicate_import(source_path, file_hash, self.import_log_dir):
             logger.info(f"Skipping duplicate file: {source_path}")
             raise DuplicateDetectionError(
                 f"File {source_path} is a duplicate (hash: {file_hash})"
             )
-        # Step 3: Convert using plugins
-        try:
-            markdown_outputs = convert_file_to_markdowns(
-                source_path, self.plugin_registry
-            )
-        except UnknownFormatError as e:
-            logger.error(f"No plugin could handle {source_path}: {e}")
-            raise ImportSystemError(f"Unknown format: {source_path}") from None
-        if not markdown_outputs:
+        
+        # Step 3: Use orchestrator for plugin-based conversion
+        import_result = self.orchestrator.import_file(source_path)
+        
+        # Handle different import statuses
+        if import_result.status == ImportStatus.ERROR:
+            logger.error(f"Import failed for {source_path}: {import_result.message}")
+            raise ImportSystemError(f"Import failed: {import_result.message}")
+        
+        elif import_result.status == ImportStatus.SKIPPED:
+            logger.error(f"No plugin could handle {source_path}: {import_result.message}")
+            raise ImportSystemError(f"Unknown format: {source_path}")
+        
+        elif import_result.status == ImportStatus.IGNORED:
             logger.info(f"No conversations found in {source_path}")
             return []
-        logger.info(f"Found {len(markdown_outputs)} conversation(s) in {source_path}")
-        # Step 4: Write Tier 1 Markdown files
-        output_files = []
-        tier1_dir = self.vault_path / self.config.paths.tier1
-        for i, md in enumerate(markdown_outputs):
-            # Generate filename
-            if len(markdown_outputs) > 1:
-                # Multiple conversations - add index
-                base_filename = generate_output_filename(md, source_path)
-                name, ext = base_filename.rsplit(".", 1)
-                filename = f"{name}_{i + 1}.{ext}"
-            else:
-                filename = generate_output_filename(md, source_path)
-            output_path = tier1_dir / filename
-            # Format as complete Tier 1 Markdown
-            content = format_tier1_markdown(md)
-            # Write atomically
-            write_file_atomically(output_path, content)
-            output_files.append(output_path)
-            logger.info(f"Created Tier 1 file: {output_path}")
-        # Step 5: Record successful import
-        record_import(source_path, file_hash, self.import_log_dir, output_files)
-        logger.info(f"Successfully imported {source_path} -> {len(output_files)} files")
-        return output_files
-
+        
+        elif import_result.status == ImportStatus.SUCCESS:
+            # Re-run plugin conversion to get the MarkdownOutput objects
+            # (The orchestrator validates plugins work, now we get the actual outputs)
+            try:
+                markdown_outputs = convert_file_to_markdowns(
+                    source_path, self.plugin_manager.get_plugins()
+                )
+            except UnknownFormatError as e:
+                # This shouldn't happen since orchestrator already validated
+                logger.error(f"Unexpected plugin failure after orchestrator success: {e}")
+                raise ImportSystemError(f"Plugin conversion failed: {e}") from None
+            
+            if not markdown_outputs:
+                logger.info(f"No conversations found in {source_path}")
+                return []
+            
+            logger.info(f"Found {len(markdown_outputs)} conversation(s) in {source_path}")
+            logger.info(f"Used plugin: {import_result.plugin_used}")
+            
+            # Step 4: Write Tier 1 Markdown files
+            output_files = []
+            tier1_dir = self.vault_path / self.config.paths.tier1
+            for i, md in enumerate(markdown_outputs):
+                # Generate filename
+                if len(markdown_outputs) > 1:
+                    # Multiple conversations - add index
+                    base_filename = generate_output_filename(md, source_path)
+                    name, ext = base_filename.rsplit(".", 1)
+                    filename = f"{name}_{i + 1}.{ext}"
+                else:
+                    filename = generate_output_filename(md, source_path)
+                
+                output_path = tier1_dir / filename
+                # Format as complete Tier 1 Markdown
+                content = format_tier1_markdown(md)
+                # Write atomically
+                write_file_atomically(output_path, content)
+                output_files.append(output_path)
+                logger.info(f"Created Tier 1 file: {output_path}")
+            
+            # Step 5: Record successful import with enhanced metadata
+            record_import(source_path, file_hash, self.import_log_dir, output_files)
+            logger.info(f"Successfully imported {source_path} -> {len(output_files)} files")
+            return output_files
+        
+        else:
+            # Unexpected status
+            raise ImportSystemError(f"Unexpected import status: {import_result.status}")
     def import_directory(
         self, source_dir: Path, recursive: bool = True
     ) -> Dict[Path, List[Path]]:

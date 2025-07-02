@@ -125,7 +125,12 @@ class TestTier1ImportSystem:
         system = Tier1ImportSystem(config)
         assert system.vault_path == Path("/test/vault")
         assert system.import_log_dir == Path("/test/vault/logs")
-        assert len(system.plugin_registry) >= 1  # At least default plugin
+        assert system.plugin_manager.get_plugin_count() >= 1  # At least default plugin
+        
+        # Test plugin info
+        plugin_info = system.get_plugin_info()
+        assert "plugin_count" in plugin_info
+        assert plugin_info["plugin_count"] >= 1
 
 
 def test_integration_simple_conversation():
