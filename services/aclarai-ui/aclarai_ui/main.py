@@ -2,11 +2,13 @@
 
 import logging
 import os
-import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple, cast
 
 import gradio as gr
+from aclarai_shared.plugin_manager import ImportOrchestrator, ImportResult
+from aclarai_shared.plugin_manager import ImportStatus as PluginImportStatus
 
 from .config import config
 from .review_panel import create_review_panel
@@ -18,20 +20,46 @@ logging.basicConfig(
 logger = logging.getLogger("aclarai-ui")
 
 
-class ImportStatus:
-    """Class to track import status and queue."""
+class ImportStatusTracker:
+    """Class to track import status and queue for UI display."""
 
     def __init__(self):
         self.import_queue = []
         self.summary_stats = {"imported": 0, "failed": 0, "fallback": 0, "skipped": 0}
+        # Initialize the real plugin orchestrator
+        self.orchestrator = ImportOrchestrator()
         logger.info(
-            "ImportStatus initialized",
+            "ImportStatusTracker initialized with real plugin orchestrator",
             extra={
                 "service": "aclarai-ui",
-                "component": "ImportStatus",
+                "component": "ImportStatusTracker",
                 "action": "initialize",
+                "plugin_count": self.orchestrator.plugin_manager.get_plugin_count(),
             },
         )
+
+    @staticmethod
+    def _map_plugin_status_to_ui(
+        plugin_status: PluginImportStatus, plugin_name: Optional[str] = None
+    ) -> str:
+        """Map plugin ImportStatus enum to UI-friendly status strings."""
+        status_mapping = {
+            PluginImportStatus.SUCCESS: "✅ Imported",
+            PluginImportStatus.IGNORED: "⏸️ Skipped",
+            PluginImportStatus.ERROR: "❌ Failed",
+            PluginImportStatus.SKIPPED: "❌ Failed",  # No plugin could handle it
+        }
+
+        status = status_mapping.get(plugin_status, "❌ Failed")
+
+        # Special case: if successful with DefaultPlugin, mark as fallback
+        if (
+            plugin_status == PluginImportStatus.SUCCESS
+            and plugin_name == "DefaultPlugin"
+        ):
+            status = "⚠️ Fallback"
+
+        return status
 
     def add_file(self, filename: str, file_path: str):
         """Add a file to the import queue."""
@@ -49,7 +77,7 @@ class ImportStatus:
                 "File added to import queue",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "add_file",
                     "file_name": filename,
                     "file_path": file_path,
@@ -60,7 +88,7 @@ class ImportStatus:
                 "Failed to add file to import queue",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "add_file",
                     "file_name": filename,
                     "error": str(e),
@@ -80,7 +108,7 @@ class ImportStatus:
                         "File status updated",
                         extra={
                             "service": "aclarai-ui",
-                            "component": "ImportStatus",
+                            "component": "ImportStatusTracker",
                             "action": "update_status",
                             "file_name": filename,
                             "status": status,
@@ -93,7 +121,7 @@ class ImportStatus:
                     "File not found in queue for status update",
                     extra={
                         "service": "aclarai-ui",
-                        "component": "ImportStatus",
+                        "component": "ImportStatusTracker",
                         "action": "update_status",
                         "file_name": filename,
                         "attempted_status": status,
@@ -104,7 +132,7 @@ class ImportStatus:
                 "Failed to update file status",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "update_status",
                     "file_name": filename,
                     "error": str(e),
@@ -112,6 +140,57 @@ class ImportStatus:
                 },
             )
             # Graceful degradation: continue operation even if status update fails
+
+    def process_file_with_orchestrator(self, file_path: str) -> ImportResult:
+        """Process a file using the real plugin orchestrator."""
+        try:
+            logger.info(
+                "Processing file with orchestrator",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "ImportStatusTracker",
+                    "action": "process_file",
+                    "file_path": file_path,
+                },
+            )
+
+            # Use the real orchestrator to process the file
+            result = self.orchestrator.import_file(Path(file_path))
+
+            logger.info(
+                "File processing completed",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "ImportStatusTracker",
+                    "action": "process_file",
+                    "file_path": file_path,
+                    "status": result.status.value,
+                    "plugin_used": result.plugin_used,
+                    "result_message": result.message,
+                },
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to process file with orchestrator",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "ImportStatusTracker",
+                    "action": "process_file",
+                    "file_path": file_path,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            # Return a failed result for graceful degradation
+            return ImportResult(
+                file_path=Path(file_path),
+                status=PluginImportStatus.ERROR,
+                message=f"Processing failed: {str(e)}",
+                error_details=str(e),
+            )
 
     def format_queue_display(self) -> str:
         """Format the import queue for display."""
@@ -136,7 +215,7 @@ class ImportStatus:
                 "Failed to format queue display",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "format_queue_display",
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -167,7 +246,7 @@ class ImportStatus:
                 "Summary generated",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "get_summary",
                     "total_files": total,
                     "imported": imported,
@@ -194,7 +273,7 @@ class ImportStatus:
                 "Failed to generate summary",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatus",
+                    "component": "ImportStatusTracker",
                     "action": "get_summary",
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -204,79 +283,10 @@ class ImportStatus:
             return "## 📊 Import Summary\n\nError generating summary. Please check logs for details."
 
 
-def detect_file_format(file_path: str, filename: str) -> Tuple[str, str]:
-    """Simulate format detection logic with proper error handling.
-    Returns:
-        Tuple of (detector_name, status)
-    """
-    try:
-        logger.info(
-            "Starting format detection",
-            extra={
-                "service": "aclarai-ui",
-                "component": "format_detector",
-                "action": "detect_format",
-                "file_name": filename,
-                "file_path": file_path,
-            },
-        )
-        # Simulate format detection based on file extension and content
-        time.sleep(0.5)  # Simulate processing time
-        if filename.lower().endswith(".json"):
-            # Check if it's a Slack export based on filename
-            if "slack" in filename.lower():
-                detector, status = "slack_json", "✅ Imported"
-            else:
-                # Default to ChatGPT JSON format
-                detector, status = "chatgpt_json", "✅ Imported"
-        elif filename.lower().endswith(".csv"):
-            # Check if it's a generic export based on filename
-            if "generic" in filename.lower() or "tabular" in filename.lower():
-                detector, status = "generic_csv", "✅ Imported"
-            else:
-                # Default to Slack CSV format
-                detector, status = "slack_csv", "✅ Imported"
-        elif filename.lower().endswith(".txt"):
-            # Simulate generic text that needs fallback
-            detector, status = "fallback_llm", "⚠️ Fallback"
-        elif filename.lower().endswith(".md"):
-            # Simulate markdown format
-            detector, status = "markdown", "✅ Imported"
-        else:
-            # Simulate unsupported format
-            detector, status = "None", "❌ Failed"
-        logger.info(
-            "Format detection completed",
-            extra={
-                "service": "aclarai-ui",
-                "component": "format_detector",
-                "action": "detect_format",
-                "file_name": filename,
-                "detector": detector,
-                "status": status,
-            },
-        )
-        return detector, status
-    except Exception as e:
-        logger.error(
-            "Format detection failed",
-            extra={
-                "service": "aclarai-ui",
-                "component": "format_detector",
-                "action": "detect_format",
-                "file_name": filename,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-        )
-        # Graceful degradation: return failed status
-        return "error", "❌ Failed"
-
-
-def simulate_plugin_orchestrator(
-    file_path: Optional[str], import_status: ImportStatus
-) -> Tuple[str, str, ImportStatus]:
-    """Simulate the plugin orchestrator processing a file with proper error handling.
+def real_plugin_orchestrator(
+    file_path: Optional[str], import_status: ImportStatusTracker
+) -> Tuple[str, str, ImportStatusTracker]:
+    """Process a file using the real plugin orchestrator with proper error handling.
     Args:
         file_path: Path to uploaded file
         import_status: Current import status state
@@ -290,22 +300,24 @@ def simulate_plugin_orchestrator(
                 extra={
                     "service": "aclarai-ui",
                     "component": "plugin_orchestrator",
-                    "action": "simulate_import",
+                    "action": "real_import",
                 },
             )
             return "No file selected for import.", "", import_status
+
         filename = os.path.basename(file_path)
         logger.info(
-            "Starting plugin orchestrator simulation",
+            "Starting real plugin orchestrator processing",
             extra={
                 "service": "aclarai-ui",
                 "component": "plugin_orchestrator",
-                "action": "simulate_import",
+                "action": "real_import",
                 "file_name": filename,
                 "file_path": file_path,
             },
         )
-        # Check for duplicates (simple simulation)
+
+        # Check for duplicates
         existing_files = [item["filename"] for item in import_status.import_queue]
         if filename in existing_files:
             logger.info(
@@ -323,38 +335,59 @@ def simulate_plugin_orchestrator(
                 import_status.get_summary(),
                 import_status,
             )
-        # Add file to queue
+
+        # Add file to queue with processing status
         import_status.add_file(filename, file_path)
-        # Start with processing status
-        queue_display = import_status.format_queue_display()
-        # Simulate format detection and processing
-        detector, status = detect_file_format(file_path, filename)
-        # Update status after "processing"
-        time.sleep(1)  # Simulate processing time
-        import_status.update_file_status(filename, status, detector)
+
+        # Process file with the real orchestrator
+        result = import_status.process_file_with_orchestrator(file_path)
+
+        # Map the result to UI status
+        ui_status = ImportStatusTracker._map_plugin_status_to_ui(
+            result.status, result.plugin_used
+        )
+        detector_name = result.plugin_used or "None"
+
+        # Handle special cases in the plugin result
+        if result.status == PluginImportStatus.IGNORED:
+            # File processed but no conversations found
+            detector_name = result.plugin_used or "No plugin"
+            ui_status = "⏸️ Skipped"
+        elif result.status == PluginImportStatus.SKIPPED:
+            # No plugin could handle the file
+            detector_name = "None"
+            ui_status = "❌ Failed"
+
+        # Update status in the queue
+        import_status.update_file_status(filename, ui_status, detector_name)
+
         logger.info(
-            "Plugin orchestrator simulation completed",
+            "Real plugin orchestrator processing completed",
             extra={
                 "service": "aclarai-ui",
                 "component": "plugin_orchestrator",
-                "action": "simulate_import",
+                "action": "real_import",
                 "file_name": filename,
-                "final_status": status,
-                "detector": detector,
+                "final_status": ui_status,
+                "detector": detector_name,
+                "plugin_status": result.status.value,
+                "result_message": result.message,
             },
         )
+
         return (
             import_status.format_queue_display(),
             import_status.get_summary(),
             import_status,
         )
+
     except Exception as e:
         logger.error(
-            "Plugin orchestrator simulation failed",
+            "Real plugin orchestrator processing failed",
             extra={
                 "service": "aclarai-ui",
                 "component": "plugin_orchestrator",
-                "action": "simulate_import",
+                "action": "real_import",
                 "file_name": filename if "filename" in locals() else "unknown",
                 "error": str(e),
                 "error_type": type(e).__name__,
@@ -364,12 +397,14 @@ def simulate_plugin_orchestrator(
         error_msg = f"Error processing file: {str(e)}"
         return (
             error_msg,
-            "Processing failed. Please check logs for details.",
+            "Processing failed.",
             import_status,
         )
 
 
-def clear_import_queue(import_status: ImportStatus) -> Tuple[str, str, ImportStatus]:
+def clear_import_queue(
+    import_status: ImportStatusTracker,
+) -> Tuple[str, str, ImportStatusTracker]:
     """Clear the import queue and reset statistics.
     Args:
         import_status: Current import status state
@@ -386,7 +421,7 @@ def clear_import_queue(import_status: ImportStatus) -> Tuple[str, str, ImportSta
                 "queue_size": len(import_status.import_queue),
             },
         )
-        new_import_status = ImportStatus()
+        new_import_status = ImportStatusTracker()
         return "Import queue cleared.", "", new_import_status
     except Exception as e:
         logger.error(
@@ -418,7 +453,7 @@ def create_import_interface() -> gr.Blocks:
             title="aclarai - Import Panel", theme=gr.themes.Soft()
         ) as interface:
             # Session-based state management for import status
-            import_status_state = gr.State(ImportStatus())
+            import_status_state = gr.State(ImportStatusTracker())
             gr.Markdown("# 📥 aclarai Import Panel")
             gr.Markdown(
                 """Upload conversation files from various sources (ChatGPT exports, Slack logs, generic text files)
@@ -453,21 +488,21 @@ def create_import_interface() -> gr.Blocks:
                 )
 
             # Event handlers with error handling and state management
-            def safe_simulate_plugin_orchestrator(
+            def safe_real_plugin_orchestrator(
                 file_input_value, import_status
-            ) -> Tuple[str, str, ImportStatus]:
+            ) -> Tuple[str, str, ImportStatusTracker]:
                 try:
                     queue_display, summary_display, updated_status = (
-                        simulate_plugin_orchestrator(file_input_value, import_status)
+                        real_plugin_orchestrator(file_input_value, import_status)
                     )
                     return queue_display, summary_display, updated_status
                 except Exception as e:
                     logger.error(
-                        "Error in plugin orchestrator simulation",
+                        "Error in real plugin orchestrator",
                         extra={
                             "service": "aclarai-ui",
                             "component": "interface_handler",
-                            "action": "simulate_orchestrator",
+                            "action": "real_orchestrator",
                             "error": str(e),
                             "error_type": type(e).__name__,
                         },
@@ -480,7 +515,7 @@ def create_import_interface() -> gr.Blocks:
 
             def safe_clear_import_queue(
                 import_status,
-            ) -> Tuple[str, str, ImportStatus]:
+            ) -> Tuple[str, str, ImportStatusTracker]:
                 try:
                     queue_display, summary_display, new_status = clear_import_queue(
                         import_status
@@ -504,13 +539,13 @@ def create_import_interface() -> gr.Blocks:
                     )
 
             import_btn.click(
-                fn=safe_simulate_plugin_orchestrator,
+                fn=safe_real_plugin_orchestrator,
                 inputs=[file_input, import_status_state],
                 outputs=[queue_display, summary_display, import_status_state],
             )
             # Auto-process on file upload
             file_input.change(
-                fn=safe_simulate_plugin_orchestrator,
+                fn=safe_real_plugin_orchestrator,
                 inputs=[file_input, import_status_state],
                 outputs=[queue_display, summary_display, import_status_state],
             )
@@ -564,7 +599,7 @@ def create_complete_interface() -> gr.Blocks:
                 # Import panel content (existing functionality)
                 with gr.Tab("📥 Import", id="import_tab"), gr.Group():
                     # Session-based state management for import status
-                    import_status_state = gr.State(ImportStatus())
+                    import_status_state = gr.State(ImportStatusTracker())
                     gr.Markdown(
                         """Upload conversation files from various sources (ChatGPT exports, Slack logs, generic text files)
                         to process and import into the aclarai system. Files are automatically detected and processed
@@ -599,23 +634,23 @@ def create_complete_interface() -> gr.Blocks:
                         )
 
                     # Event handlers with error handling and state management
-                    def safe_simulate_plugin_orchestrator(
+                    def safe_real_plugin_orchestrator(
                         file_input_value, import_status
-                    ) -> Tuple[str, str, ImportStatus]:
+                    ) -> Tuple[str, str, ImportStatusTracker]:
                         try:
                             queue_display, summary_display, updated_status = (
-                                simulate_plugin_orchestrator(
+                                real_plugin_orchestrator(
                                     file_input_value, import_status
                                 )
                             )
                             return queue_display, summary_display, updated_status
                         except Exception as e:
                             logger.error(
-                                "Error in plugin orchestrator simulation",
+                                "Error in real plugin orchestrator",
                                 extra={
                                     "service": "aclarai-ui",
                                     "component": "interface_handler",
-                                    "action": "simulate_orchestrator",
+                                    "action": "real_orchestrator",
                                     "error": str(e),
                                     "error_type": type(e).__name__,
                                 },
@@ -628,7 +663,7 @@ def create_complete_interface() -> gr.Blocks:
 
                     def safe_clear_import_queue(
                         import_status,
-                    ) -> Tuple[str, str, ImportStatus]:
+                    ) -> Tuple[str, str, ImportStatusTracker]:
                         try:
                             queue_display, summary_display, new_status = (
                                 clear_import_queue(import_status)
@@ -652,7 +687,7 @@ def create_complete_interface() -> gr.Blocks:
                             )
 
                     import_btn.click(
-                        fn=safe_simulate_plugin_orchestrator,
+                        fn=safe_real_plugin_orchestrator,
                         inputs=[file_input, import_status_state],
                         outputs=[
                             queue_display,
@@ -662,7 +697,7 @@ def create_complete_interface() -> gr.Blocks:
                     )
                     # Auto-process on file upload
                     file_input.change(
-                        fn=safe_simulate_plugin_orchestrator,
+                        fn=safe_real_plugin_orchestrator,
                         inputs=[file_input, import_status_state],
                         outputs=[
                             queue_display,

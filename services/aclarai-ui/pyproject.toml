@@ -19,7 +19,12 @@ test = [
 ]
 
 [project.scripts]
+# Main entry point for the full UI service
 aclarai-ui = "aclarai_ui.main:main"
+
+# Standalone launchers for development and testing
+launch-config = "aclarai_ui.util.config_launcher:main"
+launch-import-panel = "aclarai_ui.util.import_panel_launcher:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aclarai_ui"]
