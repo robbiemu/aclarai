@@ -1,143 +1,120 @@
 # Tier 1 Import System Tutorial
 
-This tutorial shows how to use the aclarai Tier 1 import system to convert conversation files into standardized Tier 1 Markdown documents.
+This tutorial shows how to use the aclarai Tier 1 import system to convert conversation files into standardized Tier 1 Markdown documents. The system is now orchestrated by the `ImportOrchestrator` and provides detailed feedback through the `ImportResult` object.
 
 ## Basic Usage
 
 ### Setting Up the Import System
 
+First, you need to initialize the core components: the `PluginManager` and the `ImportOrchestrator`.
+
 ```python
-from aclarai_shared import aclaraiConfig, Tier1ImportSystem, PathsConfig
+from pathlib import Path
+from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.import_system import Tier1ImportSystem, ImportStatus
+from aclarai_shared.plugin_manager import PluginManager
 
-# Configure with your vault path
-config = aclaraiConfig(
-    vault_path="/path/to/your/vault",
-    paths=PathsConfig(
-        tier1="conversations",
-        logs="import_logs"
-    )
-)
+# 1. Load the application configuration
+config = aclaraiConfig()
 
-# Initialize the import system
-system = Tier1ImportSystem(config)
+# 2. Initialize the PluginManager to discover all installed plugins
+plugin_manager = PluginManager()
+
+# 3. Initialize the Tier1ImportSystem with the config and plugin manager
+system = Tier1ImportSystem(config=config, plugin_manager=plugin_manager)
 ```
 
 ### Importing a Single File
 
-```python
-# Import a conversation file
-output_files = system.import_file("chat_export.txt")
+When you import a file, the system returns an `ImportResult` object that tells you exactly what happened.
 
-if output_files:
-    print(f"Created {len(output_files)} Tier 1 file(s):")
-    for file in output_files:
-        print(f"  {file}")
-else:
-    print("No conversations found in the file")
+```python
+# Create a dummy file for the example
+dummy_file = Path("my_conversation.txt")
+dummy_file.write_text("alice: Hello!\nbob: Hi there.")
+
+# Import the conversation file
+result = system.import_file(dummy_file)
+
+# Check the result status
+print(f"Import status: {result.status.name}")
+
+if result.status == ImportStatus.SUCCESS:
+    print(f"Successfully created Tier 1 file: {result.output_file}")
+elif result.status in (ImportStatus.ERROR, ImportStatus.IGNORED, ImportStatus.SKIPPED):
+    print(f"Import did not complete: {result.message}")
+
+# Clean up the dummy file
+dummy_file.unlink()
 ```
 
 ### Importing a Directory
 
+The `import_directory` method returns a list of `ImportResult` objects, one for each file processed.
+
 ```python
-# Import all files from a directory
-results = system.import_directory("conversations/", recursive=True)
+# Create a dummy directory and files
+import_dir = Path("my_conversations")
+import_dir.mkdir()
+(import_dir / "chat1.txt").write_text("dave: First chat.")
+(import_dir / "chat2.txt").write_text("sara: Second chat.")
 
-# Show results
-total_files = len(results)
-successful = sum(1 for files in results.values() if files)
-print(f"Processed {total_files} files, {successful} successful imports")
+# Import all files from the directory
+results = system.import_directory(import_dir, recursive=True)
+
+# Process the results
+for result in results:
+    print(f"- File: {result.input_file.name}, Status: {result.status.name}, Message: {result.message}")
+
+# Clean up the dummy directory
+import shutil
+shutil.rmtree(import_dir)
 ```
 
-## Supported Input Formats
+## Handling Different Statuses
 
-The system automatically detects and converts various conversation formats:
+The `ImportResult` object is key to understanding the outcome of an import. Here’s how to handle the different statuses:
 
--   **Simple speaker format**: `alice: Hello\nbob: Hi there!`
--   **ENTRY format**: `ENTRY [10:00] alice >> message`
--   **With metadata**: Session IDs, topics, participants extraction
+-   `ImportStatus.SUCCESS`: The file was converted and saved successfully. The `output_file` attribute points to the new Tier 1 Markdown file.
+-   `ImportStatus.IGNORED`: The file was a duplicate of already imported content. The `message` attribute will explain why it was ignored.
+-   `ImportStatus.SKIPPED`: The file was skipped because it was empty or a directory. The `message` will provide details.
+-   `ImportStatus.ERROR`: An error occurred. The `message` will contain the error details for debugging.
+-   `ImportStatus.NO_PLUGIN_FOUND`: No suitable plugin was found to handle the file format.
 
-## Understanding the Output
+Here is a more robust example of handling results:
 
-The system generates Tier 1 Markdown files with proper annotations.
+```python
+results = system.import_directory("path/to/your/conversations")
 
-### Initial Import
+successful_imports = []
+failed_imports = []
 
-Immediately after import, the file will contain the conversation text, block identifiers, and file-level metadata.
+for res in results:
+    if res.status == ImportStatus.SUCCESS:
+        successful_imports.append(res.output_file)
+    else:
+        failed_imports.append((res.input_file, res.status, res.message))
 
-```markdown
-<!-- aclarai:title=Weekly Team Sync -->
-<!-- aclarai:created_at=2025-06-09T23:29:03.406829 -->
-<!-- aclarai:participants=["alice", "bob", "charlie"] -->
-<!-- aclarai:message_count=3 -->
-<!-- aclarai:plugin_metadata={"source_format": "fallback_llm", "session_id": "team_weekly_20250609"} -->
-
-alice: Let's start with project updates
-<!-- aclarai:id=blk_fkj7pn ver=1 -->
-^blk_fkj7pn
-
-bob: The backend API is 90% complete
-<!-- aclarai:id=blk_xl8j4v ver=1 -->
-^blk_xl8j4v
-
-charlie: Frontend is ready for testing
-<!-- aclarai:id=blk_mn3k2p ver=1 -->
-^blk_mn3k2p
-```
-
-### After Claim Evaluation
-
-Once the claims within the file have been processed by the evaluation agents, additional metadata comments for scores will be added directly into the file. Notice that the `ver` number of the block has been incremented.
-
-```markdown
-<!-- aclarai:title=Weekly Team Sync -->
-<!-- aclarai:created_at=2025-06-09T23:29:03.406829 -->
-<!-- aclarai:participants=["alice", "bob", "charlie"] -->
-<!-- aclarai:message_count=3 -->
-<!-- aclarai:plugin_metadata={"source_format": "fallback_llm", "session_id": "team_weekly_20250609"} -->
-
-<!-- aclarai:entailed_score=0.91 -->
-<!-- aclarai:coverage_score=0.77 -->
-<!-- aclarai:decontextualization_score=0.88 -->
-alice: Let's start with project updates
-<!-- aclarai:id=blk_fkj7pn ver=4 -->
-^blk_fkj7pn
-
-bob: The backend API is 90% complete
-<!-- aclarai:id=blk_xl8j4v ver=1 -->
-^blk_xl8j4v
-
-charlie: Frontend is ready for testing
-<!-- aclarai:id=blk_mn3k2p ver=1 -->
-^blk_mn3k2p
+print(f"Successfully imported {len(successful_imports)} files.")
+if failed_imports:
+    print(f"\nFailed or skipped {len(failed_imports)} files:")
+    for file, status, msg in failed_imports:
+        print(f"  - {file.name} ({status.name}): {msg}")
 ```
 
 ## Duplicate Detection
 
-The system automatically prevents re-importing identical content:
+The system automatically handles duplicate detection. If you attempt to import a file with the same content as a previously imported one, the `import_file` method will return an `ImportResult` with a status of `ImportStatus.IGNORED`.
 
 ```python
 # First import succeeds
-output_files = system.import_file("chat.txt")
-print(f"Imported: {output_files}")
+result1 = system.import_file(Path("chat.txt"))
+print(f"First import: {result1.status.name}")
 
-# Second import of same file is skipped
-try:
-    system.import_file("chat.txt")
-except DuplicateDetectionError:
-    print("File already imported (duplicate detected)")
+# Second import of the same file is ignored
+result2 = system.import_file(Path("chat.txt"))
+print(f"Second import: {result2.status.name}") # -> IGNORED
+print(f"Message: {result2.message}")
 ```
 
-## Error Handling
-
-```python
-from aclarai_shared.import_system import DuplicateDetectionError, ImportSystemError
-
-try:
-    output_files = system.import_file("conversation.txt")
-except DuplicateDetectionError:
-    print("File already imported")
-except ImportSystemError as e:
-    print(f"Import failed: {e}")
-except Exception as e:
-    print(f"Unexpected error: {e}")
-```
+This prevents creating redundant files in your vault and ensures that each unique conversation is stored only once.

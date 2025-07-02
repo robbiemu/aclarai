@@ -1,320 +1,68 @@
-# Getting Started with aclarai Default Plugin
+# Understanding the Default Plugin
 
-This tutorial walks you through using aclarai's default plugin for converting unstructured conversation data into standardized Tier 1 Markdown format. The default plugin serves as a fallback for files that aren't recognized by specific format plugins.
+This tutorial explains the role and behavior of the `DefaultPlugin` in the aclarai import system. Unlike other plugins that target specific formats, the `DefaultPlugin` is a general-purpose fallback that ensures any file can be processed.
 
-## Overview
+## Key Concepts
 
-The default plugin is part of aclarai's pluggable format conversion system. It:
-- Always accepts input as a fallback option
-- Uses pattern matching and optional LLM processing
-- Converts conversations to aclarai Tier 1 Markdown format
-- Generates unique block IDs and metadata
+-   **Fallback Mechanism**: The `DefaultPlugin` has a low priority and is designed to handle files that are not claimed by any other, more specific plugin.
+-   **Automatic Discovery**: You do **not** need to manually register or enable the `DefaultPlugin`. The `PluginManager` automatically discovers and includes it in the import process.
+-   **Best-Effort Conversion**: It uses a combination of pattern matching and (optional) LLM-based analysis to extract conversations from unstructured text.
 
-## Step 1: Basic Setup
+## How It Works
 
-First, let's set up the basic imports and plugin registry:
+When the `ImportOrchestrator` processes a file, it asks the `PluginManager` for the best plugin. The `PluginManager` checks all high-priority plugins first. If none of them can handle the file, the `DefaultPlugin` is chosen as the fallback.
+
+Its `can_accept()` method always returns `True`, guaranteeing that it will accept any file that other plugins have rejected.
+
+## Usage
+
+You don't need to do anything to "use" the `DefaultPlugin`. It works automatically as part of the `Tier1ImportSystem`. When you import a file that doesn't match any specific format (like a plain `.txt` file with a simple `speaker: message` structure), the `DefaultPlugin` will be used behind the scenes.
 
 ```python
-import sys
-import tempfile
 from pathlib import Path
+from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.import_system import Tier1ImportSystem, ImportStatus
+from aclarai_shared.plugin_manager import PluginManager
 
-# Add the shared module to the path
-sys.path.append(str(Path(__file__).parent / "shared"))
+# Standard import system setup
+config = aclaraiConfig()
+plugin_manager = PluginManager()
+system = Tier1ImportSystem(config=config, plugin_manager=plugin_manager)
 
-# Import the plugin system
-from aclarai_shared import DefaultPlugin, convert_file_to_markdowns
+# Create a generic text file that no specific plugin would claim
+generic_file = Path("generic_chat.txt")
+generic_file.write_text("alex: This is a generic chat.\njane: It should be handled by the default plugin.")
+
+# Process the file
+result = system.import_file(generic_file)
+
+# Check the result
+if result.status == ImportStatus.SUCCESS:
+    # You can inspect the plugin metadata to confirm the DefaultPlugin was used
+    markdown_content = result.output_file.read_text()
+    if 'plugin_metadata={"source_format": "fallback_llm"}' in markdown_content:
+        print("Confirmed: The DefaultPlugin was used as a fallback.")
+
+# Clean up
+generic_file.unlink()
+if result.output_file and result.output_file.exists():
+    result.output_file.unlink()
 ```
 
-## Step 2: Prepare Sample Data
+## Supported Formats
 
-The default plugin can handle various conversation formats. Let's start with a custom log format:
+The `DefaultPlugin` is designed to recognize common, simple formats out-of-the-box:
 
-```python
-sample_data = """
-CONVERSATION_LOG_v1.0
-====================
-SESSION_ID: demo_001
-TOPIC: Sprint Planning
-PARTICIPANTS: alice, bob, charlie
+-   **Simple Speaker Format**: `speaker: message`
+-   **Log-style Format**: `ENTRY [timestamp] speaker >> message`
+-   **Metadata Headers**: It can often extract metadata like `TOPIC:` or `PARTICIPANTS:` from the top of a file.
 
-ENTRY [09:00:00] alice >> Let's start our sprint planning meeting.
-ENTRY [09:00:15] bob >> I've prepared the backlog for review.
-ENTRY [09:00:30] charlie >> Great! I see we have 15 user stories to estimate.
-ENTRY [09:01:00] alice >> Let's start with the authentication improvements.
-ENTRY [09:01:20] bob >> That should be a 3-point story based on complexity.
-ENTRY [09:01:45] charlie >> I agree. It touches multiple components but the scope is clear.
+If these patterns fail, it can optionally use a configured LLM to attempt a more intelligent extraction.
 
-SESSION_END: 09:05:00
-DURATION: 5m0s
-"""
-```
+## Customizing LLM Prompts
 
-## Step 3: Process with Default Plugin
+For advanced use cases, you can customize the LLM prompts that the `DefaultPlugin` uses for conversation extraction. This allows you to tailor its behavior to specific types of unstructured text you frequently work with.
 
-Create a plugin registry and process the conversation:
+Prompt templates are located in `settings/prompts/`. By editing the `conversation_extraction.yaml` file, you can fine-tune the instructions given to the LLM, improving its accuracy for your data.
 
-```python
-# Create a temporary file with the sample data
-with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".log") as f:
-    f.write(sample_data)
-    temp_path = Path(f.name)
-
-try:
-    # Create plugin registry with the default plugin
-    default_plugin = DefaultPlugin()
-    registry = [default_plugin]
-
-    print("Processing with DefaultPlugin...")
-
-    # Convert the file
-    outputs = convert_file_to_markdowns(temp_path, registry)
-
-    print(f"✅ Successfully processed file!")
-    print(f"📊 Extracted {len(outputs)} conversation(s)")
-
-finally:
-    # Clean up
-    temp_path.unlink()
-```
-
-## Step 4: Examine the Results
-
-Let's look at what the plugin extracted:
-
-```python
-if outputs:
-    output = outputs[0]
-    print(f"📝 Conversation Details:")
-    print(f"   Title: {output.title}")
-    print(f"   Participants: {output.metadata['participants']}")
-    print(f"   Message Count: {output.metadata['message_count']}")
-    print(f"   Plugin Used: {output.metadata['plugin_metadata']['source_format']}")
-
-    print("📄 Generated Markdown:")
-    print(output.markdown_text)
-```
-
-Expected output format:
-```markdown
-<!-- aclarai:title=Sprint Planning -->
-<!-- aclarai:created_at=2023-12-22T16:45:00Z -->
-<!-- aclarai:participants=["alice", "bob", "charlie"] -->
-<!-- aclarai:message_count=6 -->
-<!-- aclarai:plugin_metadata={"source_format": "fallback_llm", ...} -->
-
-alice: Let's start our sprint planning meeting.
-<!-- aclarai:id=blk_abc123 ver=1 -->
-^blk_abc123
-
-bob: I've prepared the backlog for review.
-<!-- aclarai:id=blk_def456 ver=1 -->
-^blk_def456
-
-...
-```
-
-## Step 5: Try Different Formats
-
-The default plugin handles multiple conversation formats:
-
-### Simple Speaker Format
-```python
-simple_conversation = """
-john: Hey, how's the project going?
-jane: Pretty well! We're ahead of schedule.
-john: That's great news. Any blockers?
-jane: Just waiting on the design review.
-"""
-```
-
-### JSON Format
-```python
-json_conversation = """
-{
-  "messages": [
-    {"speaker": "alice", "text": "Hello everyone"},
-    {"speaker": "bob", "text": "Hi Alice, ready for the meeting?"}
-  ]
-}
-"""
-```
-
-### CSV Format
-```python
-csv_conversation = """
-timestamp,speaker,message
-09:00:00,alice,"Let's start the meeting"
-09:00:15,bob,"I have the agenda ready"
-"""
-```
-
-## Step 7: Customizing LLM Prompts (Optional)
-
-The default plugin uses externalized YAML prompt templates that you can customize to improve conversation extraction for your specific use cases.
-
-### Understanding Prompt Templates
-
-The default plugin uses a YAML template located at `prompts/conversation_extraction.yaml.example` for LLM-based conversation extraction. This template defines:
-
-- **System prompt**: The agent's role and behavior
-- **Instructions**: Step-by-step extraction guidelines  
-- **Output format**: Expected JSON structure
-- **Rules**: Specific extraction rules
-- **Template**: The actual prompt sent to the LLM
-
-### Customizing the Prompt
-
-1. **Copy the template**:
-   ```bash
-   cp prompts/conversation_extraction.yaml.example prompts/conversation_extraction.yaml
-   ```
-
-2. **Edit the template** to suit your needs:
-   ```yaml
-   # Example customization: Focus on technical conversations
-   system_prompt: |
-     You are an expert technical conversation analyst specializing in software development discussions.
-   
-   rules:
-     - "Extract technical terms and preserve exact terminology"
-     - "Identify code snippets and technical references"
-     - "Preserve URLs, file paths, and technical identifiers"
-     - "Detect technical roles (developer, architect, QA, etc.)"
-   ```
-
-3. **Test your customization**:
-   ```python
-   # The plugin will automatically use your custom prompt
-   plugin = DefaultPlugin()
-   outputs = plugin.convert(technical_conversation_text, file_path)
-   ```
-
-### Common Customizations
-
-**For Meeting Transcripts**:
-```yaml
-rules:
-  - "Identify action items and decisions"
-  - "Preserve timestamps and agenda items"
-  - "Extract meeting metadata (attendees, duration)"
-```
-
-**For Customer Support Conversations**:
-```yaml
-rules:
-  - "Identify customer issues and resolutions"
-  - "Preserve ticket numbers and reference IDs"
-  - "Extract sentiment and urgency indicators"
-```
-
-**For Educational Content**:
-```yaml
-rules:
-  - "Identify questions and answers clearly"
-  - "Preserve instructional context and examples"
-  - "Extract learning objectives and key concepts"
-```
-
-### Fallback Behavior
-
-- If `prompts/conversation_extraction.yaml` exists, the plugin uses your custom template
-- If not found, it falls back to the built-in template
-- This ensures the plugin works out-of-the-box while allowing customization
-
-### Template Variables
-
-The template must include the `{input_text}` placeholder:
-```yaml
-template: |
-  Your custom instructions here...
-  
-  INPUT TEXT:
-  {input_text}
-  
-  Extract conversations following the format above.
-```
-
-## Step 8: Understanding Plugin Behavior
-
-The default plugin demonstrates key plugin interface behaviors:
-
-```python
-plugin = DefaultPlugin()
-
-test_inputs = [
-    "random text with no conversation",
-    "alice: hello\nbob: hi there", 
-    "ENTRY [10:00] speaker >> message",
-    "",
-    "1234567890 !@#$%^&*()",
-]
-
-print("Testing can_accept() method:")
-for i, test_input in enumerate(test_inputs, 1):
-    accepts = plugin.can_accept(test_input)
-    print(f"  {i}. '{test_input[:30]}...' -> {accepts}")
-
-# Output: All return True (fallback behavior)
-```
-
-## Step 9: Integration with Plugin System
-
-In a real system, the default plugin works as part of a plugin registry:
-
-```python
-# Typical orchestrator setup
-registry = [
-    ChatGPTPlugin(),      # Specific format plugins first
-    SlackPlugin(),
-    WhatsAppPlugin(), 
-    DefaultPlugin()       # Fallback plugin last
-]
-
-# The orchestrator tries each plugin until one accepts the input
-outputs = convert_file_to_markdowns(input_file, registry)
-```
-
-When other plugins return `False` from `can_accept()`, the default plugin will always return `True` and attempt to extract conversations using its pattern matching and LLM capabilities.
-
-## Key Features Demonstrated
-
-- **Fallback Behavior**: Always accepts input when other plugins fail
-- **Multiple Format Support**: Handles various conversation structures
-- **Metadata Extraction**: Automatically extracts session IDs, topics, durations
-- **Block ID Generation**: Creates unique identifiers for each message
-- **Tier 1 Compliance**: Outputs standard aclarai Markdown format
-
-## Next Steps
-
-- Integrate with the full plugin orchestrator system
-- Add more specific format plugins for common conversation types
-- Configure LLM credentials for enhanced conversation extraction
-- Explore writing custom plugins using the default plugin as a reference
-
-## Writing Custom Plugins
-
-The default plugin demonstrates the standard plugin interface. To write your own plugin:
-
-1. **Inherit from Plugin base class**
-2. **Implement can_accept()**: Return True/False based on format detection
-3. **Implement convert()**: Extract conversations and return MarkdownOutput objects
-4. **Use shared utilities**: Leverage block ID generation and metadata helpers
-
-Example custom plugin structure:
-```python
-from aclarai_shared import Plugin, MarkdownOutput
-from aclarai_shared.utils.block_id import generate_unique_block_id
-
-class MyCustomPlugin(Plugin):
-    def can_accept(self, raw_input: str) -> bool:
-        # Check if this plugin can handle the input format
-        return "MY_FORMAT_MARKER" in raw_input
-    
-    def convert(self, raw_input: str, file_path: Path) -> List[MarkdownOutput]:
-        # Extract conversations and return formatted output
-        # Use generate_unique_block_id() for block IDs
-        pass
-```
-
-The default plugin serves as both a functional fallback and a comprehensive example for plugin development.
+For more details, see the [Plugin System Guide (`docs/guides/plugin_system_guide.md`)](<../guides/plugin_system_guide.md>).

@@ -80,6 +80,20 @@ lint.ignore = ["E501", "E203"]
 quote-style = "double"
 indent-style = "space"
 
+[tool.ruff.lint.per-file-ignores]
+# | Rule     | Reason to ignore in tests                                 |
+# | -------- | --------------------------------------------------------- |
+# | `ARG002` | Unused arguments common in tests (fixtures, mocks).       |
+# | `F841`   | Assigned but unused vars show up in side-effect tests.    |
+# | `SIM117` | `try/finally` is sometimes more readable in tests.        |
+# | `B018`   | Useless expression (e.g. bare docstrings) in test blocks. |
+"tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+"shared/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+"services/aclarai-core/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+"services/aclarai-ui/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+"services/scheduler/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+"services/vault-watcher/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+
 # Black configuration
 [tool.black]
 line-length = 88
