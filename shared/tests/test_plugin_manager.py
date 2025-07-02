@@ -24,7 +24,7 @@ class MockSpecificPlugin(Plugin):
     def can_accept(self, raw_input: str) -> bool:
         return "SPECIFIC_FORMAT" in raw_input
 
-    def convert(self, raw_input: str, path: Path) -> list[MarkdownOutput]:
+    def convert(self, _raw_input: str, _path: Path) -> list[MarkdownOutput]:
         return [
             MarkdownOutput(
                 title="Mock Specific Conversion",

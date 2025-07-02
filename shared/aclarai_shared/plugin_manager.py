@@ -19,10 +19,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from importlib.metadata import entry_points, EntryPoint
+    from importlib.metadata import EntryPoint, entry_points
 except ImportError:
     # Python < 3.8 fallback
-    from importlib_metadata import entry_points, EntryPoint  # type: ignore
+    from importlib_metadata import EntryPoint, entry_points  # type: ignore
 
 from .plugin_interface import MarkdownOutput, Plugin
 from .plugins.default_plugin import DefaultPlugin
@@ -89,13 +89,15 @@ class PluginManager:
             # Get entry points for the 'aclarai.plugins' group
             eps = entry_points()
             plugin_entries: List[EntryPoint] = []
-            
+
             if hasattr(eps, "select"):
                 # Python 3.10+ style
                 plugin_entries = list(eps.select(group="aclarai.plugins"))
             else:
-                # Python 3.8-3.9 style - eps is a dict  
-                entries: Any = eps.get("aclarai.plugins") if "aclarai.plugins" in eps else []
+                # Python 3.8-3.9 style - eps is a dict
+                entries: Any = (
+                    eps.get("aclarai.plugins") if "aclarai.plugins" in eps else []
+                )
                 plugin_entries = list(entries) if entries else []
 
             for entry_point in plugin_entries:

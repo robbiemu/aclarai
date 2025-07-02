@@ -1,87 +1,61 @@
 # Tier 1 Markdown Import System
 
-The Tier 1 import system provides a complete pipeline for importing conversation files into the aclarai vault as standardized Tier 1 Markdown documents.
+The Tier 1 import system provides a complete, orchestrated pipeline for importing conversation files into the aclarai vault as standardized Tier 1 Markdown documents. It is built on a robust, plugin-based architecture that ensures extensibility and maintainability.
+
+## Core Components
+
+The import system consists of three main components that work together to process and convert files:
+
+1.  **`Tier1ImportSystem`**: The high-level entry point for all import operations. It handles file discovery, duplicate detection, and orchestrates the entire import process.
+2.  **`ImportOrchestrator`**: The central coordinator that manages the import lifecycle for a single file. It uses the `PluginManager` to find a suitable plugin and returns a structured `ImportResult`.
+3.  **`PluginManager`**: Responsible for discovering, loading, and ordering all available import plugins. It uses Python's `entry_points` mechanism for automatic plugin registration.
+
+## Architecture and Data Flow
+
+The import process follows a clear, sequential flow, ensuring that each file is handled consistently and efficiently.
+
+```mermaid
+graph TD
+    A[Tier1ImportSystem] --> B{ImportOrchestrator};
+    B --> C{PluginManager};
+    C --> D[Discover & Order Plugins];
+    D --> E[Selects Best Plugin];
+    E --> F[Plugin.convert()];
+    F --> G[MarkdownOutput];
+    G --> B;
+    B --> H[ImportResult];
+    H --> A;
+```
+
+1.  **Initiation**: The `Tier1ImportSystem` receives a file path and initiates the import process.
+2.  **Orchestration**: It passes the file to the `ImportOrchestrator`, which takes over the conversion logic.
+3.  **Plugin Discovery**: The `ImportOrchestrator` queries the `PluginManager` to find a suitable plugin for the file format. The `PluginManager` discovers all installed plugins via `entry_points` and orders them based on priority.
+4.  **Conversion**: The highest-priority plugin that can handle the file format is selected and its `convert()` method is called.
+5.  **Structured Output**: The plugin returns one or more `MarkdownOutput` objects containing the converted text and metadata.
+6.  **Result**: The `ImportOrchestrator` wraps the result in an `ImportResult` object, which includes a status (`ImportStatus.SUCCESS`, `ImportStatus.ERROR`, etc.) and other relevant details.
+7.  **File Writing**: The `Tier1ImportSystem` receives the `ImportResult` and, if successful, performs an atomic write to save the new Tier 1 Markdown file to the vault.
 
 ## Features
 
-- **Hash-based duplicate detection**: SHA-256 hashing prevents re-importing the same content
-- **Plugin-based format conversion**: Extensible system supports multiple conversation formats
-- **Atomic file writing**: Safe `.tmp` → `fsync` → `rename` pattern prevents corruption
-- **Proper Tier 1 format**: Generates compliant Markdown with metadata and block annotations
-- **Configuration-driven**: Uses vault paths from central configuration
-- **Import logging**: Tracks successful imports for auditing and duplicate detection
+-   **Automatic Plugin Discovery**: Plugins are discovered automatically via `entry_points`, eliminating the need for manual registration. See the [Plugin System Guide (`docs/guides/plugin_system_guide.md`)](<../guides/plugin_system_guide.md>) for more details.
+-   **Structured Import Results**: The `ImportResult` dataclass provides detailed feedback on each import operation, including status, messages, and output files.
+-   **Hash-Based Duplicate Detection**: SHA-256 hashing prevents re-importing the same content.
+-   **Atomic File Writing**: A safe `.tmp` → `fsync` → `rename` pattern prevents file corruption.
+-   **Configuration-Driven**: Uses vault paths from the central `aclaraiConfig` system.
 
 ## Usage
 
 For complete usage examples and step-by-step tutorials, see:
-- **Tutorial**: `docs/tutorials/tier1_import_tutorial.md` - Complete guide with examples
-- **CLI Reference**: `shared/aclarai_shared/scripts/import_cli.py --help` - Command line options
+-   **Tutorial**: `docs/tutorials/tier1_import_tutorial.md`
+-   **CLI Reference**: `shared/aclarai_shared/scripts/import_cli.py --help`
 
-## Configuration
+## Error Handling and Statuses
 
-The import system uses the central `aclaraiConfig` system with vault path configuration. See `shared/aclarai_shared/config.py` for the `PathsConfig` dataclass implementation and `docs/ENVIRONMENT_CONFIGURATION.md` for environment variable details.
+The system uses the `ImportStatus` enum to communicate the outcome of an import operation:
 
-## Generated Format
+-   `SUCCESS`: The file was successfully converted and saved.
+-   `SKIPPED`: The file was skipped (e.g., it was empty or a directory).
+-   `IGNORED`: The file was ignored because it was a duplicate.
+-   `ERROR`: An error occurred during processing. The `message` field in the `ImportResult` will contain details.
 
-The system generates Tier 1 Markdown files with proper file-level metadata, block annotations, and Obsidian-compatible anchors. For detailed format specifications and examples, see `docs/tutorials/tier1_import_tutorial.md`.
-
-## Supported Input Formats
-
-The system supports various conversation formats through the pluggable format conversion system:
-
-- **Simple speaker format**: `alice: Hello\nbob: Hi there!`
-- **ENTRY format**: `ENTRY [10:00] alice >> Hello`
-- **With metadata**: Session IDs, topics, participants extraction
-- **Graceful fallback**: Handles unknown formats and empty files
-
-The plugin system uses a `MarkdownOutput` structure containing:
-- `title`: Conversation title (auto-generated if missing)
-- `markdown_text`: Full Markdown content to write
-- `metadata`: Optional fields including `created_at`, `participants`, `message_count`, `duration_sec`, and `plugin_metadata`
-
-## Duplicate Detection
-
-The system uses SHA-256 content hashing for duplicate detection and maintains import logs in JSON format. For usage examples, see `docs/tutorials/tier1_import_tutorial.md`.
-
-## File Naming
-
-Output files use a canonical naming scheme:
-- Format: `YYYY-MM-DD_{source_name}_{conversation_title}.md`
-- Special characters in filenames are converted to underscores
-- Date is extracted from conversation metadata or file modification time
-
-## Error Handling
-
-The system implements robust error handling with specific exception types for different failure modes. For usage examples and error handling patterns, see `docs/tutorials/tier1_import_tutorial.md`.
-
-### Atomic Write Safety
-
-The system uses a `write-temp → fsync → rename` pattern to ensure file integrity. Since Obsidian doesn't place exclusive locks on Markdown files and allows concurrent access from other programs, atomic writes prevent corruption during concurrent edits. The pattern ensures that other watchers (including Obsidian) either see the old version or the fully written new one, never a half-written file.
-
-## Testing
-
-The system includes comprehensive test coverage. See test files in `shared/tests/` for implementation details and `shared/tests/test_tier1_*.py` for running specific test suites.
-
-## Architecture Integration
-
-The import system integrates with aclarai's broader architecture:
-
-- **Plugin System**: Uses existing plugin interface and default plugin
-- **Configuration**: Leverages central configuration system
-- **Vault Structure**: Respects configured directory layout
-- **Graph Sync**: Generated files are ready for graph synchronization
-- **Obsidian Compatibility**: Safe concurrent access with Obsidian
-
-### Generated Tier 1 Format
-
-The system generates Tier 1 Markdown files where each conversation utterance becomes a block with:
-
-- **Speaker format**: `speaker: text` blocks
-- **Unique identifiers**: Each utterance gets a `<!-- aclarai:id=blk_xyz ver=1 -->` comment
-- **Obsidian anchors**: Corresponding `^blk_xyz` anchors for block references
-- **File metadata**: HTML comments at the top with conversation details
-
-This format enables:
-- Precise linking between Markdown and graph nodes
-- File-safe sync and version tracking
-- Native compatibility with Obsidian block references
+This structured approach to error handling allows consumers of the import system (like the UI) to provide clear and actionable feedback to the user.

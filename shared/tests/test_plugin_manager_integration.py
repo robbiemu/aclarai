@@ -4,9 +4,11 @@ Integration tests for plugin manager and import orchestrator.
 
 import json
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
+from aclarai_shared.config import PathsConfig, aclaraiConfig
 from aclarai_shared.import_system import Tier1ImportSystem
 from aclarai_shared.plugin_interface import MarkdownOutput, Plugin
 from aclarai_shared.plugin_manager import (
@@ -485,13 +487,12 @@ class TestPluginManagerEndToEndIntegration:
             assert len(log_data["hashes"]) == 1
             assert str(test_file) in log_data["files"]
 
-            # Test duplicate detection  
-            try:
+            # Test duplicate detection
+
+            with suppress(Exception):
                 system.import_file(test_file)
                 # Should raise DuplicateDetectionError, but we catch it
                 # This verifies the complete duplicate detection pipeline
-            except Exception:
-                pass  # Expected for duplicate detection
 
     @pytest.mark.integration
     def test_multi_format_batch_import_with_real_vault(self):
@@ -667,9 +668,6 @@ Support: Let me guide you through some troubleshooting steps.
         - Proper error logging and status tracking
         - System stability under adverse conditions
         """
-        import tempfile
-
-        from aclarai_shared.config import PathsConfig, aclaraiConfig
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Setup vault
@@ -680,11 +678,11 @@ Support: Let me guide you through some troubleshooting steps.
             tier1_dir.mkdir(parents=True)
             logs_dir.mkdir(parents=True)
 
-            config = aclaraiConfig(
+            aclaraiConfig(
                 vault_path=str(vault_dir), paths=PathsConfig(tier1="tier1", logs="logs")
             )
 
-            # We only need the orchestrator for this test 
+            # We only need the orchestrator for this test
             orchestrator = ImportOrchestrator()
 
             # Test various error scenarios

@@ -71,7 +71,10 @@ pip install -e .
 python -m aclarai_ui.main
 ```
 
-### Simulation vs. Integration
+### Backend Integration
 
--   **Initial Implementation:** The UI service was initially scaffolded with **simulated backend functions** (e.g., `simulate_plugin_orchestrator`). This allows for frontend development and testing before the real backend logic is complete.
--   **Full Integration:** As backend components are developed, these simulations are replaced with direct calls to the real import orchestrator and other functions in the `aclarai-shared` library.
+The UI service integrates directly with the `Tier1ImportSystem` located in the `aclarai-shared` library. This direct-call approach simplifies development by avoiding the need for an intermediate REST API.
+
+-   **Import Process**: When a user uploads files through the Import Panel, the UI backend calls the `Tier1ImportSystem.import_file()` method for each file.
+-   **Status Display**: The `import_file()` method returns a structured `ImportResult` object. The UI uses the `status` and `message` fields of this object to provide real-time, detailed feedback to the user in the "Live Import Queue" (e.g., `SUCCESS`, `IGNORED`, `ERROR`).
+-   **Simulations**: During early development, the UI can be run with simulated backend functions. This allows for frontend work to proceed even if the core import logic is not yet complete. These simulations are replaced with direct calls to the `Tier1ImportSystem` for full integration.
