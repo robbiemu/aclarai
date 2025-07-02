@@ -71,8 +71,8 @@ class DirtyBlockConsumer:
             self.coverage_agent: Optional[CoverageAgent] = CoverageAgent(
                 self.llm, self.tool_factory, self.config
             )
-            self.decontextualization_agent: Optional[DecontextualizationAgent] = DecontextualizationAgent(
-                self.llm, self.tool_factory, self.config
+            self.decontextualization_agent: Optional[DecontextualizationAgent] = (
+                DecontextualizationAgent(self.llm, self.tool_factory, self.config)
             )
         else:
             self.entailment_agent = None  # Explicitly set to None if LLM fails
@@ -98,7 +98,8 @@ class DirtyBlockConsumer:
                 "llm_initialized": self.llm is not None,
                 "entailment_agent_initialized": self.entailment_agent is not None,
                 "coverage_agent_initialized": self.coverage_agent is not None,
-                "decontextualization_agent_initialized": self.decontextualization_agent is not None,
+                "decontextualization_agent_initialized": self.decontextualization_agent
+                is not None,
             },
         )
 
@@ -271,6 +272,12 @@ class DirtyBlockConsumer:
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def _process_dirty_block(self, message: Dict[str, Any]) -> bool:
+        """
+        Processes a single dirty block message.
+        This version correctly groups all post-sync processing to ensure that if
+        evaluation agents are unavailable, subsequent steps like concept processing
+        are also skipped, preventing latent bugs.
+        """
         aclarai_id_from_message = message.get("aclarai_id")
         try:
             aclarai_id = message["aclarai_id"]
@@ -302,29 +309,35 @@ class DirtyBlockConsumer:
                 return False
 
             if sync_success and change_type in ("created", "modified"):
-                # Check if all evaluation agents are initialized
                 agents_available = (
-                    self.entailment_agent and self.coverage_agent and self.decontextualization_agent
+                    self.entailment_agent is not None
+                    and self.coverage_agent is not None
+                    and self.decontextualization_agent is not None
                 )
-                
+
                 if not agents_available:
-                    missing_agents = []
-                    if not self.entailment_agent:
-                        missing_agents.append("EntailmentAgent")
-                    if not self.coverage_agent:
-                        missing_agents.append("CoverageAgent")
-                    if not self.decontextualization_agent:
-                        missing_agents.append("DecontextualizationAgent")
-                    
+                    missing_agents = [
+                        name
+                        for agent, name in [
+                            (self.entailment_agent, "EntailmentAgent"),
+                            (self.coverage_agent, "CoverageAgent"),
+                            (
+                                self.decontextualization_agent,
+                                "DecontextualizationAgent",
+                            ),
+                        ]
+                        if agent is None
+                    ]
                     logger.error(
-                        f"Evaluation agents not initialized ({', '.join(missing_agents)}), skipping evaluation for block {aclarai_id}.",
+                        f"Evaluation agents not initialized ({', '.join(missing_agents)}), skipping evaluation and concept processing for block {aclarai_id}.",
                         extra={"aclarai_id": aclarai_id},
                     )
                 else:
-                    logger.info(
-                        f"Processing block {aclarai_id} for claim evaluation.",
-                        extra={"aclarai_id": aclarai_id},
-                    )
+                    # --- All processing logic now happens inside this 'else' block ---
+                    assert self.entailment_agent is not None
+                    assert self.coverage_agent is not None
+                    assert self.decontextualization_agent is not None
+
                     source_text = current_block["semantic_text"]
                     source_id = current_block["aclarai_id"]
                     absolute_file_path = (
@@ -345,7 +358,7 @@ class DirtyBlockConsumer:
                                 "aclarai_id_source": source_id,
                             },
                         )
-                        
+
                         # Entailment evaluation
                         entailment_score, err_msg_ent = (
                             self.entailment_agent.evaluate_entailment(
@@ -363,7 +376,6 @@ class DirtyBlockConsumer:
                                     "error": err_msg_ent,
                                 },
                             )
-
                         logger.info(
                             f"Claim {claim_id} entailment_score: {entailment_score}",
                             extra={
@@ -371,7 +383,7 @@ class DirtyBlockConsumer:
                                 "entailed_score": entailment_score,
                             },
                         )
-                        
+
                         # Coverage evaluation
                         coverage_score, omitted_elements, err_msg_cov = (
                             self.coverage_agent.evaluate_coverage(
@@ -389,7 +401,6 @@ class DirtyBlockConsumer:
                                     "error": err_msg_cov,
                                 },
                             )
-
                         logger.info(
                             f"Claim {claim_id} coverage_score: {coverage_score}",
                             extra={
@@ -397,7 +408,7 @@ class DirtyBlockConsumer:
                                 "coverage_score": coverage_score,
                             },
                         )
-                        
+
                         # Decontextualization evaluation
                         decontextualization_score, err_msg_decon = (
                             self.decontextualization_agent.evaluate_claim_decontextualization(
@@ -415,7 +426,6 @@ class DirtyBlockConsumer:
                                     "error": err_msg_decon,
                                 },
                             )
-
                         logger.info(
                             f"Claim {claim_id} decontextualization_score: {decontextualization_score}",
                             extra={
@@ -423,7 +433,7 @@ class DirtyBlockConsumer:
                                 "decontextualization_score": decontextualization_score,
                             },
                         )
-                        
+
                         # Update Neo4j with all scores
                         self.graph_service.update_relationship_score(
                             claim_id, source_id, "entailed_score", entailment_score
@@ -432,11 +442,13 @@ class DirtyBlockConsumer:
                             claim_id, source_id, "coverage_score", coverage_score
                         )
                         self.graph_service.update_relationship_score(
-                            claim_id, source_id, "decontextualization_score", decontextualization_score
+                            claim_id,
+                            source_id,
+                            "decontextualization_score",
+                            decontextualization_score,
                         )
-                        
-                        # Update Markdown with all scores
-                        # Only update markdown if score is not None (per architecture requirements)
+
+                        # Update Markdown if score is not None
                         if entailment_score is not None:
                             self.markdown_service.add_or_update_score(
                                 source_filepath_str,
@@ -444,7 +456,6 @@ class DirtyBlockConsumer:
                                 "entailed_score",
                                 entailment_score,
                             )
-                        
                         if coverage_score is not None:
                             self.markdown_service.add_or_update_score(
                                 source_filepath_str,
@@ -452,7 +463,6 @@ class DirtyBlockConsumer:
                                 "coverage_score",
                                 coverage_score,
                             )
-                        
                         if decontextualization_score is not None:
                             self.markdown_service.add_or_update_score(
                                 source_filepath_str,
@@ -461,22 +471,25 @@ class DirtyBlockConsumer:
                                 decontextualization_score,
                             )
 
-            if sync_success and change_type in ("created", "modified"):
-                try:
-                    concept_result = self.concept_processor.process_block_for_concepts(
-                        current_block, block_type="claim"
-                    )
-                    logger.debug(
-                        f"Concept processing for block {aclarai_id} result: {concept_result.get('merged_count', 0)} merged, {concept_result.get('promoted_count', 0)} promoted.",
-                        extra={"aclarai_id": aclarai_id},
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Concept processing (original call) failed for block {aclarai_id}: {e}",
-                        extra={"aclarai_id": aclarai_id, "error": str(e)},
-                    )
+                    # Part 2: Concept Processing
+                    try:
+                        concept_result = (
+                            self.concept_processor.process_block_for_concepts(
+                                current_block, block_type="claim"
+                            )
+                        )
+                        logger.debug(
+                            f"Concept processing for block {aclarai_id} result: {concept_result.get('merged_count', 0)} merged, {concept_result.get('promoted_count', 0)} promoted.",
+                            extra={"aclarai_id": aclarai_id},
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Concept processing failed for block {aclarai_id}: {e}",
+                            extra={"aclarai_id": aclarai_id, "error": str(e)},
+                        )
 
             return sync_success
+
         except KeyError as e:
             logger.error(
                 f"DirtyBlockConsumer: Missing required field in message: {e}. Message body: {message}",
