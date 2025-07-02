@@ -148,7 +148,8 @@ omit = [
     "*/tests/*",
     "*/test_*.py",
     "*/__pycache__/*",
-    "*/migrations/*"
+    "*/migrations/*",
+    "services/aclarai-ui/util/launch_ui_test.py",
 ]
 
 [tool.coverage.report]

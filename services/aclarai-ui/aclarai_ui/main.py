@@ -2,16 +2,16 @@
 
 import logging
 import os
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, cast
 
 import gradio as gr
+from aclarai_shared.plugin_manager import ImportOrchestrator, ImportResult
+from aclarai_shared.plugin_manager import ImportStatus as PluginImportStatus
 
 from .config import config
 from .review_panel import create_review_panel
-from aclarai_shared.plugin_manager import ImportOrchestrator, ImportStatus as PluginImportStatus, ImportResult
 
 # Configure structured logging as per docs/arch/on-error-handling-and-resilience.md
 logging.basicConfig(
@@ -39,7 +39,9 @@ class ImportStatusTracker:
         )
 
     @staticmethod
-    def _map_plugin_status_to_ui(plugin_status: PluginImportStatus, plugin_name: Optional[str] = None) -> str:
+    def _map_plugin_status_to_ui(
+        plugin_status: PluginImportStatus, plugin_name: Optional[str] = None
+    ) -> str:
         """Map plugin ImportStatus enum to UI-friendly status strings."""
         status_mapping = {
             PluginImportStatus.SUCCESS: "✅ Imported",
@@ -47,13 +49,16 @@ class ImportStatusTracker:
             PluginImportStatus.ERROR: "❌ Failed",
             PluginImportStatus.SKIPPED: "❌ Failed",  # No plugin could handle it
         }
-        
+
         status = status_mapping.get(plugin_status, "❌ Failed")
-        
+
         # Special case: if successful with DefaultPlugin, mark as fallback
-        if plugin_status == PluginImportStatus.SUCCESS and plugin_name == "DefaultPlugin":
+        if (
+            plugin_status == PluginImportStatus.SUCCESS
+            and plugin_name == "DefaultPlugin"
+        ):
             status = "⚠️ Fallback"
-            
+
         return status
 
     def add_file(self, filename: str, file_path: str):
@@ -143,15 +148,15 @@ class ImportStatusTracker:
                 "Processing file with orchestrator",
                 extra={
                     "service": "aclarai-ui",
-                    "component": "ImportStatusTracker", 
+                    "component": "ImportStatusTracker",
                     "action": "process_file",
                     "file_path": file_path,
                 },
             )
-            
+
             # Use the real orchestrator to process the file
             result = self.orchestrator.import_file(Path(file_path))
-            
+
             logger.info(
                 "File processing completed",
                 extra={
@@ -164,9 +169,9 @@ class ImportStatusTracker:
                     "result_message": result.message,
                 },
             )
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(
                 "Failed to process file with orchestrator",
@@ -184,7 +189,7 @@ class ImportStatusTracker:
                 file_path=Path(file_path),
                 status=PluginImportStatus.ERROR,
                 message=f"Processing failed: {str(e)}",
-                error_details=str(e)
+                error_details=str(e),
             )
 
     def format_queue_display(self) -> str:
@@ -299,19 +304,19 @@ def real_plugin_orchestrator(
                 },
             )
             return "No file selected for import.", "", import_status
-            
+
         filename = os.path.basename(file_path)
         logger.info(
             "Starting real plugin orchestrator processing",
             extra={
                 "service": "aclarai-ui",
-                "component": "plugin_orchestrator", 
+                "component": "plugin_orchestrator",
                 "action": "real_import",
                 "file_name": filename,
                 "file_path": file_path,
             },
         )
-        
+
         # Check for duplicates
         existing_files = [item["filename"] for item in import_status.import_queue]
         if filename in existing_files:
@@ -330,17 +335,19 @@ def real_plugin_orchestrator(
                 import_status.get_summary(),
                 import_status,
             )
-            
+
         # Add file to queue with processing status
         import_status.add_file(filename, file_path)
-        
+
         # Process file with the real orchestrator
         result = import_status.process_file_with_orchestrator(file_path)
-        
+
         # Map the result to UI status
-        ui_status = ImportStatusTracker._map_plugin_status_to_ui(result.status, result.plugin_used)
+        ui_status = ImportStatusTracker._map_plugin_status_to_ui(
+            result.status, result.plugin_used
+        )
         detector_name = result.plugin_used or "None"
-        
+
         # Handle special cases in the plugin result
         if result.status == PluginImportStatus.IGNORED:
             # File processed but no conversations found
@@ -350,16 +357,16 @@ def real_plugin_orchestrator(
             # No plugin could handle the file
             detector_name = "None"
             ui_status = "❌ Failed"
-        
+
         # Update status in the queue
         import_status.update_file_status(filename, ui_status, detector_name)
-        
+
         logger.info(
             "Real plugin orchestrator processing completed",
             extra={
                 "service": "aclarai-ui",
                 "component": "plugin_orchestrator",
-                "action": "real_import", 
+                "action": "real_import",
                 "file_name": filename,
                 "final_status": ui_status,
                 "detector": detector_name,
@@ -367,18 +374,18 @@ def real_plugin_orchestrator(
                 "result_message": result.message,
             },
         )
-        
+
         return (
             import_status.format_queue_display(),
             import_status.get_summary(),
             import_status,
         )
-        
+
     except Exception as e:
         logger.error(
             "Real plugin orchestrator processing failed",
             extra={
-                "service": "aclarai-ui", 
+                "service": "aclarai-ui",
                 "component": "plugin_orchestrator",
                 "action": "real_import",
                 "file_name": filename if "filename" in locals() else "unknown",
@@ -395,7 +402,9 @@ def real_plugin_orchestrator(
         )
 
 
-def clear_import_queue(import_status: ImportStatusTracker) -> Tuple[str, str, ImportStatusTracker]:
+def clear_import_queue(
+    import_status: ImportStatusTracker,
+) -> Tuple[str, str, ImportStatusTracker]:
     """Clear the import queue and reset statistics.
     Args:
         import_status: Current import status state
