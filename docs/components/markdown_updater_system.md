@@ -2,7 +2,7 @@
 
 ## 🎯 Purpose
 
-The `MarkdownUpdaterService` is a dedicated component responsible for safely and atomically modifying Markdown files within the aclarai vault. Its primary goal is to provide a single, reliable interface for any backend service (such as evaluation agents) that needs to add or update `aclarai`-specific metadata comments within existing documents, without corrupting the file or losing data.
+The `MarkdownUpdaterService` is a dedicated component responsible for safely and atomically modifying Markdown files within the aclarai vault. Its primary goal is to provide a single, reliable interface for any backend service (such as the `DirtyBlockConsumer` orchestrating evaluation agents) that needs to add or update `aclarai`-specific metadata comments within existing documents, without corrupting the file or losing data.
 
 This service is the cornerstone of how aclarai enriches documents with new information (like evaluation scores) while respecting the principles of data integrity and versioning.
 
@@ -36,7 +36,7 @@ graph TD
 
 ## 🐍 Usage Example
 
-Any service needing to update a Markdown file can use the `MarkdownUpdaterService`. The evaluation agents are the primary consumers of this service.
+Any service needing to update a Markdown file can use the `MarkdownUpdaterService`. The `DirtyBlockConsumer` is the primary consumer of this service, calling it after each evaluation agent completes its work.
 
 The `add_or_update_score` method provides a generic interface for persisting any evaluation score.
 
@@ -44,7 +44,6 @@ The `add_or_update_score` method provides a generic interface for persisting any
 from aclarai_core.markdown import MarkdownUpdaterService
 
 # Assume the following variables are defined from an agent's evaluation
-claim_id = "claim_123"
 source_block_id = "blk_abc123"
 file_path = "/path/to/vault/tier1/conversation.md"
 
@@ -55,7 +54,7 @@ decon_score = 0.88
 # Instantiate the service
 updater = MarkdownUpdaterService()
 
-# Example 1: The EntailmentAgent persists its score
+# Example 1: The DirtyBlockConsumer persists the entailment score
 success1 = updater.add_or_update_score(
     filepath_str=file_path,
     block_id=source_block_id,
@@ -63,7 +62,7 @@ success1 = updater.add_or_update_score(
     score=entailment_score
 )
 
-# Example 2: The CoverageAgent persists its score
+# Example 2: The DirtyBlockConsumer persists the coverage score
 success2 = updater.add_or_update_score(
     filepath_str=file_path,
     block_id=source_block_id,
@@ -71,7 +70,7 @@ success2 = updater.add_or_update_score(
     score=coverage_score
 )
 
-# Example 3: The DecontextualizationAgent persists its score
+# Example 3: The DirtyBlockConsumer persists the decontextualization score
 success3 = updater.add_or_update_score(
     filepath_str=file_path,
     block_id=source_block_id,
@@ -87,10 +86,10 @@ else:
 
 ## 🧩 Integration Points
 
-*   **Upstream (Callers):** This service is primarily called by the **Evaluation Agents** (`Entailment`, `Coverage`, `Decontextualization`) after they have computed a score for a claim.
+*   **Upstream (Callers):** This service is primarily called by the **`DirtyBlockConsumer`** after it orchestrates the evaluation agents.
 *   **Downstream (Consumers of Output):** The output of this service (the modified Markdown file) is consumed by:
     *   The **`vault-watcher`** service, which detects the file change.
-    *   The **`block_syncing_loop`** and **`vault_sync` job**, which will detect the incremented `ver=` number and updated file hash, triggering re-processing of the block.
+    *   The **`block_syncing_loop`** and **`vault_sync` job**, which will detect the incremented `ver=` number and updated file hash, triggering re-processing of the block if necessary.
 
 ## ❌ Error Handling
 

@@ -40,8 +40,10 @@ class TestDirtyBlockConsumer:
             patch("aclarai_core.dirty_block_consumer.Neo4jGraphManager"),
             patch("aclarai_core.dirty_block_consumer.ConceptProcessor"),
             patch("aclarai_core.agents.entailment_agent.CodeActAgent"),
+            # Add these two patches
+            patch("aclarai_core.dirty_block_consumer.CoverageAgent"),
+            patch("aclarai_core.dirty_block_consumer.DecontextualizationAgent"),
             patch("aclarai_core.dirty_block_consumer.BlockParser"),
-            # Patch the LLM initialization to avoid real model loading
             patch(
                 "aclarai_core.dirty_block_consumer.DirtyBlockConsumer._initialize_llm",
                 return_value=Mock(),
