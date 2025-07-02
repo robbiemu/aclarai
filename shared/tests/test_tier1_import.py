@@ -126,7 +126,7 @@ class TestTier1ImportSystem:
         assert system.vault_path == Path("/test/vault")
         assert system.import_log_dir == Path("/test/vault/logs")
         assert system.plugin_manager.get_plugin_count() >= 1  # At least default plugin
-        
+
         # Test plugin info
         plugin_info = system.get_plugin_info()
         assert "plugin_count" in plugin_info

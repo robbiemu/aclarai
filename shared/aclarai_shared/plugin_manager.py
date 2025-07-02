@@ -18,7 +18,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .plugin_interface import Plugin
+try:
+    from importlib.metadata import entry_points, EntryPoint
+except ImportError:
+    # Python < 3.8 fallback
+    from importlib_metadata import entry_points, EntryPoint  # type: ignore
+
+from .plugin_interface import MarkdownOutput, Plugin
 from .plugins.default_plugin import DefaultPlugin
 from .plugins.utils import ensure_defaults
 
@@ -45,6 +51,9 @@ class ImportResult:
     output_files: Optional[List[Path]] = None
     error_details: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    conversion_outputs: Optional[List[MarkdownOutput]] = (
+        None  # Store actual conversion results
+    )
 
 
 class PluginManager:
@@ -69,24 +78,64 @@ class PluginManager:
         """
         Discover and register all available plugins.
 
-        This method scans for plugins and registers them in the correct order:
-        1. Format-specific plugins (higher priority)
-        2. Default/fallback plugin (lowest priority)
+        This method:
+        1. Discovers plugins via entry_points (aclarai.plugins group)
+        2. Registers discovered plugins with proper ordering
+        3. Always registers DefaultPlugin as fallback (lowest priority)
         """
-        # For now, we only have the default plugin
-        # Future plugins would be discovered here via entry_points or package scanning
+        # Step 1: Discover plugins via entry_points
+        discovered_plugins: List[Plugin] = []
+        try:
+            # Get entry points for the 'aclarai.plugins' group
+            eps = entry_points()
+            plugin_entries: List[EntryPoint] = []
+            
+            if hasattr(eps, "select"):
+                # Python 3.10+ style
+                plugin_entries = list(eps.select(group="aclarai.plugins"))
+            else:
+                # Python 3.8-3.9 style - eps is a dict  
+                entries: Any = eps.get("aclarai.plugins") if "aclarai.plugins" in eps else []
+                plugin_entries = list(entries) if entries else []
 
-        # TODO: Implement automatic plugin discovery using entry_points or similar
-        # For example:
-        # import pkg_resources
-        # for entry_point in pkg_resources.iter_entry_points('aclarai.plugins'):
-        #     plugin_class = entry_point.load()
-        #     plugin = plugin_class()
-        #     self.register_plugin(plugin)
+            for entry_point in plugin_entries:
+                try:
+                    # Load the plugin class from entry point
+                    plugin_class = entry_point.load()
 
-        # Register the default plugin as fallback (always last)
+                    # Instantiate the plugin
+                    plugin = plugin_class()
+
+                    # Validate it's a proper plugin
+                    if hasattr(plugin, "can_accept") and hasattr(plugin, "convert"):
+                        discovered_plugins.append(plugin)
+                        logger.info(
+                            f"Discovered plugin via entry_points: {type(plugin).__name__}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Entry point {entry_point.name} does not implement Plugin interface"
+                        )
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to load plugin from entry point {entry_point.name}: {e}"
+                    )
+
+        except Exception as e:
+            logger.warning(f"Failed to discover plugins via entry_points: {e}")
+
+        # Step 2: Register discovered plugins (they get priority over fallback)
+        for plugin in discovered_plugins:
+            self.register_plugin(plugin, is_fallback=False)
+
+        # Step 3: Always register the default plugin as fallback (lowest priority)
         default_plugin = DefaultPlugin()
         self.register_plugin(default_plugin, is_fallback=True)
+
+        logger.info(
+            f"Plugin discovery complete: {len(discovered_plugins)} from entry_points + 1 default plugin"
+        )
 
     def register_plugin(self, plugin: Plugin, is_fallback: bool = False) -> None:
         """
@@ -265,9 +314,10 @@ class ImportOrchestrator:
                     message=f"Successfully processed {len(processed_outputs)} conversation(s)",
                     plugin_used=plugin_name,
                     output_files=None,  # Will be set by higher-level import system
+                    conversion_outputs=processed_outputs,  # Store the actual conversion outputs
                     metadata={
                         "conversation_count": len(processed_outputs),
-                        "plugin_metadata": processed_outputs[0].metadata.get(
+                        "plugin_metadata": (processed_outputs[0].metadata or {}).get(
                             "plugin_metadata", {}
                         )
                         if processed_outputs
