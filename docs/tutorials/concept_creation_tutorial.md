@@ -72,19 +72,32 @@ concepts = neo4j_manager.create_concepts(promoted_concept_inputs)
 # - Timestamp and version tracking
 ```
 
-### Step 4: Tier 3 File Generation
+### Step 4: Concept Summary Generation
 
-Finally, each new concept automatically gets a Tier 3 Markdown file:
+The final step generates rich, detailed Markdown files for each concept using the Concept Summary Agent, which employs a RAG (Retrieval-Augmented Generation) workflow to create comprehensive concept pages:
 
 ```python
-from aclarai_shared.tier3_concept import ConceptFileWriter
+from aclarai_shared.concept_summary_agent import ConceptSummaryAgent
 
-writer = ConceptFileWriter()
+# Initialize the agent
+agent = ConceptSummaryAgent()
 
-# Creates a file for each concept
-for concept in created_concepts:
-    success = writer.write_concept_file(concept)
+# Generate pages for all canonical concepts
+result = agent.run_agent()
+
+# The agent automatically:
+# - Retrieves supporting claims and summaries from Neo4j
+# - Finds related concepts via vector similarity search
+# - Generates intelligent content using LLM
+# - Creates properly formatted Markdown files atomically
 ```
+
+The Concept Summary Agent uses a sophisticated RAG workflow to create content:
+
+1. **Graph Retrieval**: Fetches claims and summaries related to the concept via Neo4j relationships
+2. **Vector Search**: Finds semantically related concepts and utterances using vector similarity
+3. **LLM Generation**: Synthesizes retrieved context into coherent concept definitions and examples
+4. **Atomic Writing**: Safely writes complete files to prevent corruption during vault monitoring
 
 ## Generated File Structure
 
@@ -102,22 +115,32 @@ Concept filenames are generated from the concept text using filesystem-safe tran
 
 ### File Content Template
 
-Each generated concept file follows this structure:
+Each generated concept file follows this enhanced structure created by the Concept Summary Agent:
 
 ```markdown
 ## Concept: machine learning
 
-This concept was automatically extracted and promoted from processed content.
+Machine learning is a field of artificial intelligence focused on algorithms that improve automatically through experience, enabling computers to learn patterns from data without explicit programming for each task.
 
 ### Examples
-<!-- Examples will be added when claims are linked to this concept -->
+- ML algorithms can identify patterns in medical imaging data to assist diagnosis ^claim_ml_medical_123
+- Recommendation systems use machine learning to personalize content delivery ^summary_ml_recommendations_456
+- Natural language processing applies ML techniques to understand human language ^claim_nlp_ml_789
 
 ### See Also
-<!-- Related concepts will be added through concept linking -->
+- [[artificial intelligence]]
+- [[data science]]
+- [[neural networks]]
 
 <!-- aclarai:id=concept_machine_learning_123 ver=1 -->
 ^concept_machine_learning_123
 ```
+
+Key improvements over basic concept files:
+- **Intelligent Definitions**: LLM-generated explanations based on available context
+- **Rich Examples**: Real claims and summaries that support or mention the concept
+- **Semantic Relationships**: Vector search finds related concepts automatically
+- **Proper Anchoring**: All examples include ^anchor references for Obsidian linking
 
 ## Key Components Explained
 
@@ -200,6 +223,12 @@ Customize concept creation behavior in your `settings/aclarai.config.yaml`:
 ```yaml
 concept_detection:
   similarity_threshold: 0.85  # Higher = more strict concept merging
+
+concept_summaries:
+  model: "gpt-4"              # LLM for generating concept content
+  max_examples: 5             # Maximum examples per concept page
+  skip_if_no_claims: true     # Skip concepts without supporting evidence
+  include_see_also: true      # Include related concepts section
   
 embedding:
   default_model: "sentence-transformers/all-MiniLM-L6-v2"
@@ -231,9 +260,10 @@ grep "promoted concepts" aclarai.log
 
 ## Next Steps
 
-- **Concept Linking**: Connect related concepts through manual editing
-- **Example Addition**: Add real-world examples to concept files
-- **Relationship Mapping**: Use Obsidian's graph view to explore concept networks
-- **Custom Templates**: Modify concept file templates in the codebase
+- **Manual Curation**: Review and edit generated concept pages to add domain expertise
+- **Concept Linking**: The agent automatically creates [[wiki-style links]] to related concepts
+- **Example Enrichment**: As more content is processed, concept pages automatically gain more examples
+- **Vector Search Optimization**: Fine-tune similarity thresholds to improve related concept discovery
+- **Custom Prompts**: Modify the agent's LLM prompts for domain-specific concept generation
 
-The concept creation system provides a foundation for building a comprehensive knowledge graph that grows automatically as you process more content through aclarai.
+The Concept Summary Agent provides an intelligent foundation for building a comprehensive knowledge graph that grows automatically as you process more content through aclarai, creating rich, interconnected concept pages that serve as the backbone of your knowledge base.

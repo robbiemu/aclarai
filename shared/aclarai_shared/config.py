@@ -98,6 +98,16 @@ class NounPhraseExtractionConfig:
 
 
 @dataclass
+class ConceptSummariesConfig:
+    """Configuration for the Concept Summary Agent."""
+
+    model: str = "gpt-4"
+    max_examples: int = 5
+    skip_if_no_claims: bool = True
+    include_see_also: bool = True
+
+
+@dataclass
 class ThresholdConfig:
     """Configuration for various similarity and processing thresholds."""
 
@@ -222,6 +232,9 @@ class aclaraiConfig:
     concepts: ConceptsConfig = field(default_factory=ConceptsConfig)
     noun_phrase_extraction: NounPhraseExtractionConfig = field(
         default_factory=NounPhraseExtractionConfig
+    )
+    concept_summaries: ConceptSummariesConfig = field(
+        default_factory=ConceptSummariesConfig
     )
     threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
     vault_watcher: VaultWatcherConfig = field(default_factory=VaultWatcherConfig)
@@ -366,6 +379,14 @@ class aclaraiConfig:
                 "default_status", "pending"
             ),
         )
+        # Load concept summaries configuration from YAML
+        concept_summaries_config = yaml_config.get("concept_summaries", {})
+        concept_summaries = ConceptSummariesConfig(
+            model=concept_summaries_config.get("model", "gpt-4"),
+            max_examples=concept_summaries_config.get("max_examples", 5),
+            skip_if_no_claims=concept_summaries_config.get("skip_if_no_claims", True),
+            include_see_also=concept_summaries_config.get("include_see_also", True),
+        )
         # Load threshold configuration from YAML
         threshold_config = yaml_config.get("threshold", {})
         threshold = ThresholdConfig(
@@ -447,6 +468,7 @@ class aclaraiConfig:
             processing=processing,
             concepts=concepts,
             noun_phrase_extraction=noun_phrase_extraction,
+            concept_summaries=concept_summaries,
             threshold=threshold,
             vault_watcher=vault_watcher,
             scheduler=scheduler,

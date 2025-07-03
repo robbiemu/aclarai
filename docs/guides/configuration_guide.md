@@ -69,6 +69,12 @@ This opens a web interface at http://localhost:7861
 - **Previous Sentences (p)** (0-10): How many sentences before target sentence to include
 - **Following Sentences (f)** (0-10): How many sentences after target sentence to include
 
+**Concept Summary Configuration**:
+- **Model**: LLM model for generating concept definitions (default: uses main LLM)
+- **Max Examples** (1-20): Maximum number of examples to include per concept (default: 5)
+- **Skip If No Claims** (true/false): Skip generating pages for concepts without supporting claims (default: true)
+- **Include See Also** (true/false): Include related concepts section in generated pages (default: true)
+
 ### Making Changes
 
 1. **Load Current Settings**: The panel automatically loads your current configuration

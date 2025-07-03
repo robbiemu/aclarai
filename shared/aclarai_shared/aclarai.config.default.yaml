@@ -111,6 +111,13 @@ model:
   trending_concepts_agent: "gpt-4"
   fallback_plugin: "gpt-3.5-turbo"
 
+# Concept summary agent configuration
+concept_summaries:
+  model: "gpt-4"
+  max_examples: 5
+  skip_if_no_claims: true
+  include_see_also: true
+
 # Embedding configuration
 embedding:
   # Models configuration (following design_config_panel.md structure)
