@@ -9,7 +9,7 @@ docs/arch/on-RAG_workflow.md.
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from llama_index.llms.openai import OpenAI
 
@@ -18,7 +18,7 @@ from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.import_system import write_file_atomically
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.tools.implementations.vector_search_tool import VectorSearchTool
-from aclarai_shared.tools.vector_store_manager import VectorStoreManager
+from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class ConceptSummaryAgent:
         self,
         config: Optional[aclaraiConfig] = None,
         neo4j_manager: Optional[Neo4jGraphManager] = None,
-        vector_store_manager: Optional[VectorStoreManager] = None,
+        vector_store_manager: Optional[aclaraiVectorStoreManager] = None,
     ):
         """
         Initialize the Concept Summary Agent.
@@ -57,7 +57,7 @@ class ConceptSummaryAgent:
         # Initialize vector store manager and tool factory
         if vector_store_manager is None:
             try:
-                vector_store_manager = VectorStoreManager(config)
+                vector_store_manager = aclaraiVectorStoreManager(config)
             except Exception as e:
                 logger.warning(
                     f"Could not initialize vector store manager: {e}",
@@ -74,7 +74,14 @@ class ConceptSummaryAgent:
         # Initialize tool factory and vector search tool
         if vector_store_manager:
             try:
-                tool_factory = ToolFactory(config.model_dump(), vector_store_manager)
+                # Check if config has model_dump method (Pydantic model) or convert dict
+                if hasattr(config, 'model_dump'):
+                    config_dict = config.model_dump()
+                else:
+                    # Fallback for non-Pydantic config objects
+                    config_dict = {}
+
+                tool_factory = ToolFactory(config_dict, vector_store_manager)
                 tools = tool_factory.get_tools_for_agent("concept_summary")
                 self.vector_search_tool = None
                 for tool in tools:
@@ -96,6 +103,7 @@ class ConceptSummaryAgent:
 
         # Initialize LLM
         llm_config = config.llm
+        self.llm: Optional[OpenAI] = None
         try:
             if llm_config.provider == "openai":
                 self.llm = OpenAI(
@@ -206,7 +214,7 @@ class ConceptSummaryAgent:
             return []
 
     def get_concept_claims(
-        self, concept_id: str, limit: int = None
+        self, concept_id: str, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieve claims related to a concept via graph relationships.
@@ -231,7 +239,7 @@ class ConceptSummaryAgent:
             if limit:
                 query += f" LIMIT {limit}"
 
-            result = self.neo4j_manager.execute_query(query, concept_id=concept_id)
+            result = self.neo4j_manager.execute_query(query, {"concept_id": concept_id})
             claims = []
 
             for record in result:
@@ -269,7 +277,7 @@ class ConceptSummaryAgent:
             return []
 
     def get_concept_summaries(
-        self, concept_id: str, limit: int = None
+        self, concept_id: str, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieve summaries related to a concept via graph relationships.
@@ -295,7 +303,7 @@ class ConceptSummaryAgent:
             if limit:
                 query += f" LIMIT {limit}"
 
-            result = self.neo4j_manager.execute_query(query, concept_id=concept_id)
+            result = self.neo4j_manager.execute_query(query, {"concept_id": concept_id})
             summaries = []
 
             for record in result:
@@ -358,20 +366,20 @@ class ConceptSummaryAgent:
 
         try:
             # Search for related concepts in the concepts collection
-            results = self.vector_search_tool.call(
-                query=concept_text,
-                collections=["concepts"],
-                max_results_per_collection=limit,
-                similarity_threshold=0.7,
-            )
+            results = []
+            if "concepts" in self.vector_search_tool._vector_stores:
+                results = self.vector_search_tool._search_collection(
+                    collection="concepts",
+                    query=concept_text,
+                    max_results=limit
+                )
 
             related_concepts = []
-            if "concepts" in results:
-                for result in results["concepts"]:
-                    # Extract concept name from result text or metadata
-                    concept_name = result.get("text", "").strip()
-                    if concept_name and concept_name.lower() != concept_text.lower():
-                        related_concepts.append(concept_name)
+            for result in results:
+                # Extract concept name from result text or metadata
+                concept_name = result.get("text", "").strip()
+                if concept_name and concept_name.lower() != concept_text.lower():
+                    related_concepts.append(concept_name)
 
             logger.debug(
                 f"Found {len(related_concepts)} related concepts for '{concept_text}'",
@@ -426,23 +434,23 @@ class ConceptSummaryAgent:
 
         try:
             # Search for related utterances in the utterances collection
-            results = self.vector_search_tool.call(
-                query=concept_text,
-                collections=["utterances"],
-                max_results_per_collection=limit,
-                similarity_threshold=0.6,  # Lower threshold for utterances as they may be less direct
-            )
+            results = []
+            if "utterances" in self.vector_search_tool._vector_stores:
+                results = self.vector_search_tool._search_collection(
+                    collection="utterances",
+                    query=concept_text,
+                    max_results=limit
+                )
 
             related_utterances = []
-            if "utterances" in results:
-                for result in results["utterances"]:
-                    utterance_data = {
-                        "text": result.get("text", "").strip(),
-                        "metadata": result.get("metadata", {}),
-                        "score": result.get("score", 0.0),
-                    }
-                    if utterance_data["text"]:
-                        related_utterances.append(utterance_data)
+            for result in results:
+                utterance_data = {
+                    "text": result.get("text", "").strip(),
+                    "metadata": result.get("metadata", {}),
+                    "score": result.get("score", 0.0),
+                }
+                if utterance_data["text"]:
+                    related_utterances.append(utterance_data)
 
             logger.debug(
                 f"Found {len(related_utterances)} related utterances for '{concept_text}'",
@@ -645,8 +653,10 @@ class ConceptSummaryAgent:
         prompt = "\n".join(prompt_parts)
 
         try:
+            if self.llm is None:
+                return None
             response = self.llm.complete(prompt)
-            content = response.text.strip()
+            content = str(response.text).strip()
 
             # Ensure proper metadata is included
             aclarai_id = concept.get("aclarai_id") or f"concept_{concept_slug}"
@@ -841,6 +851,11 @@ class ConceptSummaryAgent:
             # Write file atomically
             write_file_atomically(file_path, content)
 
+            # Count items safely for logging
+            claims_count = len(cast(List[Any], context.get("claims", [])))
+            summaries_count = len(cast(List[Any], context.get("summaries", [])))
+            concepts_count = len(cast(List[Any], context.get("related_concepts", [])))
+
             logger.info(
                 f"Successfully generated concept page: {filename}",
                 extra={
@@ -849,9 +864,9 @@ class ConceptSummaryAgent:
                     "concept_id": concept_id,
                     "concept_text": concept_text,
                     "file_path": str(file_path),
-                    "claims_found": len(context["claims"]),
-                    "summaries_found": len(context["summaries"]),
-                    "related_concepts_found": len(context["related_concepts"]),
+                    "claims_found": claims_count,
+                    "summaries_found": summaries_count,
+                    "related_concepts_found": concepts_count,
                 },
             )
             return True
