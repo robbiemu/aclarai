@@ -5,6 +5,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from llama_index.core.tools import BaseTool, ToolMetadata
 
+from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
+
+from .implementations.claim_search_tool import ClaimSearchTool
 from .implementations.neo4j_tool import Neo4jQueryTool
 from .implementations.vector_search_tool import VectorSearchTool
 from .implementations.web_search.base import WebSearchTool
@@ -22,11 +25,15 @@ class ToolFactory:
     """
 
     def __init__(
-        self, config: Dict[str, Any], vector_store_manager: VectorStoreManager
+        self,
+        config: Dict[str, Any],
+        vector_store_manager: VectorStoreManager,
+        neo4j_manager: Optional[Neo4jGraphManager] = None,
     ) -> None:
         """Initialize the tool factory."""
         self._config = config.get("tools", {})
         self.vector_store_manager = vector_store_manager
+        self.neo4j_manager = neo4j_manager
         # Instance-level cache to store initialized tools for each agent
         self._agent_tool_cache: Dict[str, List[BaseTool | Callable[..., Any]]] = {}
 
@@ -61,6 +68,8 @@ class ToolFactory:
                 tool = self._initialize_vector_search_tool(params)
             elif tool_type == "Neo4jQueryTool":
                 tool = self._initialize_neo4j_tool(self._config.get("neo4j", {}))
+            elif tool_type == "ClaimSearchTool":
+                tool = self._initialize_claim_search_tool()
             elif tool_type == "WebSearchTool":
                 tool = self._initialize_web_search_tool(
                     self._config.get("web_search", {})
@@ -72,14 +81,28 @@ class ToolFactory:
                 continue
 
             if tool:
-                # Allow agent-specific metadata to override the tool's default metadata
-                if "metadata" in params:
-                    tool.metadata = ToolMetadata(**params["metadata"])
                 tools.append(tool)
 
         # Store the newly created tool list in the cache before returning
         self._agent_tool_cache[agent_name] = tools
         return tools
+
+    def _initialize_claim_search_tool(self) -> Optional[ClaimSearchTool]:
+        """Initialize the ClaimSearchTool."""
+        if not self.neo4j_manager:
+            logger.error("Neo4j manager not available for ClaimSearchTool.")
+            return None
+        try:
+            metadata = ToolMetadata(
+                name="claim_search",
+                description="Searches for claims related to a given concept.",
+            )
+            tool = ClaimSearchTool(self.neo4j_manager, metadata)
+            logger.info("Successfully initialized ClaimSearchTool.")
+            return tool
+        except Exception as e:
+            logger.error(f"Failed to initialize ClaimSearchTool: {str(e)}")
+            return None
 
     def _initialize_neo4j_tool(
         self, config: Dict[str, Any]

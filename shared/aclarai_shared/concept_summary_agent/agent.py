@@ -11,13 +11,17 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+from llama_index.core.agent import AgentRunner
+from llama_index.core.tools import BaseTool
 from llama_index.llms.openai import OpenAI
 
+from aclarai_shared.concept_summary_agent.sub_agents.retrieval_agents import (
+    create_retrieval_agent,
+)
 from aclarai_shared.config import aclaraiConfig
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.import_system import write_file_atomically
 from aclarai_shared.tools.factory import ToolFactory
-from aclarai_shared.tools.implementations.vector_search_tool import VectorSearchTool
 from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
 
 logger = logging.getLogger(__name__)
@@ -71,36 +75,6 @@ class ConceptSummaryAgent:
 
         self.vector_store_manager = vector_store_manager
 
-        # Initialize tool factory and vector search tool
-        if vector_store_manager:
-            try:
-                # Check if config has model_dump method (Pydantic model) or convert dict
-                if hasattr(config, "model_dump"):
-                    config_dict = config.model_dump()
-                else:
-                    # Fallback for non-Pydantic config objects
-                    config_dict = {}
-
-                tool_factory = ToolFactory(config_dict, vector_store_manager)
-                tools = tool_factory.get_tools_for_agent("concept_summary")
-                self.vector_search_tool = None
-                for tool in tools:
-                    if isinstance(tool, VectorSearchTool):
-                        self.vector_search_tool = tool
-                        break
-            except Exception as e:
-                logger.warning(
-                    f"Could not initialize vector search tool: {e}",
-                    extra={
-                        "service": "aclarai",
-                        "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.__init__",
-                        "error": str(e),
-                    },
-                )
-                self.vector_search_tool = None
-        else:
-            self.vector_search_tool = None
-
         # Initialize LLM
         llm_config = config.llm
         self.llm: Optional[OpenAI] = None
@@ -125,6 +99,54 @@ class ConceptSummaryAgent:
             )
             self.llm = None
             self.model_name = "template-fallback"
+
+        # Initialize sub-agents
+        self.claim_retrieval_agent: Optional[AgentRunner] = None
+        self.related_concepts_agent: Optional[AgentRunner] = None
+
+        if self.llm and vector_store_manager:
+            try:
+                tool_factory = ToolFactory(
+                    config.model_dump() if hasattr(config, "model_dump") else {},
+                    vector_store_manager,
+                    self.neo4j_manager,
+                )
+
+                claim_tools_raw = tool_factory.get_tools_for_agent("claim_retrieval")
+                claim_tools: List[BaseTool] = [
+                    tool for tool in claim_tools_raw if isinstance(tool, BaseTool)
+                ]
+                self.claim_retrieval_agent = create_retrieval_agent(
+                    tools=claim_tools,
+                    llm=self.llm,
+                    system_prompt="You are an expert in retrieving claims related to a specific concept from a knowledge graph. "
+                    "Use the available tools to find and return a list of claims.",
+                )
+
+                # Create RelatedConceptsAgent
+                related_concepts_tools_raw = tool_factory.get_tools_for_agent(
+                    "related_concepts"
+                )
+                related_concepts_tools: List[BaseTool] = [
+                    tool
+                    for tool in related_concepts_tools_raw
+                    if isinstance(tool, BaseTool)
+                ]
+                self.related_concepts_agent = create_retrieval_agent(
+                    tools=related_concepts_tools,
+                    llm=self.llm,
+                    system_prompt="You are an expert in finding semantically similar concepts using a vector store. "
+                    "Use the available tools to find and return a list of related concepts.",
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize sub-agents: {e}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.__init__",
+                        "error": str(e),
+                    },
+                )
 
         # Initialize concept summaries config with defaults
         concept_summaries_config = getattr(config, "concept_summaries", {})
@@ -157,7 +179,10 @@ class ConceptSummaryAgent:
                 "max_examples": self.max_examples,
                 "skip_if_no_claims": self.skip_if_no_claims,
                 "include_see_also": self.include_see_also,
-                "vector_search_available": self.vector_search_tool is not None,
+                "claim_retrieval_agent_available": self.claim_retrieval_agent
+                is not None,
+                "related_concepts_agent_available": self.related_concepts_agent
+                is not None,
                 "llm_available": self.llm is not None,
             },
         )
@@ -213,265 +238,6 @@ class ConceptSummaryAgent:
             )
             return []
 
-    def get_concept_claims(
-        self, concept_id: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve claims related to a concept via graph relationships.
-
-        Args:
-            concept_id: The concept ID to find claims for
-            limit: Maximum number of claims to return
-
-        Returns:
-            List of claim dictionaries with text and aclarai_id
-        """
-        try:
-            # Build query with optional limit
-            query = """
-            MATCH (c:Concept {id: $concept_id})
-            MATCH (claim:Claim)-[r:SUPPORTS_CONCEPT|MENTIONS_CONCEPT|CONTRADICTS_CONCEPT]->(c)
-            RETURN claim.text as text, claim.id as claim_id, claim.aclarai_id as aclarai_id,
-                   type(r) as relationship_type, r.strength as strength
-            ORDER BY r.strength DESC, claim.timestamp DESC
-            """
-
-            if limit:
-                query += f" LIMIT {limit}"
-
-            result = self.neo4j_manager.execute_query(query, {"concept_id": concept_id})
-            claims = []
-
-            for record in result:
-                claims.append(
-                    {
-                        "text": record["text"],
-                        "claim_id": record["claim_id"],
-                        "aclarai_id": record["aclarai_id"],
-                        "relationship_type": record["relationship_type"],
-                        "strength": record["strength"],
-                    }
-                )
-
-            logger.debug(
-                f"Retrieved {len(claims)} claims for concept {concept_id}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_concept_claims",
-                    "concept_id": concept_id,
-                    "claims_count": len(claims),
-                },
-            )
-            return claims
-
-        except Exception as e:
-            logger.error(
-                f"Failed to retrieve claims for concept {concept_id}: {e}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_concept_claims",
-                    "concept_id": concept_id,
-                    "error": str(e),
-                },
-            )
-            return []
-
-    def get_concept_summaries(
-        self, concept_id: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve summaries related to a concept via graph relationships.
-
-        Args:
-            concept_id: The concept ID to find summaries for
-            limit: Maximum number of summaries to return
-
-        Returns:
-            List of summary dictionaries with text and aclarai_id
-        """
-        try:
-            # Build query with optional limit
-            query = """
-            MATCH (c:Concept {id: $concept_id})
-            MATCH (summary:Summary)-[r:MENTIONS_CONCEPT|RELATES_TO]->(c)
-            RETURN summary.text as text, summary.id as summary_id,
-                   summary.aclarai_id as aclarai_id,
-                   type(r) as relationship_type
-            ORDER BY summary.timestamp DESC
-            """
-
-            if limit:
-                query += f" LIMIT {limit}"
-
-            result = self.neo4j_manager.execute_query(query, {"concept_id": concept_id})
-            summaries = []
-
-            for record in result:
-                summaries.append(
-                    {
-                        "text": record["text"],
-                        "summary_id": record["summary_id"],
-                        "aclarai_id": record["aclarai_id"],
-                        "relationship_type": record["relationship_type"],
-                    }
-                )
-
-            logger.debug(
-                f"Retrieved {len(summaries)} summaries for concept {concept_id}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_concept_summaries",
-                    "concept_id": concept_id,
-                    "summaries_count": len(summaries),
-                },
-            )
-            return summaries
-
-        except Exception as e:
-            logger.error(
-                f"Failed to retrieve summaries for concept {concept_id}: {e}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_concept_summaries",
-                    "concept_id": concept_id,
-                    "error": str(e),
-                },
-            )
-            return []
-
-    def get_related_concepts(self, concept_text: str, limit: int = 5) -> List[str]:
-        """
-        Get related concepts using vector similarity search.
-
-        Uses the VectorSearchTool to find semantically similar concepts in the
-        concepts vector store.
-
-        Args:
-            concept_text: The concept text to find related concepts for
-            limit: Maximum number of related concepts to return
-
-        Returns:
-            List of related concept names
-        """
-        if not self.vector_search_tool:
-            logger.debug(
-                f"Vector search tool not available for related concepts search: '{concept_text}'",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_concepts",
-                    "concept_text": concept_text,
-                },
-            )
-            return []
-
-        try:
-            # Search for related concepts in the concepts collection
-            results = []
-            if "concepts" in self.vector_search_tool._vector_stores:
-                results = self.vector_search_tool._search_collection(
-                    collection="concepts", query=concept_text, max_results=limit
-                )
-
-            related_concepts = []
-            for result in results:
-                # Extract concept name from result text or metadata
-                concept_name = result.get("text", "").strip()
-                if concept_name and concept_name.lower() != concept_text.lower():
-                    related_concepts.append(concept_name)
-
-            logger.debug(
-                f"Found {len(related_concepts)} related concepts for '{concept_text}'",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_concepts",
-                    "concept_text": concept_text,
-                    "related_concepts_count": len(related_concepts),
-                },
-            )
-
-            return related_concepts[:limit]
-
-        except Exception as e:
-            logger.warning(
-                f"Vector search failed for related concepts: {e}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_concepts",
-                    "concept_text": concept_text,
-                    "error": str(e),
-                },
-            )
-            return []
-
-    def get_related_utterances(
-        self, concept_text: str, limit: int = 3
-    ) -> List[Dict[str, Any]]:
-        """
-        Get related utterances using vector similarity search.
-
-        Uses the VectorSearchTool to find relevant utterances that mention or
-        relate to the concept.
-
-        Args:
-            concept_text: The concept text to find related utterances for
-            limit: Maximum number of related utterances to return
-
-        Returns:
-            List of utterance dictionaries with text and metadata
-        """
-        if not self.vector_search_tool:
-            logger.debug(
-                f"Vector search tool not available for related utterances search: '{concept_text}'",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_utterances",
-                    "concept_text": concept_text,
-                },
-            )
-            return []
-
-        try:
-            # Search for related utterances in the utterances collection
-            results = []
-            if "utterances" in self.vector_search_tool._vector_stores:
-                results = self.vector_search_tool._search_collection(
-                    collection="utterances", query=concept_text, max_results=limit
-                )
-
-            related_utterances = []
-            for result in results:
-                utterance_data = {
-                    "text": result.get("text", "").strip(),
-                    "metadata": result.get("metadata", {}),
-                    "score": result.get("score", 0.0),
-                }
-                if utterance_data["text"]:
-                    related_utterances.append(utterance_data)
-
-            logger.debug(
-                f"Found {len(related_utterances)} related utterances for '{concept_text}'",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_utterances",
-                    "concept_text": concept_text,
-                    "related_utterances_count": len(related_utterances),
-                },
-            )
-
-            return related_utterances[:limit]
-
-        except Exception as e:
-            logger.warning(
-                f"Vector search failed for related utterances: {e}",
-                extra={
-                    "service": "aclarai",
-                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent.get_related_utterances",
-                    "concept_text": concept_text,
-                    "error": str(e),
-                },
-            )
-            return []
-
     def generate_concept_slug(self, concept_text: str) -> str:
         """
         Generate a URL-safe slug for a concept.
@@ -483,7 +249,8 @@ class ConceptSummaryAgent:
             A safe slug for use in aclarai:id
         """
         # Replace problematic characters and normalize
-        slug = re.sub(r"[^\w\s-]", "", concept_text.lower())
+        slug = concept_text.lower().replace("/", " ")
+        slug = re.sub(r"[^\w\s-]", "", slug)
         slug = re.sub(r"[-\s]+", "_", slug)
         slug = slug.strip("_")
 
@@ -604,7 +371,7 @@ class ConceptSummaryAgent:
                 f"\nClaims that support or mention this concept ({len(claims)} total):"
             )
             for _i, claim in enumerate(claims[:5]):  # Show up to 5 claims as examples
-                prompt_parts.append(f"- {claim['text']}")
+                prompt_parts.append(f"- {claim}")
 
         # Add summaries context
         summaries = context.get("summaries", [])
@@ -652,7 +419,7 @@ class ConceptSummaryAgent:
             if self.llm is None:
                 return None
             response = self.llm.complete(prompt)
-            content = str(response.text).strip()
+            content = str(response.response).strip()
 
             # Ensure proper metadata is included
             aclarai_id = concept.get("aclarai_id") or f"concept_{concept_slug}"
@@ -713,28 +480,14 @@ class ConceptSummaryAgent:
         lines.append("### Examples")
 
         claims = context.get("claims", [])
-        summaries = context.get("summaries", [])
+        context.get("summaries", [])
 
-        if claims or summaries:
-            # Combine claims and summaries for examples, limit to max_examples
-            all_examples = []
-
+        if claims:
             # Add claims first (they're typically more direct)
             for claim in claims[: self.max_examples]:
-                aclarai_id = claim.get("aclarai_id", claim.get("claim_id", "unknown"))
-                lines.append(f"- {claim['text']} ^{aclarai_id}")
-                all_examples.append(claim)
+                lines.append(f"- {claim}")
 
-            # Add summaries if we have room
-            remaining_slots = self.max_examples - len(all_examples)
-            for summary in summaries[:remaining_slots]:
-                aclarai_id = summary.get(
-                    "aclarai_id", summary.get("summary_id", "unknown")
-                )
-                lines.append(f"- {summary['text']} ^{aclarai_id}")
-                all_examples.append(summary)
-
-            if not all_examples:
+            if not claims:
                 lines.append("<!-- No examples available yet -->")
         else:
             lines.append("<!-- No examples available yet -->")
@@ -817,17 +570,23 @@ class ConceptSummaryAgent:
             )
 
             # Retrieve context using RAG workflow
+            claims: List[str] = []
+            if self.claim_retrieval_agent:
+                response = self.claim_retrieval_agent.chat(
+                    f'Find all claims related to the concept: "{concept_text}"'
+                )
+                claims = response.response if response else []
+
+            related_concepts: List[str] = []
+            if self.related_concepts_agent:
+                response = self.related_concepts_agent.chat(
+                    f'Find concepts semantically similar to: "{concept_text}"'
+                )
+                related_concepts = response.response if response else []
+
             context = {
-                "claims": self.get_concept_claims(
-                    concept_id, limit=self.max_examples * 2
-                ),
-                "summaries": self.get_concept_summaries(
-                    concept_id, limit=self.max_examples
-                ),
-                "related_concepts": self.get_related_concepts(concept_text, limit=5),
-                "related_utterances": self.get_related_utterances(
-                    concept_text, limit=3
-                ),
+                "claims": claims,
+                "related_concepts": related_concepts,
             }
 
             # Check if we should skip this concept
