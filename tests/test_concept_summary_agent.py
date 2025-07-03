@@ -58,7 +58,7 @@ def test_generate_concept_slug():
     assert agent.generate_concept_slug("machine learning") == "machine_learning"
 
     # Test concept with special characters
-    assert agent.generate_concept_slug("API/REST endpoints") == "apirest_endpoints"
+    assert agent.generate_concept_slug("API/REST endpoints") == "api_rest_endpoints"
 
     # Test concept with numbers
     assert agent.generate_concept_slug("HTTP 404 error") == "http_404_error"
@@ -141,41 +141,6 @@ def test_get_canonical_concepts_with_data():
     assert len(concepts) == 2
     assert concepts[0]["text"] == "machine learning"
     assert concepts[1]["text"] == "deep learning"
-    mock_neo4j.execute_query.assert_called_once()
-
-
-def test_get_concept_claims():
-    """Test retrieving claims for a concept."""
-    mock_config = MagicMock()
-    mock_config.paths.vault = "/tmp/test_vault"
-    mock_config.paths.tier3 = "concepts"
-    mock_neo4j = MockNeo4jManager()
-
-    # Mock Neo4j response for claims
-    mock_claims = [
-        {
-            "text": "Machine learning is a subset of AI",
-            "claim_id": "claim_1",
-            "aclarai_id": "claim_ml_subset",
-            "relationship_type": "SUPPORTS_CONCEPT",
-            "strength": 0.9,
-        },
-        {
-            "text": "ML algorithms learn from data",
-            "claim_id": "claim_2",
-            "aclarai_id": "claim_ml_algorithms",
-            "relationship_type": "MENTIONS_CONCEPT",
-            "strength": 0.8,
-        },
-    ]
-    mock_neo4j.execute_query.return_value = mock_claims
-
-    agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-
-    claims = agent.get_concept_claims("concept_1", limit=5)
-    assert len(claims) == 2
-    assert claims[0]["text"] == "Machine learning is a subset of AI"
-    assert claims[0]["relationship_type"] == "SUPPORTS_CONCEPT"
     mock_neo4j.execute_query.assert_called_once()
 
 
@@ -264,11 +229,12 @@ def test_generate_concept_page_with_atomic_write():
         agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
 
         # Mock the retrieval methods to return test data
-        agent.get_concept_claims = Mock(
-            return_value=[{"text": "Test claim", "aclarai_id": "test_claim"}]
+        agent.claim_retrieval_agent = Mock()
+        agent.claim_retrieval_agent.chat.return_value = Mock(
+            response=[{"text": "Test claim", "aclarai_id": "test_claim"}]
         )
-        agent.get_concept_summaries = Mock(return_value=[])
-        agent.get_related_concepts = Mock(return_value=[])
+        agent.related_concepts_agent = Mock()
+        agent.related_concepts_agent.chat.return_value = Mock(response=[])
 
         concept = {
             "id": "concept_1",
@@ -439,7 +405,6 @@ if __name__ == "__main__":
         test_generate_concept_filename()
         test_get_canonical_concepts_empty()
         test_get_canonical_concepts_with_data()
-        test_get_concept_claims()
         test_should_skip_concept()
         test_generate_concept_content()
         test_generate_concept_page_with_atomic_write()

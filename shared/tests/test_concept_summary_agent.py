@@ -50,7 +50,13 @@ class TestConceptSummaryAgent(unittest.TestCase):
 
         # Mock the sub-agents
         self.mock_claim_agent = MagicMock()
+        self.mock_claim_agent.chat.return_value = Response(
+            response=["claim 1 ^id1", "claim 2 ^id2"]
+        )
         self.mock_related_concepts_agent = MagicMock()
+        self.mock_related_concepts_agent.chat.return_value = Response(
+            response=["related concept 1", "related concept 2"]
+        )
         self.mock_create_retrieval_agent.side_effect = [
             self.mock_claim_agent,
             self.mock_related_concepts_agent,
@@ -70,15 +76,17 @@ class TestConceptSummaryAgent(unittest.TestCase):
     def test_generate_concept_slug_and_filename(self):
         """Test the slug and filename generation."""
         self.assertEqual(
-            self.agent.generate_concept_slug("Machine Learning"), "machine_learning"
+            self.agent.generate_concept_slug("Test/Concept"), "test_concept"
         )
+        self.assertEqual(
+            self.agent.generate_concept_slug("API/REST endpoints"), "api_rest_endpoints"
+        )
+
         self.assertEqual(
             self.agent.generate_concept_filename("Machine Learning"),
             "Machine_Learning.md",
         )
-        self.assertEqual(
-            self.agent.generate_concept_slug("Test/Concept"), "test_concept"
-        )
+
         self.assertEqual(
             self.agent.generate_concept_filename("Test/Concept"), "Test_Concept.md"
         )

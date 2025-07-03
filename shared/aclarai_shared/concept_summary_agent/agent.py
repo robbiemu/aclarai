@@ -249,7 +249,7 @@ class ConceptSummaryAgent:
             A safe slug for use in aclarai:id
         """
         # Replace problematic characters and normalize
-        slug = concept_text.lower().replace("/", " ")
+        slug = concept_text.lower().replace("/", "_")
         slug = re.sub(r"[^\w\s-]", "", slug)
         slug = re.sub(r"[-\s]+", "_", slug)
         slug = slug.strip("_")
@@ -480,16 +480,36 @@ class ConceptSummaryAgent:
         lines.append("### Examples")
 
         claims = context.get("claims", [])
-        context.get("summaries", [])
+        summaries = context.get("summaries", [])
 
         if claims:
             # Add claims first (they're typically more direct)
             for claim in claims[: self.max_examples]:
-                lines.append(f"- {claim}")
+                # Ensure claim is a dictionary and has 'text' and 'aclarai_id'
+                if (
+                    isinstance(claim, dict)
+                    and "text" in claim
+                    and "aclarai_id" in claim
+                ):
+                    lines.append(f"- {claim['text']} ^{claim['aclarai_id']}")
+                else:
+                    lines.append(f"- {claim} # Fallback for unexpected claim format")
 
-            if not claims:
-                lines.append("<!-- No examples available yet -->")
-        else:
+        if summaries:
+            # Add summaries
+            for summary in summaries[: self.max_examples]:
+                if (
+                    isinstance(summary, dict)
+                    and "text" in summary
+                    and "aclarai_id" in summary
+                ):
+                    lines.append(f"- {summary['text']} ^{summary['aclarai_id']}")
+                else:
+                    lines.append(
+                        f"- {summary} # Fallback for unexpected summary format"
+                    )
+
+        if not claims and not summaries:
             lines.append("<!-- No examples available yet -->")
 
         lines.append("")
