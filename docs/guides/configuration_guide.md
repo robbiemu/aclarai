@@ -128,7 +128,33 @@ window:
   claimify:
     p: 3  # Previous sentences
     f: 1  # Following sentences
+
+scheduler:
+  jobs:
+    top_concepts:
+      enabled: true
+      manual_only: false
+      cron: "0 4 * * *" # 4 AM daily
+      description: "Generate Top Concepts.md from PageRank analysis"
+      metric: "pagerank"
+      count: 25
+      percent: null
+      target_file: "Top Concepts.md"
 ```
+
+### Concept Highlight & Summary Jobs
+
+The `top_concepts` job generates a `Top Concepts.md` file in your vault, summarizing the most central concepts identified through graph analysis.
+
+-   **`enabled`**: (Boolean) Set to `true` to enable the job, `false` to disable it.
+-   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered, ignoring the `cron` schedule.
+-   **`cron`**: (String) A standard cron expression defining the schedule for automatic execution (e.g., `"0 4 * * *"` for daily at 4 AM).
+-   **`description`**: (String) A human-readable description of the job.
+-   **`metric`**: (String) The graph algorithm to use for identifying top concepts. Currently, `"pagerank"` is supported.
+-   **`count`**: (Integer) The number of top concepts to include in the `Top Concepts.md` file. If `percent` is also set, `count` takes precedence.
+-   **`percent`**: (Float) The percentage of top concepts to include (e.g., `0.1` for the top 10%). If `count` is also set, `count` takes precedence.
+-   **`target_file`**: (String) The name of the Markdown file where the top concepts summary will be written (e.g., `"Top Concepts.md"`).
+
 
 ## Configuration Loading
 

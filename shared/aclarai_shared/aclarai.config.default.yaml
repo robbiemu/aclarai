@@ -265,6 +265,16 @@ scheduler:
       manual_only: false
       cron: "*/30 * * * *"  # Every 30 minutes
       description: "Sync vault files with knowledge graph"
+    
+    top_concepts:
+      enabled: true
+      manual_only: false
+      cron: "0 4 * * *"  # 4 AM daily
+      description: "Generate Top Concepts.md from PageRank analysis"
+      metric: "pagerank"
+      count: 25
+      percent: null
+      target_file: "Top Concepts.md"
 
 # Feature flags
 features:

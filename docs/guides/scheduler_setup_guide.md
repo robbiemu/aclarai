@@ -77,6 +77,12 @@ The following jobs are included with aclarai by default.
 -   **Description:** Scans all Tier 3 concept files (`[[Concept]]` pages) and updates their vector embeddings if the content has changed. This keeps the semantic search index for concepts up-to-date.
 -   **Default `cron`:** `"0 3 * * *"` (Daily at 3:00 AM)
 
+### Top Concepts Job
+
+-   **ID:** `top_concepts`
+-   **Description:** This job runs PageRank analysis on the knowledge graph's concepts to identify the most important ones and writes them to a `Top Concepts.md` file.
+-   **Default `cron`:** `"0 4 * * *"` (Daily at 4 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.
