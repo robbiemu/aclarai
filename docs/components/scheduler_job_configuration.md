@@ -68,6 +68,23 @@ vault_sync:
   description: "Sync vault files with knowledge graph"
 ```
 
+### `top_concepts`
+Generates a `Top Concepts.md` file by running PageRank analysis on the knowledge graph to identify the most central concepts.
+
+**Default Configuration:**
+```yaml
+top_concepts:
+  enabled: true
+  manual_only: false
+  cron: "0 4 * * *" # 4 AM daily
+  description: "Generate Top Concepts.md from PageRank analysis"
+  metric: "pagerank"
+  count: 25
+  percent: null
+  target_file: "Top Concepts.md"
+```
+The `metric` parameter specifies the algorithm to use for identifying top concepts (e.g., `pagerank`). `count` determines the top N concepts to include, while `percent` specifies the top N% of concepts. `target_file` defines the output filename for the generated Markdown file.
+
 ## Job Execution Logic
 
 The scheduler evaluates job configuration as follows:

@@ -12,6 +12,7 @@ Key responsibilities:
 -   **Concept Embedding Refresh**: Updates vector embeddings for concept files that have been modified.
 -   **Reprocessing Tasks**: Handles content marked for reprocessing by other parts of the system.
 -   **Concept Hygiene**: (Future) Performs deduplication and refinement operations.
+-   **Concept Highlighting**: Identifies and highlights the most central concepts in the knowledge graph using PageRank analysis, generating a 'Top Concepts' summary page.
 
 ## Architecture
 
