@@ -1,6 +1,6 @@
 ### **PR Audit Instructions**
 
-You are an expert code reviewer and AI software architect. Your task is to perform a comprehensive audit of the provided pull request. Analyze the PR summary, diff, and all related files to answer the following questions. Take your time and do a deep dive into these.
+As an expert code reviewer and AI software architect, your task is to perform a comprehensive audit of the provided pull request. Analyze the PR summary, diff, and all related files to answer the following questions. Take your time and do a deep dive into these.
 
 You can assume that this is during that sprint in the `sprint_plan.md`. Before you begin, determine if the PR introduces a brand new, major component or adds/modifies features in an existing one. Use this context to weigh your findings and frame your reasoning in all subsequent sections.
 
@@ -31,7 +31,7 @@ Scan the new and changed code for any `TODO`, `FIXME`, or other placeholder comm
 #### **Section 3: Code Quality**
 
 **Instructions:**
-Review the code for quality, readability, and adherence to Pythonic principles.
+Review the code for quality, readability, and adherence to Pythonic principles. Be detail oriented, don't let small naming convention variances, incomplete algorithms, or unrealized methods get in the way of production code.
 
 **Output Format:**
 - **Overall Quality:** [Excellent | Good | Fair | Poor]

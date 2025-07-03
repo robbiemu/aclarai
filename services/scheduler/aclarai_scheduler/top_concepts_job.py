@@ -486,13 +486,34 @@ class TopConceptsJob:
             stats["error_details"].append(error_msg)
 
         finally:
-            # Clean up projected graph
+            # 1. Clean up the temporary property written to the persistent graph
             try:
-                cleanup_query = "CALL gds.graph.drop('concept_graph') YIELD graphName RETURN graphName"
-                self.neo4j_manager.query(cleanup_query)
+                cleanup_prop_query = "MATCH (c:Concept) WHERE c.pagerank_score IS NOT NULL REMOVE c.pagerank_score"
+                self.neo4j_manager.query(cleanup_prop_query)
+                logger.info(
+                    "top_concepts_job.run_job: Cleaned up pagerank_score property from nodes."
+                )
             except Exception as e:
                 logger.warning(
-                    f"top_concepts_job.run_job: Failed to clean up projected graph: {e}",
+                    f"top_concepts_job.run_job: Failed to clean up pagerank_score property from nodes: {e}",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "top_concepts_job.run_job",
+                        "cleanup_error": str(e),
+                    },
+                )
+
+            # 2. Clean up the GDS in-memory graph projection
+            try:
+                cleanup_graph_query = "CALL gds.graph.drop('concept_graph') YIELD graphName RETURN graphName"
+                self.neo4j_manager.query(cleanup_graph_query)
+                logger.info(
+                    "top_concepts_job.run_job: Cleaned up GDS projected graph 'concept_graph'."
+                )
+            except Exception as e:
+                # This error is common if the graph projection failed in the first place, so log as a warning.
+                logger.warning(
+                    f"top_concepts_job.run_job: Failed to clean up projected GDS graph 'concept_graph' (this may be expected if projection failed): {e}",
                     extra={
                         "service": "aclarai-scheduler",
                         "filename.function_name": "top_concepts_job.run_job",
