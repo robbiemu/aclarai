@@ -6,9 +6,8 @@ detailed Markdown pages for canonical concepts.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
-import pytest
 from aclarai_shared.concept_summary_agent import ConceptSummaryAgent
 
 
@@ -31,11 +30,11 @@ def test_concept_summary_agent_initialization():
     mock_config.llm.model = "gpt-4"
     mock_config.llm.api_key = "test-key"
     mock_config.model_dump.return_value = {}
-    
+
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     assert agent.config == mock_config
     assert agent.neo4j_manager == mock_neo4j
     assert agent.model_name == "gpt-4"
@@ -52,21 +51,21 @@ def test_generate_concept_slug():
     mock_config.llm.provider = "unsupported"  # This will trigger fallback
     mock_config.model_dump.return_value = {}
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     # Test normal concept
     assert agent.generate_concept_slug("machine learning") == "machine_learning"
-    
+
     # Test concept with special characters
     assert agent.generate_concept_slug("API/REST endpoints") == "apirest_endpoints"
-    
+
     # Test concept with numbers
     assert agent.generate_concept_slug("HTTP 404 error") == "http_404_error"
-    
+
     # Test empty concept
     assert agent.generate_concept_slug("") == "unnamed_concept"
-    
+
     # Test concept with only special characters
     assert agent.generate_concept_slug("@#$%") == "unnamed_concept"
 
@@ -77,15 +76,17 @@ def test_generate_concept_filename():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     # Test normal concept
     assert agent.generate_concept_filename("machine learning") == "machine_learning.md"
-    
+
     # Test concept with special characters
-    assert agent.generate_concept_filename("API/REST endpoints") == "API_REST_endpoints.md"
-    
+    assert (
+        agent.generate_concept_filename("API/REST endpoints") == "API_REST_endpoints.md"
+    )
+
     # Test very long concept name
     long_name = "a" * 250
     filename = agent.generate_concept_filename(long_name)
@@ -100,9 +101,9 @@ def test_get_canonical_concepts_empty():
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
     mock_neo4j.execute_query.return_value = []
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     concepts = agent.get_canonical_concepts()
     assert concepts == []
     mock_neo4j.execute_query.assert_called_once()
@@ -114,7 +115,7 @@ def test_get_canonical_concepts_with_data():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     # Mock Neo4j response
     mock_records = [
         {
@@ -125,7 +126,7 @@ def test_get_canonical_concepts_with_data():
             "timestamp": "2024-01-01T00:00:00Z",
         },
         {
-            "id": "concept_2", 
+            "id": "concept_2",
             "text": "deep learning",
             "aclarai_id": "concept_deep_learning",
             "version": 1,
@@ -133,9 +134,9 @@ def test_get_canonical_concepts_with_data():
         },
     ]
     mock_neo4j.execute_query.return_value = mock_records
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     concepts = agent.get_canonical_concepts()
     assert len(concepts) == 2
     assert concepts[0]["text"] == "machine learning"
@@ -149,12 +150,12 @@ def test_get_concept_claims():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     # Mock Neo4j response for claims
     mock_claims = [
         {
             "text": "Machine learning is a subset of AI",
-            "claim_id": "claim_1", 
+            "claim_id": "claim_1",
             "aclarai_id": "claim_ml_subset",
             "relationship_type": "SUPPORTS_CONCEPT",
             "strength": 0.9,
@@ -162,15 +163,15 @@ def test_get_concept_claims():
         {
             "text": "ML algorithms learn from data",
             "claim_id": "claim_2",
-            "aclarai_id": "claim_ml_algorithms", 
+            "aclarai_id": "claim_ml_algorithms",
             "relationship_type": "MENTIONS_CONCEPT",
             "strength": 0.8,
         },
     ]
     mock_neo4j.execute_query.return_value = mock_claims
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     claims = agent.get_concept_claims("concept_1", limit=5)
     assert len(claims) == 2
     assert claims[0]["text"] == "Machine learning is a subset of AI"
@@ -184,20 +185,20 @@ def test_should_skip_concept():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     # Test with skip_if_no_claims = True (default)
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     concept = {"id": "concept_1", "text": "test concept"}
-    
+
     # Should skip when no claims
     context_no_claims = {"claims": [], "summaries": []}
     assert agent.should_skip_concept(concept, context_no_claims) is True
-    
+
     # Should not skip when claims exist
     context_with_claims = {"claims": [{"text": "test claim"}], "summaries": []}
     assert agent.should_skip_concept(concept, context_with_claims) is False
-    
+
     # Test with skip_if_no_claims = False
     agent.skip_if_no_claims = False
     assert agent.should_skip_concept(concept, context_no_claims) is False
@@ -209,16 +210,16 @@ def test_generate_concept_content():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     concept = {
         "id": "concept_1",
         "text": "machine learning",
         "aclarai_id": "concept_machine_learning",
         "version": 1,
     }
-    
+
     context = {
         "claims": [
             {
@@ -234,9 +235,9 @@ def test_generate_concept_content():
         ],
         "related_concepts": ["artificial intelligence", "deep learning"],
     }
-    
+
     content = agent.generate_concept_content(concept, context)
-    
+
     # Check required sections
     assert "## Concept: machine learning" in content
     assert "### Examples" in content
@@ -254,37 +255,37 @@ def test_generate_concept_page_with_atomic_write():
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_path = Path(temp_dir)
         concepts_path = vault_path / "concepts"
-        
+
         mock_config = MagicMock()
         mock_config.paths.vault = str(vault_path)
         mock_config.paths.tier3 = "concepts"
         mock_neo4j = MockNeo4jManager()
-        
+
         agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-        
+
         # Mock the retrieval methods to return test data
-        agent.get_concept_claims = Mock(return_value=[
-            {"text": "Test claim", "aclarai_id": "test_claim"}
-        ])
+        agent.get_concept_claims = Mock(
+            return_value=[{"text": "Test claim", "aclarai_id": "test_claim"}]
+        )
         agent.get_concept_summaries = Mock(return_value=[])
         agent.get_related_concepts = Mock(return_value=[])
-        
+
         concept = {
             "id": "concept_1",
             "text": "test concept",
             "aclarai_id": "concept_test",
             "version": 1,
         }
-        
+
         # Generate the concept page
         result = agent.generate_concept_page(concept)
-        
+
         assert result is True
-        
+
         # Check that file was created
         expected_file = concepts_path / "test_concept.md"
         assert expected_file.exists()
-        
+
         # Check file content
         content = expected_file.read_text()
         assert "## Concept: test concept" in content
@@ -295,32 +296,32 @@ def test_generate_concept_page_skip_no_claims():
     """Test concept page generation when concept should be skipped."""
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_path = Path(temp_dir)
-        
+
         mock_config = MagicMock()
         mock_config.paths.vault = str(vault_path)
         mock_config.paths.tier3 = "concepts"
         mock_neo4j = MockNeo4jManager()
-        
+
         agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
         agent.skip_if_no_claims = True
-        
+
         # Mock the retrieval methods to return no data
         agent.get_concept_claims = Mock(return_value=[])
         agent.get_concept_summaries = Mock(return_value=[])
         agent.get_related_concepts = Mock(return_value=[])
-        
+
         concept = {
             "id": "concept_1",
             "text": "test concept",
             "aclarai_id": "concept_test",
             "version": 1,
         }
-        
+
         # Generate the concept page - should be skipped
         result = agent.generate_concept_page(concept)
-        
+
         assert result is False
-        
+
         # Check that no file was created
         concepts_path = Path(vault_path) / "concepts"
         if concepts_path.exists():
@@ -331,34 +332,44 @@ def test_run_agent():
     """Test running the full agent workflow."""
     with tempfile.TemporaryDirectory() as temp_dir:
         vault_path = Path(temp_dir)
-        
+
         mock_config = MagicMock()
         mock_config.paths.vault = str(vault_path)
         mock_config.paths.tier3 = "concepts"
         mock_neo4j = MockNeo4jManager()
-        
+
         agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-        
+
         # Mock the get_canonical_concepts method
         test_concepts = [
-            {"id": "concept_1", "text": "machine learning", "aclarai_id": "concept_ml", "version": 1},
-            {"id": "concept_2", "text": "deep learning", "aclarai_id": "concept_dl", "version": 1},
+            {
+                "id": "concept_1",
+                "text": "machine learning",
+                "aclarai_id": "concept_ml",
+                "version": 1,
+            },
+            {
+                "id": "concept_2",
+                "text": "deep learning",
+                "aclarai_id": "concept_dl",
+                "version": 1,
+            },
         ]
         agent.get_canonical_concepts = Mock(return_value=test_concepts)
-        
+
         # Mock the generate_concept_page method
         agent.generate_concept_page = Mock(side_effect=[True, True])
-        
+
         # Run the agent
         result = agent.run_agent()
-        
+
         assert result["success"] is True
         assert result["concepts_processed"] == 2
         assert result["concepts_generated"] == 2
         assert result["concepts_skipped"] == 0
         assert result["errors"] == 0
         assert result["error_details"] == []
-        
+
         # Verify methods were called
         agent.get_canonical_concepts.assert_called_once()
         assert agent.generate_concept_page.call_count == 2
@@ -370,14 +381,14 @@ def test_run_agent_no_concepts():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     # Mock no concepts
     agent.get_canonical_concepts = Mock(return_value=[])
-    
+
     result = agent.run_agent()
-    
+
     assert result["success"] is True
     assert result["concepts_processed"] == 0
     assert result["concepts_generated"] == 0
@@ -391,20 +402,25 @@ def test_run_agent_with_errors():
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
     mock_neo4j = MockNeo4jManager()
-    
+
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
-    
+
     # Mock concepts
     test_concepts = [
-        {"id": "concept_1", "text": "test concept", "aclarai_id": "concept_test", "version": 1},
+        {
+            "id": "concept_1",
+            "text": "test concept",
+            "aclarai_id": "concept_test",
+            "version": 1,
+        },
     ]
     agent.get_canonical_concepts = Mock(return_value=test_concepts)
-    
+
     # Mock generate_concept_page to raise an error
     agent.generate_concept_page = Mock(side_effect=Exception("Test error"))
-    
+
     result = agent.run_agent()
-    
+
     assert result["success"] is True  # Agent continues despite errors
     assert result["concepts_processed"] == 1
     assert result["concepts_generated"] == 0

@@ -31,7 +31,7 @@ def setup_logging(level: str = "INFO"):
     )
 
 
-def main():
+def main() -> int:
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
         description="Run the Concept Summary Agent to generate concept pages"
@@ -53,64 +53,66 @@ def main():
         action="store_true",
         help="Show what would be done without actually generating files",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Setup logging
     setup_logging(args.log_level)
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Load configuration
         logger.info("Loading configuration...")
-        if args.config:
-            config = load_config(config_file=args.config)
-        else:
-            config = load_config()
-        
+        config = load_config(config_file=args.config) if args.config else load_config()
+
         logger.info(f"Vault path: {config.paths.vault}")
         logger.info(f"Concepts directory: {config.paths.tier3}")
         logger.info(f"Model: {getattr(config.concept_summaries, 'model', 'default')}")
-        logger.info(f"Max examples: {getattr(config.concept_summaries, 'max_examples', 5)}")
-        logger.info(f"Skip if no claims: {getattr(config.concept_summaries, 'skip_if_no_claims', True)}")
-        
+        logger.info(
+            f"Max examples: {getattr(config.concept_summaries, 'max_examples', 5)}"
+        )
+        logger.info(
+            f"Skip if no claims: {getattr(config.concept_summaries, 'skip_if_no_claims', True)}"
+        )
+
         if args.dry_run:
             logger.info("DRY RUN MODE: Would create ConceptSummaryAgent and run it")
             logger.info("No files will be generated in dry run mode")
             return 0
-        
+
         # Create and run the agent
         logger.info("Creating ConceptSummaryAgent...")
         agent = ConceptSummaryAgent(config=config)
-        
+
         logger.info("Running ConceptSummaryAgent...")
         result = agent.run_agent()
-        
+
         # Print results
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("CONCEPT SUMMARY AGENT RESULTS")
-        print("="*50)
+        print("=" * 50)
         print(f"Success: {result['success']}")
         print(f"Concepts processed: {result['concepts_processed']}")
         print(f"Concepts generated: {result['concepts_generated']}")
         print(f"Concepts skipped: {result['concepts_skipped']}")
         print(f"Errors: {result['errors']}")
-        
-        if result['error_details']:
+
+        if result["error_details"]:
             print("\nError details:")
-            for error in result['error_details']:
+            for error in result["error_details"]:
                 print(f"  - {error}")
-        
-        if result['success']:
+
+        if result["success"]:
             logger.info("ConceptSummaryAgent completed successfully")
             return 0
         else:
             logger.error("ConceptSummaryAgent failed")
             return 1
-            
+
     except Exception as e:
         logger.error(f"Failed to run ConceptSummaryAgent: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 

@@ -75,7 +75,7 @@ class ConceptSummaryAgent:
         if vector_store_manager:
             try:
                 # Check if config has model_dump method (Pydantic model) or convert dict
-                if hasattr(config, 'model_dump'):
+                if hasattr(config, "model_dump"):
                     config_dict = config.model_dump()
                 else:
                     # Fallback for non-Pydantic config objects
@@ -369,9 +369,7 @@ class ConceptSummaryAgent:
             results = []
             if "concepts" in self.vector_search_tool._vector_stores:
                 results = self.vector_search_tool._search_collection(
-                    collection="concepts",
-                    query=concept_text,
-                    max_results=limit
+                    collection="concepts", query=concept_text, max_results=limit
                 )
 
             related_concepts = []
@@ -437,9 +435,7 @@ class ConceptSummaryAgent:
             results = []
             if "utterances" in self.vector_search_tool._vector_stores:
                 results = self.vector_search_tool._search_collection(
-                    collection="utterances",
-                    query=concept_text,
-                    max_results=limit
+                    collection="utterances", query=concept_text, max_results=limit
                 )
 
             related_utterances = []
