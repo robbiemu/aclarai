@@ -20,6 +20,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
+from .top_concepts_job import TopConceptsJob
 from .vault_sync import VaultSyncJob
 
 
@@ -37,6 +38,7 @@ class SchedulerService:
         self.scheduler: Optional[BlockingScheduler] = None
         self.vault_sync_job = VaultSyncJob(self.config)
         self.concept_refresh_job = ConceptEmbeddingRefreshJob(self.config)
+        self.top_concepts_job = TopConceptsJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -162,6 +164,47 @@ class SchedulerService:
                 },
             )
 
+        # Register top concepts job
+        top_concepts_config = self.config.scheduler.jobs.top_concepts
+        if top_concepts_config.enabled and not top_concepts_config.manual_only:
+            # Environment variable override
+            top_concepts_enabled = (
+                os.getenv("TOP_CONCEPTS_ENABLED", "true").lower() == "true"
+            )
+            top_concepts_cron = os.getenv(
+                "TOP_CONCEPTS_CRON", top_concepts_config.cron
+            )
+            if top_concepts_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_top_concepts_job,
+                    trigger=CronTrigger.from_crontab(top_concepts_cron),
+                    id="top_concepts",
+                    name="Top Concepts Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered top concepts job with cron '{top_concepts_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "top_concepts",
+                        "cron": top_concepts_cron,
+                        "description": top_concepts_config.description,
+                    },
+                )
+        elif top_concepts_config.enabled and top_concepts_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Top concepts job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "top_concepts",
+                    "manual_only": True,
+                    "description": top_concepts_config.description,
+                },
+            )
+
     def _run_vault_sync_job(self):
         """Execute the vault synchronization job."""
         # Check if automation is paused
@@ -284,6 +327,68 @@ class SchedulerService:
                 "errors": 1,
                 "error_details": [str(e)],
                 "duration": time.time() - job_start_time,
+            }
+
+    def _run_top_concepts_job(self):
+        """Execute the top concepts job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_top_concepts_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_top_concepts_job",
+                },
+            )
+            return
+
+        job_start_time = time.time()
+        job_id = f"top_concepts_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_top_concepts_job: Starting top concepts job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_top_concepts_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the top concepts job
+            stats = self.top_concepts_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_top_concepts_job: Top concepts job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_top_concepts_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "concepts_analyzed": stats["concepts_analyzed"],
+                    "top_concepts_selected": stats["top_concepts_selected"],
+                    "file_written": stats["file_written"],
+                    "pagerank_executed": stats["pagerank_executed"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_top_concepts_job: Top concepts job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_top_concepts_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "concepts_analyzed": 0,
+                "top_concepts_selected": 0,
+                "file_written": False,
+                "pagerank_executed": False,
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
             }
 
     def run(self):

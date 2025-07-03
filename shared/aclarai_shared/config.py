@@ -176,6 +176,16 @@ class JobConfig:
 
 
 @dataclass
+class TopConceptsJobConfig(JobConfig):
+    """Configuration for the Top Concepts job."""
+
+    metric: str = "pagerank"  # pagerank | degree
+    count: Optional[int] = 25  # number of top concepts (exclusive with percent)
+    percent: Optional[float] = None  # use top N% instead of fixed count
+    target_file: str = "Top Concepts.md"  # target file name in vault
+
+
+@dataclass
 class SchedulerJobsConfig:
     """Configuration for all scheduled jobs."""
 
@@ -193,6 +203,18 @@ class SchedulerJobsConfig:
             manual_only=False,
             cron="*/30 * * * *",
             description="Sync vault files with knowledge graph",
+        )
+    )
+    top_concepts: TopConceptsJobConfig = field(
+        default_factory=lambda: TopConceptsJobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 4 * * *",  # 4 AM daily
+            description="Generate Top Concepts.md from PageRank analysis",
+            metric="pagerank",
+            count=25,
+            percent=None,
+            target_file="Top Concepts.md",
         )
     )
 
