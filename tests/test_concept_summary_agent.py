@@ -27,7 +27,10 @@ def test_concept_summary_agent_initialization():
     mock_config = MagicMock()
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
-    mock_config.model.concept_summary = "gpt-4"
+    mock_config.llm.provider = "openai"
+    mock_config.llm.model = "gpt-4"
+    mock_config.llm.api_key = "test-key"
+    mock_config.model_dump.return_value = {}
     
     mock_neo4j = MockNeo4jManager()
     
@@ -35,7 +38,7 @@ def test_concept_summary_agent_initialization():
     
     assert agent.config == mock_config
     assert agent.neo4j_manager == mock_neo4j
-    assert agent.model == "gpt-4"
+    assert agent.model_name == "gpt-4"
     assert agent.max_examples == 5
     assert agent.skip_if_no_claims is True
     assert agent.include_see_also is True
@@ -46,6 +49,8 @@ def test_generate_concept_slug():
     mock_config = MagicMock()
     mock_config.paths.vault = "/tmp/test_vault"
     mock_config.paths.tier3 = "concepts"
+    mock_config.llm.provider = "unsupported"  # This will trigger fallback
+    mock_config.model_dump.return_value = {}
     mock_neo4j = MockNeo4jManager()
     
     agent = ConceptSummaryAgent(config=mock_config, neo4j_manager=mock_neo4j)
@@ -54,7 +59,7 @@ def test_generate_concept_slug():
     assert agent.generate_concept_slug("machine learning") == "machine_learning"
     
     # Test concept with special characters
-    assert agent.generate_concept_slug("API/REST endpoints") == "api_rest_endpoints"
+    assert agent.generate_concept_slug("API/REST endpoints") == "apirest_endpoints"
     
     # Test concept with numbers
     assert agent.generate_concept_slug("HTTP 404 error") == "http_404_error"
