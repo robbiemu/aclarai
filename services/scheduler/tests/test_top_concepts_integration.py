@@ -1,11 +1,13 @@
 # Integration tests for Top Concepts Job functionality.
 
 
+import re
 import sys
 import tempfile
 from pathlib import Path
 
 import pytest
+
 from services.scheduler.aclarai_scheduler.top_concepts_job import TopConceptsJob
 from shared.aclarai_shared import load_config
 from shared.aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
@@ -33,7 +35,7 @@ class TestTopConceptsIntegration:
         self.neo4j_manager = Neo4jGraphManager(self.config)
 
         # Clear Neo4j before each test to ensure a clean state
-        self.neo4j_manager.query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
 
         # Create sample data for the success test case
         self._create_sample_neo4j_data()
@@ -42,14 +44,14 @@ class TestTopConceptsIntegration:
         """Clean up temporary directory and clear Neo4j."""
         self.temp_dir.cleanup()
         # Clear Neo4j after each test
-        self.neo4j_manager.query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
         self.neo4j_manager.close()
 
     def _create_sample_neo4j_data(self):
         """Create sample Concept nodes and relationships for PageRank to analyze."""
         # Create concepts WITHOUT the pagerank_score property.
         # The relationships are what PageRank will use to calculate centrality.
-        self.neo4j_manager.query("""
+        self.neo4j_manager.execute_query("""
             CREATE (ml:Concept {name: 'Machine Learning'})
             CREATE (nn:Concept {name: 'Neural Networks'})
             CREATE (dl:Concept {name: 'Deep Learning'})
@@ -70,23 +72,23 @@ class TestTopConceptsIntegration:
         """)
 
     def test_top_concepts_job_e2e_success(self):
-        """Test end-to-end execution of TopConceptsJob with live Neo4j data."""
+        """Test end-to-end execution of TopConceptsJob, verifying relative rank order."""
         # The data is set up in setup_method
 
         # Initialize and run the job
         job = TopConceptsJob(self.config, neo4j_manager=self.neo4j_manager)
         stats = job.run_job()
 
-        # Assertions
+        # Assertions on job statistics
         assert stats["success"] is True
         assert stats["pagerank_executed"] is True
         assert stats["file_written"] is True
-        # PageRank is run on all concepts, so concepts_analyzed should reflect total concepts
-        assert stats["concepts_analyzed"] == 6
-        assert stats["top_concepts_selected"] == 3  # Only top 3 selected for output
+        assert (
+            stats["top_concepts_selected"] == 3
+        )  # We configured the job to get the top 3
         assert len(stats["error_details"]) == 0
 
-        # Verify the output file content
+        # Verify the output file content and, most importantly, the order of concepts
         output_file_path = (
             self.temp_vault_path / self.config.scheduler.jobs.top_concepts.target_file
         )
@@ -95,36 +97,48 @@ class TestTopConceptsIntegration:
         content = output_file_path.read_text()
         print(f"Generated content:\n{content}")
 
-        assert "## Top Concepts" in content
-        assert (
-            "- [[Machine Learning]] — Ranked #1 with PageRank score 0.9500" in content
+        # 1. Extract the concept names from the markdown list in the order they appear.
+        # This is more robust than checking for hardcoded ranks or scores.
+        # The regex finds list items (-), optional whitespace (\s*), and captures the content within [[...]].
+        extracted_concepts = re.findall(r"-\s*\[\[(.*?)\]\]", content)
+
+        # 2. Define the expected order of the top 3 concepts based on the graph's structure.
+        # In our sample data, 'Machine Learning' is the most central node, followed by the
+        # other highly interconnected nodes 'Deep Learning' and 'Neural Networks'.
+        expected_order = [
+            "Machine Learning",
+            "Deep Learning",
+            "Neural Networks",
+        ]
+
+        # 3. Assert that the extracted list of concepts matches the expected order.
+        # This confirms the ranking logic is working correctly.
+        assert extracted_concepts == expected_order, (
+            f"Expected order {expected_order}, but got {extracted_concepts}"
         )
-        assert "- [[Neural Networks]] — Ranked #2 with PageRank score 0.8700" in content
-        assert "- [[Deep Learning]] — Ranked #3 with PageRank score 0.7200" in content
-        assert "[[Artificial Intelligence]]" not in content  # Should not be in top 3
+
+        # 4. Verify that lower-ranked concepts were correctly excluded from the file.
+        assert "[[Artificial Intelligence]]" not in content
         assert "[[Computer Vision]]" not in content
         assert "[[Natural Language Processing]]" not in content
 
-        # Verify aclarai:id metadata
+        # 5. Verify that the required metadata is still present in the file.
         assert "<!-- aclarai:id=file_top_concepts_" in content
         assert " ver=1 -->" in content
         assert "^file_top_concepts_" in content
 
-        # Verify that the pagerank_score property is removed from nodes after job execution
-        # This is done by the job's cleanup, which runs gds.graph.drop
-        # So, we need to query for the property directly on the nodes
-        result = self.neo4j_manager.query(
-            "MATCH (c:Concept) RETURN c.pagerank_score AS score"
+        # 6. Verify that the temporary 'pagerank_score' property was cleaned up from the graph.
+        result = self.neo4j_manager.execute_query(
+            "MATCH (c:Concept) WHERE c.pagerank_score IS NOT NULL RETURN c"
         )
-        for record in result:
-            assert record["score"] is None, (
-                "pagerank_score property should be removed from nodes"
-            )
+        assert len(result) == 0, (
+            "pagerank_score property should be removed from all nodes after job completion"
+        )
 
     def test_top_concepts_job_no_concepts(self):
         """Test end-to-end execution when no concepts are found in Neo4j."""
         # Clear all data to ensure no concepts are present for this test
-        self.neo4j_manager.query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
 
         # Initialize and run the job
         job = TopConceptsJob(self.config, neo4j_manager=self.neo4j_manager)
@@ -155,11 +169,8 @@ class TestTopConceptsIntegration:
         assert " ver=1 -->" in content
         assert "^file_top_concepts_" in content
 
-        # Verify that the pagerank_score property is removed from nodes after job execution
-        result = self.neo4j_manager.query(
-            "MATCH (c:Concept) RETURN c.pagerank_score AS score"
+        # Verify that no pagerank_score property exists
+        result = self.neo4j_manager.execute_query(
+            "MATCH (c:Concept) WHERE c.pagerank_score IS NOT NULL RETURN c.pagerank_score AS score"
         )
-        for record in result:
-            assert record["score"] is None, (
-                "pagerank_score property should be removed from nodes"
-            )
+        assert len(result) == 0

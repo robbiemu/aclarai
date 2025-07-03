@@ -22,7 +22,9 @@ class TestTopConceptsJob:
 
     def test_top_concepts_job_initialization(self):
         """Test that TopConceptsJob initializes correctly."""
-        with patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager"):
+        with patch(
+            "services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager"
+        ):
             job = TopConceptsJob(self.config)
 
             assert job.config == self.config
@@ -49,7 +51,7 @@ class TestTopConceptsJob:
         assert top_concepts.percent is None
         assert top_concepts.target_file == "Top Concepts.md"
 
-    @patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
+    @patch("services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
     def test_project_concept_graph_success(self, mock_neo4j_manager):
         """Test successful graph projection."""
         # Mock Neo4j manager
@@ -57,7 +59,7 @@ class TestTopConceptsJob:
         mock_neo4j_manager.return_value = mock_manager_instance
 
         # Mock query results
-        mock_manager_instance.query.side_effect = [
+        mock_manager_instance.execute_query.side_effect = [
             [],  # Drop graph query (no existing graph)
             [
                 {"graphName": "concept_graph", "nodeCount": 10, "relationshipCount": 15}
@@ -70,9 +72,9 @@ class TestTopConceptsJob:
         result = job._project_concept_graph()
 
         assert result is True
-        assert mock_manager_instance.query.call_count == 2
+        assert mock_manager_instance.execute_query.call_count == 2
 
-    @patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
+    @patch("services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
     def test_execute_pagerank_success(self, mock_neo4j_manager):
         """Test successful PageRank execution."""
         # Mock Neo4j manager
@@ -80,7 +82,7 @@ class TestTopConceptsJob:
         mock_neo4j_manager.return_value = mock_manager_instance
 
         # Mock PageRank result
-        mock_manager_instance.query.return_value = [
+        mock_manager_instance.execute_query.return_value = [
             {"nodePropertiesWritten": 10, "ranIterations": 8}
         ]
 
@@ -90,9 +92,9 @@ class TestTopConceptsJob:
         result = job._execute_pagerank()
 
         assert result is True
-        mock_manager_instance.query.assert_called_once()
+        mock_manager_instance.execute_query.assert_called_once()
 
-    @patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
+    @patch("services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
     def test_get_top_concepts_with_count(self, mock_neo4j_manager):
         """Test getting top concepts with count configuration."""
         # Mock Neo4j manager
@@ -100,7 +102,7 @@ class TestTopConceptsJob:
         mock_neo4j_manager.return_value = mock_manager_instance
 
         # Mock concept results
-        mock_manager_instance.query.return_value = [
+        mock_manager_instance.execute_query.return_value = [
             {"name": "Concept A", "score": 0.95},
             {"name": "Concept B", "score": 0.87},
             {"name": "Concept C", "score": 0.72},
@@ -118,7 +120,7 @@ class TestTopConceptsJob:
         assert concepts[1] == ("Concept B", 0.87)
         assert concepts[2] == ("Concept C", 0.72)
 
-    @patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
+    @patch("services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
     def test_get_top_concepts_with_percent(self, mock_neo4j_manager):
         """Test getting top concepts with percent configuration."""
         # Mock Neo4j manager
@@ -126,7 +128,7 @@ class TestTopConceptsJob:
         mock_neo4j_manager.return_value = mock_manager_instance
 
         # Mock queries: first count, then results
-        mock_manager_instance.query.side_effect = [
+        mock_manager_instance.execute_query.side_effect = [
             [{"total_count": 20}],  # Count query
             [
                 {"name": "Concept A", "score": 0.95},
@@ -142,11 +144,13 @@ class TestTopConceptsJob:
         concepts = job._get_top_concepts()
 
         assert len(concepts) == 2
-        assert mock_manager_instance.query.call_count == 2
+        assert mock_manager_instance.execute_query.call_count == 2
 
     def test_generate_markdown_content(self):
         """Test markdown content generation."""
-        with patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager"):
+        with patch(
+            "services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager"
+        ):
             job = TopConceptsJob(self.config)
 
             concepts = [
@@ -169,7 +173,9 @@ class TestTopConceptsJob:
 
     def test_generate_markdown_content_empty(self):
         """Test markdown content generation with no concepts."""
-        with patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager"):
+        with patch(
+            "services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager"
+        ):
             job = TopConceptsJob(self.config)
 
             content = job._generate_markdown_content([])
@@ -180,7 +186,9 @@ class TestTopConceptsJob:
 
     def test_write_file_atomically(self):
         """Test atomic file writing."""
-        with patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager"):
+        with patch(
+            "services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager"
+        ):
             job = TopConceptsJob(self.config)
 
             # Use a temporary directory for testing
@@ -201,7 +209,7 @@ class TestTopConceptsJob:
 
                 assert written_content == content
 
-    @patch("aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
+    @patch("services.scheduler.aclarai_scheduler.top_concepts_job.Neo4jGraphManager")
     def test_run_job_success_flow(self, mock_neo4j_manager):
         """Test complete job execution flow."""
         # Mock Neo4j manager
@@ -209,7 +217,7 @@ class TestTopConceptsJob:
         mock_neo4j_manager.return_value = mock_manager_instance
 
         # Mock all Neo4j queries for successful flow
-        mock_manager_instance.query.side_effect = [
+        mock_manager_instance.execute_query.side_effect = [
             [],  # Drop graph
             [
                 {"graphName": "concept_graph", "nodeCount": 5, "relationshipCount": 8}
@@ -218,6 +226,7 @@ class TestTopConceptsJob:
             [  # Get top concepts
                 {"name": "Test Concept", "score": 0.85},
             ],
+            [],  # Cleanup property
             [],  # Cleanup graph
         ]
 

@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 import time
-from typing import Dict, Optional
+from typing import Optional
 
 from aclarai_shared import load_config
 from aclarai_shared.automation.pause_controller import is_paused
