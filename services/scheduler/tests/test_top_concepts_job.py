@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from aclarai_scheduler.top_concepts_job import TopConceptsJob
-from aclarai_shared import load_config
+from services.scheduler.aclarai_scheduler.top_concepts_job import TopConceptsJob
+from shared.aclarai_shared import load_config
 
 
 class TestTopConceptsJob:

@@ -1,16 +1,14 @@
 # Integration tests for Top Concepts Job functionality.
 
 
-import shutil
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-from aclarai_scheduler.top_concepts_job import TopConceptsJob
-from aclarai_shared import load_config
-from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
+from services.scheduler.aclarai_scheduler.top_concepts_job import TopConceptsJob
+from shared.aclarai_shared import load_config
+from shared.aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 
 # Add project root (monorepo root) to path for imports
 project_root = Path(__file__).parent.parent.parent.parent

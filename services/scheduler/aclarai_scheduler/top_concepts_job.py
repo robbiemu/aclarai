@@ -97,10 +97,10 @@ class TopConceptsJob:
 
         try:
             # Drop existing graph if it exists
-            self.neo4j_manager.query(drop_graph_query)
+            self.neo4j_manager.execute_query(drop_graph_query)
 
             # Project new graph
-            result = self.neo4j_manager.query(project_query)
+            result = self.neo4j_manager.execute_query(project_query)
 
             if result:
                 record = result[0]
@@ -155,7 +155,7 @@ class TopConceptsJob:
         """
 
         try:
-            result = self.neo4j_manager.query(pagerank_query)
+            result = self.neo4j_manager.execute_query(pagerank_query)
 
             if result:
                 record = result[0]
@@ -218,7 +218,7 @@ class TopConceptsJob:
             """
 
             try:
-                count_result = self.neo4j_manager.query(count_query)
+                count_result = self.neo4j_manager.execute_query(count_query)
                 if count_result and count_result[0]["total_count"] > 0:
                     total_count = count_result[0]["total_count"]
                     limit = max(1, int(total_count * self.job_config.percent / 100))
@@ -264,7 +264,7 @@ class TopConceptsJob:
             query_params = {"limit": limit}
 
         try:
-            result = self.neo4j_manager.query(limit_query, query_params)
+            result = self.neo4j_manager.execute_query(limit_query, query_params)
 
             if result:
                 concepts = [(record["name"], record["score"]) for record in result]
@@ -489,7 +489,7 @@ class TopConceptsJob:
             # 1. Clean up the temporary property written to the persistent graph
             try:
                 cleanup_prop_query = "MATCH (c:Concept) WHERE c.pagerank_score IS NOT NULL REMOVE c.pagerank_score"
-                self.neo4j_manager.query(cleanup_prop_query)
+                self.neo4j_manager.execute_query(cleanup_prop_query)
                 logger.info(
                     "top_concepts_job.run_job: Cleaned up pagerank_score property from nodes."
                 )
@@ -506,7 +506,7 @@ class TopConceptsJob:
             # 2. Clean up the GDS in-memory graph projection
             try:
                 cleanup_graph_query = "CALL gds.graph.drop('concept_graph') YIELD graphName RETURN graphName"
-                self.neo4j_manager.query(cleanup_graph_query)
+                self.neo4j_manager.execute_query(cleanup_graph_query)
                 logger.info(
                     "top_concepts_job.run_job: Cleaned up GDS projected graph 'concept_graph'."
                 )

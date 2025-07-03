@@ -11,7 +11,7 @@ import os
 import signal
 import sys
 import time
-from typing import Optional
+from typing import Dict, Optional
 
 from aclarai_shared import load_config
 from aclarai_shared.automation.pause_controller import is_paused
@@ -20,7 +20,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
-from .top_concepts_job import TopConceptsJob
+from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
 from .vault_sync import VaultSyncJob
 
 
@@ -171,9 +171,7 @@ class SchedulerService:
             top_concepts_enabled = (
                 os.getenv("TOP_CONCEPTS_ENABLED", "true").lower() == "true"
             )
-            top_concepts_cron = os.getenv(
-                "TOP_CONCEPTS_CRON", top_concepts_config.cron
-            )
+            top_concepts_cron = os.getenv("TOP_CONCEPTS_CRON", top_concepts_config.cron)
             if top_concepts_enabled:
                 assert self.scheduler is not None
                 self.scheduler.add_job(
@@ -329,7 +327,7 @@ class SchedulerService:
                 "duration": time.time() - job_start_time,
             }
 
-    def _run_top_concepts_job(self):
+    def _run_top_concepts_job(self) -> TopConceptsJobStats:
         """Execute the top concepts job."""
         # Check if automation is paused
         if is_paused():
@@ -340,7 +338,15 @@ class SchedulerService:
                     "filename.function_name": "scheduler.main._run_top_concepts_job",
                 },
             )
-            return
+            return {
+                "success": True,
+                "concepts_analyzed": 0,
+                "top_concepts_selected": 0,
+                "file_written": False,
+                "pagerank_executed": False,
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
 
         job_start_time = time.time()
         job_id = f"top_concepts_{int(job_start_time)}"
