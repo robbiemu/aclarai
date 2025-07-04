@@ -6,15 +6,15 @@ docs/arch/on-concepts.md and docs/arch/on-vector_stores.md.
 """
 
 import logging
-import numpy as np
-from sklearn.cluster import DBSCAN, AgglomerativeClustering
 import time
 from typing import Dict, List, Optional, Set, Tuple, TypedDict
 
+import numpy as np
 from aclarai_shared import load_config
 from aclarai_shared.config import ConceptClusteringJobConfig, aclaraiConfig
 from aclarai_shared.embedding.storage import aclaraiVectorStore
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
+from sklearn.cluster import DBSCAN, AgglomerativeClustering
 
 logger = logging.getLogger(__name__)
 
