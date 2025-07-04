@@ -11,7 +11,7 @@ import copy
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 import gradio as gr
 import yaml
@@ -209,6 +209,63 @@ def validate_window_param(
         return True, ""
     except Exception:
         return False, "Invalid window parameter value"
+
+
+def validate_concept_highlights_config(
+    top_concepts_metric: str,
+    top_concepts_count: int,
+    top_concepts_percent: float,
+    top_concepts_target_file: str,
+    trending_topics_window_days: int,
+    trending_topics_count: int,
+    trending_topics_percent: float,
+    trending_topics_min_mentions: int,
+    trending_topics_target_file: str,
+) -> Tuple[bool, List[str]]:
+    """Validate concept highlights configuration parameters.
+    
+    Returns:
+        Tuple of (is_valid, list_of_errors)
+    """
+    validation_errors = []
+    
+    # Validate top concepts metric
+    if top_concepts_metric not in ["pagerank", "degree"]:
+        validation_errors.append("Top Concepts metric must be either 'pagerank' or 'degree'")
+    
+    # Validate top concepts count/percent mutual exclusivity
+    if top_concepts_count > 0 and top_concepts_percent > 0:
+        validation_errors.append("Top Concepts count and percent cannot both be used (set one to 0)")
+    
+    # Validate top concepts percentage range
+    if top_concepts_percent > 0 and (top_concepts_percent < 0 or top_concepts_percent > 100):
+        validation_errors.append("Top Concepts percent must be between 0 and 100")
+    
+    # Validate top concepts target file
+    if not top_concepts_target_file.strip():
+        validation_errors.append("Top Concepts target_file cannot be empty")
+    
+    # Validate trending topics count/percent mutual exclusivity
+    if trending_topics_count > 0 and trending_topics_percent > 0:
+        validation_errors.append("Trending Topics count and percent cannot both be used (set one to 0)")
+    
+    # Validate trending topics percentage range
+    if trending_topics_percent > 0 and (trending_topics_percent < 0 or trending_topics_percent > 100):
+        validation_errors.append("Trending Topics percent must be between 0 and 100")
+    
+    # Validate trending topics window days
+    if trending_topics_window_days < 1:
+        validation_errors.append("Trending Topics window_days must be at least 1")
+    
+    # Validate trending topics min mentions
+    if trending_topics_min_mentions < 0:
+        validation_errors.append("Trending Topics min_mentions must be non-negative")
+    
+    # Validate trending topics target file
+    if not trending_topics_target_file.strip():
+        validation_errors.append("Trending Topics target_file cannot be empty")
+    
+    return len(validation_errors) == 0, validation_errors
 
 
 def validate_cron_expression(cron: str) -> Tuple[bool, str]:
@@ -521,39 +578,14 @@ def create_configuration_panel() -> gr.Blocks:
                 validation_errors.append(f"Vault Sync Cron: {error}")
 
             # Validate concept highlights parameters
-            # Validate top concepts metric
-            if top_concepts_metric not in ["pagerank", "degree"]:
-                validation_errors.append(f"Top Concepts Metric: Must be 'pagerank' or 'degree', got '{top_concepts_metric}'")
-
-            # Validate top concepts count/percent (should be mutually exclusive)
-            if top_concepts_count > 0 and top_concepts_percent > 0:
-                validation_errors.append("Top Concepts: Cannot use both count and percent - choose one")
-
-            if top_concepts_count < 0:
-                validation_errors.append("Top Concepts Count: Must be non-negative")
-
-            if top_concepts_percent < 0 or top_concepts_percent > 100:
-                validation_errors.append("Top Concepts Percent: Must be between 0 and 100")
-
-            # Validate trending topics parameters
-            if trending_topics_window_days < 1:
-                validation_errors.append("Trending Topics Window Days: Must be at least 1")
-
-            if trending_topics_count < 0:
-                validation_errors.append("Trending Topics Count: Must be non-negative")
-
-            if trending_topics_percent < 0 or trending_topics_percent > 100:
-                validation_errors.append("Trending Topics Percent: Must be between 0 and 100")
-
-            if trending_topics_min_mentions < 0:
-                validation_errors.append("Trending Topics Min Mentions: Must be non-negative")
-
-            # Validate target file names
-            if not top_concepts_target_file.strip():
-                validation_errors.append("Top Concepts Target File: Cannot be empty")
-
-            if not trending_topics_target_file.strip():
-                validation_errors.append("Trending Topics Target File: Cannot be empty")
+            is_valid, concept_errors = validate_concept_highlights_config(
+                top_concepts_metric, top_concepts_count, top_concepts_percent, 
+                top_concepts_target_file, trending_topics_window_days,
+                trending_topics_count, trending_topics_percent, 
+                trending_topics_min_mentions, trending_topics_target_file
+            )
+            if not is_valid:
+                validation_errors.extend(concept_errors)
 
             if validation_errors:
                 error_msg = "❌ **Validation Errors:**\n" + "\n".join(
