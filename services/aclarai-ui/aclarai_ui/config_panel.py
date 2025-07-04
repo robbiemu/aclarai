@@ -223,48 +223,58 @@ def validate_concept_highlights_config(
     trending_topics_target_file: str,
 ) -> Tuple[bool, List[str]]:
     """Validate concept highlights configuration parameters.
-    
+
     Returns:
         Tuple of (is_valid, list_of_errors)
     """
     validation_errors = []
-    
+
     # Validate top concepts metric
     if top_concepts_metric not in ["pagerank", "degree"]:
-        validation_errors.append("Top Concepts metric must be either 'pagerank' or 'degree'")
-    
+        validation_errors.append(
+            "Top Concepts metric must be either 'pagerank' or 'degree'"
+        )
+
     # Validate top concepts count/percent mutual exclusivity
     if top_concepts_count > 0 and top_concepts_percent > 0:
-        validation_errors.append("Top Concepts count and percent cannot both be used (set one to 0)")
-    
+        validation_errors.append(
+            "Top Concepts count and percent cannot both be used (set one to 0)"
+        )
+
     # Validate top concepts percentage range
-    if top_concepts_percent > 0 and (top_concepts_percent < 0 or top_concepts_percent > 100):
+    if top_concepts_percent > 0 and (
+        top_concepts_percent < 0 or top_concepts_percent > 100
+    ):
         validation_errors.append("Top Concepts percent must be between 0 and 100")
-    
+
     # Validate top concepts target file
     if not top_concepts_target_file.strip():
         validation_errors.append("Top Concepts target_file cannot be empty")
-    
+
     # Validate trending topics count/percent mutual exclusivity
     if trending_topics_count > 0 and trending_topics_percent > 0:
-        validation_errors.append("Trending Topics count and percent cannot both be used (set one to 0)")
-    
+        validation_errors.append(
+            "Trending Topics count and percent cannot both be used (set one to 0)"
+        )
+
     # Validate trending topics percentage range
-    if trending_topics_percent > 0 and (trending_topics_percent < 0 or trending_topics_percent > 100):
+    if trending_topics_percent > 0 and (
+        trending_topics_percent < 0 or trending_topics_percent > 100
+    ):
         validation_errors.append("Trending Topics percent must be between 0 and 100")
-    
+
     # Validate trending topics window days
     if trending_topics_window_days < 1:
         validation_errors.append("Trending Topics window_days must be at least 1")
-    
+
     # Validate trending topics min mentions
     if trending_topics_min_mentions < 0:
         validation_errors.append("Trending Topics min_mentions must be non-negative")
-    
+
     # Validate trending topics target file
     if not trending_topics_target_file.strip():
         validation_errors.append("Trending Topics target_file cannot be empty")
-    
+
     return len(validation_errors) == 0, validation_errors
 
 
@@ -322,15 +332,15 @@ def create_configuration_panel() -> gr.Blocks:
         bool,
         str,
         # Concept highlights configuration
-        str,   # top_concepts_metric
-        int,   # top_concepts_count
-        float, # top_concepts_percent
-        str,   # top_concepts_target_file
-        int,   # trending_topics_window_days
-        int,   # trending_topics_count
-        float, # trending_topics_percent
-        int,   # trending_topics_min_mentions
-        str,   # trending_topics_target_file
+        str,  # top_concepts_metric
+        int,  # top_concepts_count
+        float,  # top_concepts_percent
+        str,  # top_concepts_target_file
+        int,  # trending_topics_window_days
+        int,  # trending_topics_count
+        float,  # trending_topics_percent
+        int,  # trending_topics_min_mentions
+        str,  # trending_topics_target_file
     ]:
         """Load current configuration values for UI display."""
         try:
@@ -403,15 +413,21 @@ def create_configuration_panel() -> gr.Blocks:
             top_concepts_metric = top_concepts_config.get("metric", "pagerank")
             top_concepts_count = top_concepts_config.get("count", 25)
             top_concepts_percent = top_concepts_config.get("percent", 0.0)
-            top_concepts_target_file = top_concepts_config.get("target_file", "Top Concepts.md")
+            top_concepts_target_file = top_concepts_config.get(
+                "target_file", "Top Concepts.md"
+            )
 
             # Trending topics configuration
-            trending_topics_config = concept_highlights_config.get("trending_topics", {})
+            trending_topics_config = concept_highlights_config.get(
+                "trending_topics", {}
+            )
             trending_topics_window_days = trending_topics_config.get("window_days", 7)
             trending_topics_count = trending_topics_config.get("count", 0)
             trending_topics_percent = trending_topics_config.get("percent", 5.0)
             trending_topics_min_mentions = trending_topics_config.get("min_mentions", 2)
-            trending_topics_target_file = trending_topics_config.get("target_file", "Trending Topics - {date}.md")
+            trending_topics_target_file = trending_topics_config.get(
+                "target_file", "Trending Topics - {date}.md"
+            )
 
             return (
                 claimify_default,
@@ -579,10 +595,15 @@ def create_configuration_panel() -> gr.Blocks:
 
             # Validate concept highlights parameters
             is_valid, concept_errors = validate_concept_highlights_config(
-                top_concepts_metric, top_concepts_count, top_concepts_percent, 
-                top_concepts_target_file, trending_topics_window_days,
-                trending_topics_count, trending_topics_percent, 
-                trending_topics_min_mentions, trending_topics_target_file
+                top_concepts_metric,
+                top_concepts_count,
+                top_concepts_percent,
+                top_concepts_target_file,
+                trending_topics_window_days,
+                trending_topics_count,
+                trending_topics_percent,
+                trending_topics_min_mentions,
+                trending_topics_target_file,
             )
             if not is_valid:
                 validation_errors.extend(concept_errors)
@@ -681,19 +702,37 @@ def create_configuration_panel() -> gr.Blocks:
             # Top concepts configuration
             if "top_concepts" not in current_config["concept_highlights"]:
                 current_config["concept_highlights"]["top_concepts"] = {}
-            current_config["concept_highlights"]["top_concepts"]["metric"] = top_concepts_metric.strip()
-            current_config["concept_highlights"]["top_concepts"]["count"] = top_concepts_count if top_concepts_count > 0 else None
-            current_config["concept_highlights"]["top_concepts"]["percent"] = top_concepts_percent if top_concepts_percent > 0 else None
-            current_config["concept_highlights"]["top_concepts"]["target_file"] = top_concepts_target_file.strip()
+            current_config["concept_highlights"]["top_concepts"]["metric"] = (
+                top_concepts_metric.strip()
+            )
+            current_config["concept_highlights"]["top_concepts"]["count"] = (
+                top_concepts_count if top_concepts_count > 0 else None
+            )
+            current_config["concept_highlights"]["top_concepts"]["percent"] = (
+                top_concepts_percent if top_concepts_percent > 0 else None
+            )
+            current_config["concept_highlights"]["top_concepts"]["target_file"] = (
+                top_concepts_target_file.strip()
+            )
 
             # Trending topics configuration
             if "trending_topics" not in current_config["concept_highlights"]:
                 current_config["concept_highlights"]["trending_topics"] = {}
-            current_config["concept_highlights"]["trending_topics"]["window_days"] = trending_topics_window_days
-            current_config["concept_highlights"]["trending_topics"]["count"] = trending_topics_count if trending_topics_count > 0 else None
-            current_config["concept_highlights"]["trending_topics"]["percent"] = trending_topics_percent if trending_topics_percent > 0 else None
-            current_config["concept_highlights"]["trending_topics"]["min_mentions"] = trending_topics_min_mentions
-            current_config["concept_highlights"]["trending_topics"]["target_file"] = trending_topics_target_file.strip()
+            current_config["concept_highlights"]["trending_topics"]["window_days"] = (
+                trending_topics_window_days
+            )
+            current_config["concept_highlights"]["trending_topics"]["count"] = (
+                trending_topics_count if trending_topics_count > 0 else None
+            )
+            current_config["concept_highlights"]["trending_topics"]["percent"] = (
+                trending_topics_percent if trending_topics_percent > 0 else None
+            )
+            current_config["concept_highlights"]["trending_topics"]["min_mentions"] = (
+                trending_topics_min_mentions
+            )
+            current_config["concept_highlights"]["trending_topics"]["target_file"] = (
+                trending_topics_target_file.strip()
+            )
 
             # Save to file
             success = config_manager.save_config(current_config)
@@ -928,7 +967,9 @@ def create_configuration_panel() -> gr.Blocks:
                 gr.Markdown("### 🤖 Writing Agent")
                 trending_concepts_agent_summary_input = gr.Textbox(
                     label="Model for Trending Concepts Agent",
-                    value=initial_values[7],  # trending_concepts_agent from initial_values
+                    value=initial_values[
+                        7
+                    ],  # trending_concepts_agent from initial_values
                     placeholder="gpt-4",
                     info="LLM model used to generate concept highlight content (also configured in Model & Embedding Settings)",
                 )
@@ -1031,7 +1072,10 @@ def create_configuration_panel() -> gr.Blocks:
 
                 def update_trending_topics_preview(filename: str) -> str:
                     from datetime import date
-                    preview_filename = filename.replace("{date}", date.today().strftime("%Y-%m-%d"))
+
+                    preview_filename = filename.replace(
+                        "{date}", date.today().strftime("%Y-%m-%d")
+                    )
                     return f"**Preview:** `{preview_filename}`"
 
                 # Connect preview updates
@@ -1085,8 +1129,12 @@ def create_configuration_panel() -> gr.Blocks:
                 # Insert the trending_concepts_agent value again after the original one for the summary input
                 values_list = list(values)
                 # Insert at position 8 (after trending_concepts_agent which is at position 7)
-                values_list.insert(8, values[7])  # Duplicate trending_concepts_agent value
-                return tuple(values_list) + ("🔄 **Configuration reloaded from file.**",)
+                values_list.insert(
+                    8, values[7]
+                )  # Duplicate trending_concepts_agent value
+                return tuple(values_list) + (
+                    "🔄 **Configuration reloaded from file.**",
+                )
             except Exception as e:
                 logger.error(
                     "Failed to reload configuration",

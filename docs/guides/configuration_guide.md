@@ -69,6 +69,34 @@ This opens a web interface at http://localhost:7861
 - **Previous Sentences (p)** (0-10): How many sentences before target sentence to include
 - **Following Sentences (f)** (0-10): How many sentences after target sentence to include
 
+#### 🧠 Highlight & Summary
+
+The Highlight & Summary section configures concept highlight jobs that generate vault-wide overview documents.
+
+**Writing Agent**:
+- **Model for Trending Concepts Agent**: LLM model used to generate concept highlight content
+- This setting is synchronized with the "Trending Concepts Agent" field in the Model & Embedding Settings section
+
+**Top Concepts Configuration**:
+- **Ranking Metric**: Choose between "pagerank" (PageRank algorithm) or "degree" (simple degree centrality)
+- **Count**: Fixed number of top concepts to include (mutually exclusive with Percent)
+- **Percent**: Percentage of total concepts to include as top concepts (mutually exclusive with Count)
+- **Target File**: Output filename for the top concepts document (e.g., "Top Concepts.md")
+
+**Trending Topics Configuration**:
+- **Window Days**: How many days to look back for trend analysis (e.g., 7 for weekly trends)
+- **Count**: Fixed number of trending topics to include (mutually exclusive with Percent)
+- **Percent**: Percentage of concepts to include as trending (mutually exclusive with Count)
+- **Min Mentions**: Minimum number of mentions required for a concept to be considered trending
+- **Target File**: Output filename pattern, supports `{date}` placeholder (e.g., "Trending Topics - {date}.md")
+
+**Validation & Features**:
+- Real-time filename previews show actual output filenames with date substitution
+- Comprehensive validation prevents invalid configurations (mutual exclusivity, valid ranges, non-empty filenames)
+- Clear error messages guide users to correct configuration issues
+
+#### 🕒 Automation & Scheduler Control
+
 **Concept Summary Configuration**:
 - **Model**: LLM model for generating concept definitions (default: uses main LLM)
 - **Max Examples** (1-20): Maximum number of examples to include per concept (default: 5)
@@ -113,6 +141,7 @@ model:
     disambiguation: "claude-3-opus"
     decomposition: null  # Use default
   concept_linker: "mistral-7b"
+  trending_concepts_agent: "gpt-4"
   # ... other models
 
 embedding:
@@ -128,6 +157,20 @@ window:
   claimify:
     p: 3  # Previous sentences
     f: 1  # Following sentences
+
+concept_highlights:
+  top_concepts:
+    metric: "pagerank"        # pagerank | degree
+    count: 25                 # number of top concepts (exclusive with percent)
+    percent: null             # use top N% instead of fixed count
+    target_file: "Top Concepts.md"
+  
+  trending_topics:
+    window_days: 7            # How far back to look for change
+    count: null
+    percent: 5
+    min_mentions: 2
+    target_file: "Trending Topics - {date}.md"
 
 scheduler:
   jobs:

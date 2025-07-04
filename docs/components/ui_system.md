@@ -36,10 +36,16 @@ The aclarai UI is composed of several distinct panels, each designed for a speci
 
 ### 3. Configuration Panel
 -   **Purpose:** To allow users to tune system parameters and agent behavior.
--   **Features (Planned):**
+-   **Features:**
     -   Controls for selecting LLM and embedding models for different tasks.
     -   Sliders and inputs for adjusting processing thresholds (e.g., similarity scores).
     -   Configuration for scheduled jobs (e.g., enabling/disabling, setting cron schedules).
+    -   **Highlight & Summary** section for configuring concept highlight jobs:
+        -   Writing agent model selection for concept highlights
+        -   Top Concepts configuration (metric, count/percent, target file)
+        -   Trending Topics configuration (window, thresholds, filename patterns)
+        -   Real-time filename previews with date substitution
+        -   Comprehensive validation with clear error messages
 -   **Design Document:** [aclarai Configuration Panel Design](../../docs/arch/design_config_panel.md)
 
 
