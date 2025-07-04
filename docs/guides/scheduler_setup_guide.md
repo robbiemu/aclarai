@@ -83,6 +83,12 @@ The following jobs are included with aclarai by default.
 -   **Description:** This job runs PageRank analysis on the knowledge graph's concepts to identify the most important ones and writes them to a `Top Concepts.md` file.
 -   **Default `cron`:** `"0 4 * * *"` (Daily at 4 AM)
 
+### Trending Topics Job
+
+-   **ID:** `trending_topics`
+-   **Description:** This job analyzes the creation timestamps of claim-concept relationships to identify concepts with the highest growth in mentions over a recent period. It writes the results to a `Trending Topics - <date>.md` file.
+-   **Default `cron`:** `"0 5 * * *"` (Daily at 5:00 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.
