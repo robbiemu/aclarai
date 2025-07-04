@@ -19,6 +19,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from .concept_clustering_job import ConceptClusteringJob, ConceptClusteringJobStats
 from .concept_highlight_refresh import (
     ConceptHighlightRefreshJob,
     ConceptHighlightRefreshJobStats,
@@ -51,6 +52,7 @@ class SchedulerService:
         self.trending_topics_job = TrendingTopicsJob(self.config)
         self.concept_highlight_refresh_job = ConceptHighlightRefreshJob(self.config)
         self.concept_summary_refresh_job = ConceptSummaryRefreshJob(self.config)
+        self.concept_clustering_job = ConceptClusteringJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -351,6 +353,47 @@ class SchedulerService:
                     "job_id": "concept_summary_refresh",
                     "manual_only": True,
                     "description": concept_summary_refresh_config.description,
+                },
+            )
+
+        # Register concept clustering job
+        concept_clustering_config = self.config.scheduler.jobs.concept_clustering
+        if concept_clustering_config.enabled and not concept_clustering_config.manual_only:
+            # Environment variable override
+            concept_clustering_enabled = (
+                os.getenv("CONCEPT_CLUSTERING_ENABLED", "true").lower() == "true"
+            )
+            concept_clustering_cron = os.getenv(
+                "CONCEPT_CLUSTERING_CRON", concept_clustering_config.cron
+            )
+            if concept_clustering_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_concept_clustering_job,
+                    trigger=CronTrigger.from_crontab(concept_clustering_cron),
+                    id="concept_clustering",
+                    name="Concept Clustering Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered concept clustering job with cron '{concept_clustering_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "concept_clustering",
+                        "cron": concept_clustering_cron,
+                        "description": concept_clustering_config.description,
+                    },
+                )
+        elif concept_clustering_config.enabled and concept_clustering_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Concept clustering job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "concept_clustering",
+                    "manual_only": True,
+                    "description": concept_clustering_config.description,
                 },
             )
 
@@ -787,6 +830,79 @@ class SchedulerService:
                 "concepts_updated": 0,
                 "concepts_skipped": 0,
                 "errors": 1,
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_concept_clustering_job(self) -> ConceptClusteringJobStats:
+        """Execute the concept clustering job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_concept_clustering_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_clustering_job",
+                },
+            )
+            return {
+                "success": True,
+                "concepts_processed": 0,
+                "clusters_formed": 0,
+                "concepts_clustered": 0,
+                "concepts_outliers": 0,
+                "cache_updated": False,
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"concept_clustering_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_concept_clustering_job: Starting concept clustering job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_concept_clustering_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the concept clustering job
+            stats = self.concept_clustering_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_concept_clustering_job: Concept clustering job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_clustering_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "concepts_processed": stats["concepts_processed"],
+                    "clusters_formed": stats["clusters_formed"],
+                    "concepts_clustered": stats["concepts_clustered"],
+                    "concepts_outliers": stats["concepts_outliers"],
+                    "cache_updated": stats["cache_updated"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_concept_clustering_job: Concept clustering job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_clustering_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "concepts_processed": 0,
+                "clusters_formed": 0,
+                "concepts_clustered": 0,
+                "concepts_outliers": 0,
+                "cache_updated": False,
                 "duration": time.time() - job_start_time,
                 "error_details": [str(e)],
             }
