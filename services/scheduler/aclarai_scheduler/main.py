@@ -212,7 +212,9 @@ class SchedulerService:
             trending_topics_enabled = (
                 os.getenv("TRENDING_TOPICS_ENABLED", "true").lower() == "true"
             )
-            trending_topics_cron = os.getenv("TRENDING_TOPICS_CRON", trending_topics_config.cron)
+            trending_topics_cron = os.getenv(
+                "TRENDING_TOPICS_CRON", trending_topics_config.cron
+            )
             if trending_topics_enabled:
                 assert self.scheduler is not None
                 self.scheduler.add_job(

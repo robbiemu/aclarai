@@ -193,7 +193,9 @@ class TrendingTopicsJobConfig(JobConfig):
     count: Optional[int] = None  # number of trending concepts (exclusive with percent)
     percent: Optional[float] = 5  # use top N% instead of fixed count
     min_mentions: int = 2  # minimum mentions required to be considered
-    target_file: str = "Trending Topics - {date}.md"  # target file name with date placeholder
+    target_file: str = (
+        "Trending Topics - {date}.md"  # target file name with date placeholder
+    )
 
 
 @dataclass

@@ -57,7 +57,9 @@ class TrendingTopicsJob:
         self.neo4j_manager = neo4j_manager or Neo4jGraphManager(self.config)
 
         # Get job-specific configuration
-        self.job_config: TrendingTopicsJobConfig = self.config.scheduler.jobs.trending_topics
+        self.job_config: TrendingTopicsJobConfig = (
+            self.config.scheduler.jobs.trending_topics
+        )
 
         # Vault path from config
         self.vault_path = Path(self.config.vault_path)
@@ -71,7 +73,9 @@ class TrendingTopicsJob:
         """
         current_time = datetime.now(timezone.utc)
         window_start = current_time - timedelta(days=self.job_config.window_days)
-        comparison_window_start = window_start - timedelta(days=self.job_config.window_days)
+        comparison_window_start = window_start - timedelta(
+            days=self.job_config.window_days
+        )
 
         return current_time, window_start, comparison_window_start
 
@@ -237,7 +241,12 @@ class TrendingTopicsJob:
             content = "## Trending This Week\n\n"
             content += f"*Analysis period: {window_start_date} to {current_date}*\n\n"
 
-            for concept_name, current_mentions, previous_mentions, growth_rate in trending_concepts:
+            for (
+                concept_name,
+                current_mentions,
+                previous_mentions,
+                growth_rate,
+            ) in trending_concepts:
                 # Create wikilink and description
                 if previous_mentions == 0:
                     description = f"New concept with {current_mentions} mentions"
