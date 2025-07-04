@@ -264,6 +264,16 @@ def create_configuration_panel() -> gr.Blocks:
         bool,
         bool,
         str,
+        # Concept highlights configuration
+        str,   # top_concepts_metric
+        int,   # top_concepts_count
+        float, # top_concepts_percent
+        str,   # top_concepts_target_file
+        int,   # trending_topics_window_days
+        int,   # trending_topics_count
+        float, # trending_topics_percent
+        int,   # trending_topics_min_mentions
+        str,   # trending_topics_target_file
     ]:
         """Load current configuration values for UI display."""
         try:
@@ -328,6 +338,24 @@ def create_configuration_panel() -> gr.Blocks:
             vault_sync_manual_only = vault_sync_config.get("manual_only", False)
             vault_sync_cron = vault_sync_config.get("cron", "*/30 * * * *")
 
+            # Extract concept highlights configurations
+            concept_highlights_config = config.get("concept_highlights", {})
+
+            # Top concepts configuration
+            top_concepts_config = concept_highlights_config.get("top_concepts", {})
+            top_concepts_metric = top_concepts_config.get("metric", "pagerank")
+            top_concepts_count = top_concepts_config.get("count", 25)
+            top_concepts_percent = top_concepts_config.get("percent", 0.0)
+            top_concepts_target_file = top_concepts_config.get("target_file", "Top Concepts.md")
+
+            # Trending topics configuration
+            trending_topics_config = concept_highlights_config.get("trending_topics", {})
+            trending_topics_window_days = trending_topics_config.get("window_days", 7)
+            trending_topics_count = trending_topics_config.get("count", 0)
+            trending_topics_percent = trending_topics_config.get("percent", 5.0)
+            trending_topics_min_mentions = trending_topics_config.get("min_mentions", 2)
+            trending_topics_target_file = trending_topics_config.get("target_file", "Trending Topics - {date}.md")
+
             return (
                 claimify_default,
                 claimify_selection,
@@ -352,6 +380,16 @@ def create_configuration_panel() -> gr.Blocks:
                 vault_sync_enabled,
                 vault_sync_manual_only,
                 vault_sync_cron,
+                # Concept highlights values
+                top_concepts_metric,
+                top_concepts_count,
+                top_concepts_percent,
+                top_concepts_target_file,
+                trending_topics_window_days,
+                trending_topics_count,
+                trending_topics_percent,
+                trending_topics_min_mentions,
+                trending_topics_target_file,
             )
         except Exception as e:
             logger.error(
@@ -389,6 +427,16 @@ def create_configuration_panel() -> gr.Blocks:
                 True,
                 False,
                 "*/30 * * * *",
+                # Concept highlights defaults
+                "pagerank",
+                25,
+                0.0,
+                "Top Concepts.md",
+                7,
+                0,
+                5.0,
+                2,
+                "Trending Topics - {date}.md",
             )
 
     def save_configuration(
@@ -415,6 +463,16 @@ def create_configuration_panel() -> gr.Blocks:
         vault_sync_enabled: bool,
         vault_sync_manual_only: bool,
         vault_sync_cron: str,
+        # Concept highlights parameters
+        top_concepts_metric: str,
+        top_concepts_count: int,
+        top_concepts_percent: float,
+        top_concepts_target_file: str,
+        trending_topics_window_days: int,
+        trending_topics_count: int,
+        trending_topics_percent: float,
+        trending_topics_min_mentions: int,
+        trending_topics_target_file: str,
     ) -> str:
         """Save configuration changes to YAML file."""
         try:
@@ -461,6 +519,42 @@ def create_configuration_panel() -> gr.Blocks:
             is_valid, error = validate_cron_expression(vault_sync_cron)
             if not is_valid:
                 validation_errors.append(f"Vault Sync Cron: {error}")
+
+            # Validate concept highlights parameters
+            # Validate top concepts metric
+            if top_concepts_metric not in ["pagerank", "degree"]:
+                validation_errors.append(f"Top Concepts Metric: Must be 'pagerank' or 'degree', got '{top_concepts_metric}'")
+
+            # Validate top concepts count/percent (should be mutually exclusive)
+            if top_concepts_count > 0 and top_concepts_percent > 0:
+                validation_errors.append("Top Concepts: Cannot use both count and percent - choose one")
+
+            if top_concepts_count < 0:
+                validation_errors.append("Top Concepts Count: Must be non-negative")
+
+            if top_concepts_percent < 0 or top_concepts_percent > 100:
+                validation_errors.append("Top Concepts Percent: Must be between 0 and 100")
+
+            # Validate trending topics parameters
+            if trending_topics_window_days < 1:
+                validation_errors.append("Trending Topics Window Days: Must be at least 1")
+
+            if trending_topics_count < 0:
+                validation_errors.append("Trending Topics Count: Must be non-negative")
+
+            if trending_topics_percent < 0 or trending_topics_percent > 100:
+                validation_errors.append("Trending Topics Percent: Must be between 0 and 100")
+
+            if trending_topics_min_mentions < 0:
+                validation_errors.append("Trending Topics Min Mentions: Must be non-negative")
+
+            # Validate target file names
+            if not top_concepts_target_file.strip():
+                validation_errors.append("Top Concepts Target File: Cannot be empty")
+
+            if not trending_topics_target_file.strip():
+                validation_errors.append("Trending Topics Target File: Cannot be empty")
+
             if validation_errors:
                 error_msg = "❌ **Validation Errors:**\n" + "\n".join(
                     f"- {error}" for error in validation_errors
@@ -547,6 +641,27 @@ def create_configuration_panel() -> gr.Blocks:
             current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = (
                 vault_sync_cron.strip()
             )
+
+            # Update concept highlights configuration
+            if "concept_highlights" not in current_config:
+                current_config["concept_highlights"] = {}
+
+            # Top concepts configuration
+            if "top_concepts" not in current_config["concept_highlights"]:
+                current_config["concept_highlights"]["top_concepts"] = {}
+            current_config["concept_highlights"]["top_concepts"]["metric"] = top_concepts_metric.strip()
+            current_config["concept_highlights"]["top_concepts"]["count"] = top_concepts_count if top_concepts_count > 0 else None
+            current_config["concept_highlights"]["top_concepts"]["percent"] = top_concepts_percent if top_concepts_percent > 0 else None
+            current_config["concept_highlights"]["top_concepts"]["target_file"] = top_concepts_target_file.strip()
+
+            # Trending topics configuration
+            if "trending_topics" not in current_config["concept_highlights"]:
+                current_config["concept_highlights"]["trending_topics"] = {}
+            current_config["concept_highlights"]["trending_topics"]["window_days"] = trending_topics_window_days
+            current_config["concept_highlights"]["trending_topics"]["count"] = trending_topics_count if trending_topics_count > 0 else None
+            current_config["concept_highlights"]["trending_topics"]["percent"] = trending_topics_percent if trending_topics_percent > 0 else None
+            current_config["concept_highlights"]["trending_topics"]["min_mentions"] = trending_topics_min_mentions
+            current_config["concept_highlights"]["trending_topics"]["target_file"] = trending_topics_target_file.strip()
 
             # Save to file
             success = config_manager.save_config(current_config)
@@ -769,6 +884,127 @@ def create_configuration_panel() -> gr.Blocks:
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
 
+        # Highlight & Summary Section
+        with gr.Group():
+            gr.Markdown("## 🧠 Highlight & Summary")
+            gr.Markdown(
+                "Configure concept highlight jobs that generate global summary pages for your vault."
+            )
+
+            with gr.Group():
+                gr.Markdown("### 🏆 Top Concepts")
+                gr.Markdown("Generate ranked lists of most important concepts")
+                with gr.Row():
+                    top_concepts_metric_input = gr.Dropdown(
+                        label="Ranking Metric",
+                        value=initial_values[23],
+                        choices=["pagerank", "degree"],
+                        info="Algorithm for ranking concepts (PageRank or simple degree centrality)",
+                    )
+                    top_concepts_count_input = gr.Number(
+                        label="Count",
+                        value=initial_values[24],
+                        minimum=0,
+                        maximum=1000,
+                        step=1,
+                        info="Number of top concepts to include (0 to use percent instead)",
+                    )
+                with gr.Row():
+                    top_concepts_percent_input = gr.Number(
+                        label="Percent",
+                        value=initial_values[25],
+                        minimum=0.0,
+                        maximum=100.0,
+                        step=0.1,
+                        info="Percentage of top concepts to include (0 to use count instead)",
+                    )
+                    top_concepts_target_file_input = gr.Textbox(
+                        label="Target File",
+                        value=initial_values[26],
+                        placeholder="Top Concepts.md",
+                        info="Output filename for the top concepts page",
+                    )
+
+                # Preview for top concepts filename
+                with gr.Row():
+                    top_concepts_preview = gr.Markdown(
+                        value=f"**Preview:** `{initial_values[26]}`",
+                        label="Filename Preview",
+                    )
+
+            with gr.Group():
+                gr.Markdown("### 📈 Trending Topics")
+                gr.Markdown("Track concepts with recent activity increases")
+                with gr.Row():
+                    trending_topics_window_days_input = gr.Number(
+                        label="Window Days",
+                        value=initial_values[27],
+                        minimum=1,
+                        maximum=365,
+                        step=1,
+                        info="Number of days to look back for trend analysis",
+                    )
+                    trending_topics_count_input = gr.Number(
+                        label="Count",
+                        value=initial_values[28],
+                        minimum=0,
+                        maximum=1000,
+                        step=1,
+                        info="Number of trending topics to include (0 to use percent instead)",
+                    )
+                with gr.Row():
+                    trending_topics_percent_input = gr.Number(
+                        label="Percent",
+                        value=initial_values[29],
+                        minimum=0.0,
+                        maximum=100.0,
+                        step=0.1,
+                        info="Percentage of trending topics to include (0 to use count instead)",
+                    )
+                    trending_topics_min_mentions_input = gr.Number(
+                        label="Min Mentions",
+                        value=initial_values[30],
+                        minimum=0,
+                        maximum=100,
+                        step=1,
+                        info="Minimum mentions required for a concept to be considered trending",
+                    )
+                trending_topics_target_file_input = gr.Textbox(
+                    label="Target File",
+                    value=initial_values[31],
+                    placeholder="Trending Topics - {date}.md",
+                    info="Output filename pattern for trending topics (use {date} for current date)",
+                )
+
+                # Preview for trending topics filename
+                with gr.Row():
+                    trending_topics_preview = gr.Markdown(
+                        value=f"**Preview:** `{initial_values[31].replace('{date}', '2024-01-01')}`",
+                        label="Filename Preview",
+                    )
+
+                # Function to update filename previews
+                def update_top_concepts_preview(filename: str) -> str:
+                    return f"**Preview:** `{filename}`"
+
+                def update_trending_topics_preview(filename: str) -> str:
+                    from datetime import date
+                    preview_filename = filename.replace("{date}", date.today().strftime("%Y-%m-%d"))
+                    return f"**Preview:** `{preview_filename}`"
+
+                # Connect preview updates
+                top_concepts_target_file_input.change(
+                    fn=update_top_concepts_preview,
+                    inputs=[top_concepts_target_file_input],
+                    outputs=[top_concepts_preview],
+                )
+
+                trending_topics_target_file_input.change(
+                    fn=update_trending_topics_preview,
+                    inputs=[trending_topics_target_file_input],
+                    outputs=[trending_topics_preview],
+                )
+
         # Save Section
         with gr.Group():
             gr.Markdown("## 💾 Save Configuration")
@@ -828,6 +1064,16 @@ def create_configuration_panel() -> gr.Blocks:
                 vault_sync_enabled_input,
                 vault_sync_manual_only_input,
                 vault_sync_cron_input,
+                # Concept highlights inputs
+                top_concepts_metric_input,
+                top_concepts_count_input,
+                top_concepts_percent_input,
+                top_concepts_target_file_input,
+                trending_topics_window_days_input,
+                trending_topics_count_input,
+                trending_topics_percent_input,
+                trending_topics_min_mentions_input,
+                trending_topics_target_file_input,
             ],
             outputs=[save_status],
         )
@@ -858,6 +1104,16 @@ def create_configuration_panel() -> gr.Blocks:
                 vault_sync_enabled_input,
                 vault_sync_manual_only_input,
                 vault_sync_cron_input,
+                # Concept highlights inputs
+                top_concepts_metric_input,
+                top_concepts_count_input,
+                top_concepts_percent_input,
+                top_concepts_target_file_input,
+                trending_topics_window_days_input,
+                trending_topics_count_input,
+                trending_topics_percent_input,
+                trending_topics_min_mentions_input,
+                trending_topics_target_file_input,
                 save_status,
             ],
         )
