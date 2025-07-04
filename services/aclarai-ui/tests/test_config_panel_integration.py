@@ -224,6 +224,169 @@ class TestConfigurationPanelIntegration:
         expect(save_button).to_be_enabled()
         expect(reload_button).to_be_enabled()
 
+    @pytest.mark.integration
+    def test_concept_highlights_section_present(self, page: Page, gradio_app):
+        """Test that the Highlight & Summary section is present."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Check that the Highlight & Summary section is present
+        expect(page.locator("text=🧠 Highlight & Summary")).to_be_visible()
+        expect(page.locator("text=Writing Agent")).to_be_visible()
+        expect(page.locator("text=Top Concepts")).to_be_visible()
+        expect(page.locator("text=Trending Topics")).to_be_visible()
+
+    @pytest.mark.integration
+    def test_concept_highlights_inputs_present(self, page: Page, gradio_app):
+        """Test that all concept highlights input fields are present."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Check Top Concepts inputs
+        expect(page.locator("text=Ranking Metric")).to_be_visible()
+        expect(page.locator("text=Count").nth(0)).to_be_visible()  # Top concepts count
+        expect(
+            page.locator("text=Percent").nth(0)
+        ).to_be_visible()  # Top concepts percent
+        expect(
+            page.locator("text=Target File").nth(0)
+        ).to_be_visible()  # Top concepts file
+
+        # Check Trending Topics inputs
+        expect(page.locator("text=Window Days")).to_be_visible()
+        expect(page.locator("text=Min Mentions")).to_be_visible()
+        expect(
+            page.locator("text=Count").nth(1)
+        ).to_be_visible()  # Trending topics count
+        expect(
+            page.locator("text=Percent").nth(1)
+        ).to_be_visible()  # Trending topics percent
+        expect(
+            page.locator("text=Target File").nth(1)
+        ).to_be_visible()  # Trending topics file
+
+    @pytest.mark.integration
+    def test_trending_concepts_agent_synchronization(self, page: Page, gradio_app):
+        """Test that trending concepts agent inputs are synchronized."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Find the trending concepts agent input in the Model section
+        main_trending_agent_input = page.locator(
+            "text=Trending Concepts Agent"
+        ).locator("..//input")
+
+        # Find the trending concepts agent input in the Highlight section
+        summary_trending_agent_input = page.locator(
+            "text=Model for Trending Concepts Agent"
+        ).locator("..//input")
+
+        # Change value in main input
+        main_trending_agent_input.fill("gpt-4-custom")
+        page.wait_for_timeout(500)  # Wait for synchronization
+
+        # Check that summary input is updated
+        summary_value = summary_trending_agent_input.input_value()
+        assert summary_value == "gpt-4-custom"
+
+        # Change value in summary input
+        summary_trending_agent_input.fill("claude-3-opus")
+        page.wait_for_timeout(500)  # Wait for synchronization
+
+        # Check that main input is updated
+        main_value = main_trending_agent_input.input_value()
+        assert main_value == "claude-3-opus"
+
+    @pytest.mark.integration
+    def test_concept_highlights_validation_messages(self, page: Page, gradio_app):
+        """Test that concept highlights validation shows appropriate messages."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Fill in invalid values
+        # Set both count and percent for top concepts (should be mutually exclusive)
+        count_input = page.locator("text=Count").nth(0).locator("..//input")
+        percent_input = page.locator("text=Percent").nth(0).locator("..//input")
+
+        count_input.fill("25")
+        percent_input.fill("10")
+
+        # Set invalid metric
+        metric_dropdown = page.locator("text=Ranking Metric").locator("..//select")
+        # Note: We can't actually set an invalid option in a dropdown, so we'll test this differently
+
+        # Click save to trigger validation
+        save_button = page.locator('button:has-text("Save Changes")')
+        save_button.click()
+        page.wait_for_timeout(2000)
+
+        # Check that validation error appears
+        expect(page.locator("text=Validation Errors")).to_be_visible()
+
+    @pytest.mark.integration
+    def test_filename_preview_functionality(self, page: Page, gradio_app):
+        """Test that filename previews update correctly."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Find the trending topics target file input
+        trending_file_input = (
+            page.locator("text=Target File").nth(1).locator("..//input")
+        )
+
+        # Change the filename pattern
+        trending_file_input.fill("My Topics - {date}.md")
+        page.wait_for_timeout(500)  # Wait for preview update
+
+        # Check that preview is updated (should contain current date)
+        from datetime import date
+
+        expected_date = date.today().strftime("%Y-%m-%d")
+        expect(page.locator(f"text=My Topics - {expected_date}.md")).to_be_visible()
+
+    @pytest.mark.integration
+    def test_concept_highlights_save_and_reload(self, page: Page, gradio_app):
+        """Test that concept highlights configuration can be saved and reloaded."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Fill in valid concept highlights configuration
+        metric_dropdown = page.locator("text=Ranking Metric").locator("..//select")
+        metric_dropdown.select_option("degree")
+
+        count_input = page.locator("text=Count").nth(0).locator("..//input")
+        count_input.fill("30")
+
+        percent_input = page.locator("text=Percent").nth(0).locator("..//input")
+        percent_input.fill("0")
+
+        target_file_input = page.locator("text=Target File").nth(0).locator("..//input")
+        target_file_input.fill("My Top Concepts.md")
+
+        window_days_input = page.locator("text=Window Days").locator("..//input")
+        window_days_input.fill("14")
+
+        # Save configuration
+        save_button = page.locator('button:has-text("Save Changes")')
+        save_button.click()
+        page.wait_for_timeout(2000)
+
+        # Check for success message
+        expect(page.locator("text=Configuration saved successfully")).to_be_visible()
+
+        # Change values to test reload
+        count_input.fill("50")
+        target_file_input.fill("Changed File.md")
+
+        # Reload configuration
+        reload_button = page.locator('button:has-text("Reload from File")')
+        reload_button.click()
+        page.wait_for_timeout(2000)
+
+        # Check that values are restored
+        assert count_input.input_value() == "30"
+        assert target_file_input.input_value() == "My Top Concepts.md"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-m", "integration"])
