@@ -155,6 +155,16 @@ The `top_concepts` job generates a `Top Concepts.md` file in your vault, summari
 -   **`percent`**: (Float) The percentage of top concepts to include (e.g., `0.1` for the top 10%). If `count` is also set, `count` takes precedence.
 -   **`target_file`**: (String) The name of the Markdown file where the top concepts summary will be written (e.g., `"Top Concepts.md"`).
 
+### Trending Topics Job
+
+The `trending_topics` job generates a `Trending Topics - <date>.md` file in your vault, summarizing concepts with the highest recent growth in mentions.
+
+-   **`window_days`**: (Integer) The time window in days for trend analysis (e.g., `7` for weekly trends).
+-   **`count`**: (Integer) The fixed number of top trending concepts to include.
+-   **`percent`**: (Float) The percentage of top trending concepts to include (e.g., `0.05` for the top 5%). If `count` is set, `percent` is ignored.
+-   **`min_mentions`**: (Integer) The minimum number of mentions a concept must have in the current period to be considered.
+-   **`target_file`**: (String) The name of the output file. The `{date}` placeholder will be replaced with the current date (e.g., `YYYY-MM-DD`).
+
 
 ## Configuration Loading
 

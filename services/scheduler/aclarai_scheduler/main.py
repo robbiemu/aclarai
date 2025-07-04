@@ -21,6 +21,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
 from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
+from .trending_topics_job import TrendingTopicsJob, TrendingTopicsJobStats
 from .vault_sync import VaultSyncJob
 
 
@@ -39,6 +40,7 @@ class SchedulerService:
         self.vault_sync_job = VaultSyncJob(self.config)
         self.concept_refresh_job = ConceptEmbeddingRefreshJob(self.config)
         self.top_concepts_job = TopConceptsJob(self.config)
+        self.trending_topics_job = TrendingTopicsJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -200,6 +202,47 @@ class SchedulerService:
                     "job_id": "top_concepts",
                     "manual_only": True,
                     "description": top_concepts_config.description,
+                },
+            )
+
+        # Register trending topics job
+        trending_topics_config = self.config.scheduler.jobs.trending_topics
+        if trending_topics_config.enabled and not trending_topics_config.manual_only:
+            # Environment variable override
+            trending_topics_enabled = (
+                os.getenv("TRENDING_TOPICS_ENABLED", "true").lower() == "true"
+            )
+            trending_topics_cron = os.getenv(
+                "TRENDING_TOPICS_CRON", trending_topics_config.cron
+            )
+            if trending_topics_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_trending_topics_job,
+                    trigger=CronTrigger.from_crontab(trending_topics_cron),
+                    id="trending_topics",
+                    name="Trending Topics Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered trending topics job with cron '{trending_topics_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "trending_topics",
+                        "cron": trending_topics_cron,
+                        "description": trending_topics_config.description,
+                    },
+                )
+        elif trending_topics_config.enabled and trending_topics_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Trending topics job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "trending_topics",
+                    "manual_only": True,
+                    "description": trending_topics_config.description,
                 },
             )
 
@@ -393,6 +436,79 @@ class SchedulerService:
                 "top_concepts_selected": 0,
                 "file_written": False,
                 "pagerank_executed": False,
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_trending_topics_job(self) -> TrendingTopicsJobStats:
+        """Execute the trending topics job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_trending_topics_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_trending_topics_job",
+                },
+            )
+            return {
+                "success": True,
+                "concepts_analyzed": 0,
+                "trending_concepts_selected": 0,
+                "file_written": False,
+                "window_start": "",
+                "window_end": "",
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"trending_topics_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_trending_topics_job: Starting trending topics job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_trending_topics_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the trending topics job
+            stats = self.trending_topics_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_trending_topics_job: Trending topics job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_trending_topics_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "concepts_analyzed": stats["concepts_analyzed"],
+                    "trending_concepts_selected": stats["trending_concepts_selected"],
+                    "file_written": stats["file_written"],
+                    "window_start": stats["window_start"],
+                    "window_end": stats["window_end"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_trending_topics_job: Trending topics job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_trending_topics_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "concepts_analyzed": 0,
+                "trending_concepts_selected": 0,
+                "file_written": False,
+                "window_start": "",
+                "window_end": "",
                 "duration": time.time() - job_start_time,
                 "error_details": [str(e)],
             }

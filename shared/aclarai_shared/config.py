@@ -186,6 +186,19 @@ class TopConceptsJobConfig(JobConfig):
 
 
 @dataclass
+class TrendingTopicsJobConfig(JobConfig):
+    """Configuration for the Trending Topics job."""
+
+    window_days: int = 7  # How far back to look for change
+    count: Optional[int] = None  # number of trending concepts (exclusive with percent)
+    percent: Optional[float] = 5  # use top N% instead of fixed count
+    min_mentions: int = 2  # minimum mentions required to be considered
+    target_file: str = (
+        "Trending Topics - {date}.md"  # target file name with date placeholder
+    )
+
+
+@dataclass
 class SchedulerJobsConfig:
     """Configuration for all scheduled jobs."""
 
@@ -215,6 +228,19 @@ class SchedulerJobsConfig:
             count=25,
             percent=None,
             target_file="Top Concepts.md",
+        )
+    )
+    trending_topics: TrendingTopicsJobConfig = field(
+        default_factory=lambda: TrendingTopicsJobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 5 * * *",  # 5 AM daily
+            description="Generate Trending Topics - <date>.md from concept mention deltas",
+            window_days=7,
+            count=None,
+            percent=5,
+            min_mentions=2,
+            target_file="Trending Topics - {date}.md",
         )
     )
 

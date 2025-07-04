@@ -2,6 +2,8 @@
 
 As an expert code reviewer and AI software architect, your task is to perform a comprehensive audit of the provided pull request. Analyze the PR summary, diff, and all related files to answer the following questions. Take your time and do a deep dive into these.
 
+DO NOT COPY THIS ENTIRE DOCUMENT. WRITE YOUR OWN DOCUMENT USING THESE INSTRUCTIONS.
+
 You can assume that this is during that sprint in the `sprint_plan.md`. Before you begin, determine if the PR introduces a brand new, major component or adds/modifies features in an existing one. Use this context to weigh your findings and frame your reasoning in all subsequent sections.
 
 #### **Section 1: Completeness**

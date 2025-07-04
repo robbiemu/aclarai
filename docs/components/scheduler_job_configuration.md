@@ -56,6 +56,23 @@ concept_embedding_refresh:
   description: "Refresh concept embeddings from Tier 3 pages"
 ```
 
+### `trending_topics`
+Generates a `Trending Topics - <date>.md` file by analyzing the growth of concept mentions over a configurable time window.
+
+**Default Configuration:**
+```yaml
+trending_topics:
+  enabled: true
+  manual_only: false
+  cron: "0 5 * * *"  # 5 AM daily
+  description: "Generate Trending Topics - {date}.md from concept mention deltas"
+  window_days: 7
+  count: null
+  percent: 5
+  min_mentions: 2
+  target_file: "Trending Topics - {date}.md"
+```
+
 ### `vault_sync`
 Synchronizes vault files with the knowledge graph.
 
