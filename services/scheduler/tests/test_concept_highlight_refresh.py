@@ -2,8 +2,9 @@
 Tests for the Concept Highlight Refresh Job.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from services.scheduler.aclarai_scheduler.concept_highlight_refresh import (
     ConceptHighlightRefreshJob,

@@ -2,8 +2,9 @@
 Tests for the Concept Summary Refresh Job.
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 from services.scheduler.aclarai_scheduler.concept_summary_refresh import (
     ConceptSummaryRefreshJob,
