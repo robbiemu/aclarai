@@ -208,6 +208,24 @@ The `trending_topics` job generates a `Trending Topics - <date>.md` file in your
 -   **`min_mentions`**: (Integer) The minimum number of mentions a concept must have in the current period to be considered.
 -   **`target_file`**: (String) The name of the output file. The `{date}` placeholder will be replaced with the current date (e.g., `YYYY-MM-DD`).
 
+### Concept Highlight Refresh Job
+
+The `concept_highlight_refresh` job combines the `top_concepts` and `trending_topics` jobs into a single, efficient execution.
+
+-   **`enabled`**: (Boolean) Set to `true` to enable the job.
+-   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered.
+-   **`cron`**: (String) The schedule for automatic execution (e.g., `"0 6 * * *"` for daily at 6 AM).
+-   **`description`**: (String) A human-readable description of the job.
+
+### Concept Summary Refresh Job
+
+The `concept_summary_refresh` job generates detailed `[[Concept]]` pages for all canonical concepts.
+
+-   **`enabled`**: (Boolean) Set to `true` to enable the job.
+-   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered.
+-   **`cron`**: (String) The schedule for automatic execution (e.g., `"0 7 * * *"` for daily at 7 AM).
+-   **`description`**: (String) A human-readable description of the job.
+
 
 ## Configuration Loading
 

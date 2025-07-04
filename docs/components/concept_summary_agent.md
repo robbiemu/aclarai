@@ -157,16 +157,18 @@ python run_concept_summary_agent.py --log-level DEBUG
 
 ### Via Scheduler
 
-The agent can be integrated into the scheduler service by adding a job configuration:
+The agent is executed as a scheduled job by default, managed by the `concept_summary_refresh` job in the scheduler service. This automates the regular generation and updating of concept pages.
+
+The job is configured in `settings/aclarai.config.yaml` under the `scheduler.jobs` section:
 
 ```yaml
 scheduler:
   jobs:
-    concept_summary_generation:
+    concept_summary_refresh:
       enabled: true
       manual_only: false
-      cron: "0 4 * * *"  # Run daily at 4 AM
-      description: "Generate concept summary pages"
+      cron: "0 7 * * *"  # Run daily at 7 AM
+      description: "Generate concept summary pages for all canonical concepts"
 ```
 
 ## Implementation Notes

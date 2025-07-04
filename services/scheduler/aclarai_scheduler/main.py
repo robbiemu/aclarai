@@ -19,9 +19,15 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from .concept_highlight_refresh import (
+    ConceptHighlightRefreshJob,
+    ConceptHighlightRefreshJobStats,
+)
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
-from .concept_highlight_refresh import ConceptHighlightRefreshJob, ConceptHighlightRefreshJobStats
-from .concept_summary_refresh import ConceptSummaryRefreshJob, ConceptSummaryRefreshJobStats
+from .concept_summary_refresh import (
+    ConceptSummaryRefreshJob,
+    ConceptSummaryRefreshJobStats,
+)
 from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
 from .trending_topics_job import TrendingTopicsJob, TrendingTopicsJobStats
 from .vault_sync import VaultSyncJob
@@ -251,8 +257,13 @@ class SchedulerService:
             )
 
         # Register concept highlight refresh job
-        concept_highlight_refresh_config = self.config.scheduler.jobs.concept_highlight_refresh
-        if concept_highlight_refresh_config.enabled and not concept_highlight_refresh_config.manual_only:
+        concept_highlight_refresh_config = (
+            self.config.scheduler.jobs.concept_highlight_refresh
+        )
+        if (
+            concept_highlight_refresh_config.enabled
+            and not concept_highlight_refresh_config.manual_only
+        ):
             # Environment variable override
             concept_highlight_refresh_enabled = (
                 os.getenv("CONCEPT_HIGHLIGHT_REFRESH_ENABLED", "true").lower() == "true"
@@ -279,7 +290,10 @@ class SchedulerService:
                         "description": concept_highlight_refresh_config.description,
                     },
                 )
-        elif concept_highlight_refresh_config.enabled and concept_highlight_refresh_config.manual_only:
+        elif (
+            concept_highlight_refresh_config.enabled
+            and concept_highlight_refresh_config.manual_only
+        ):
             self.logger.info(
                 "scheduler.main._register_jobs: Concept highlight refresh job is enabled but set to manual_only, skipping automatic scheduling",
                 extra={
@@ -292,8 +306,13 @@ class SchedulerService:
             )
 
         # Register concept summary refresh job
-        concept_summary_refresh_config = self.config.scheduler.jobs.concept_summary_refresh
-        if concept_summary_refresh_config.enabled and not concept_summary_refresh_config.manual_only:
+        concept_summary_refresh_config = (
+            self.config.scheduler.jobs.concept_summary_refresh
+        )
+        if (
+            concept_summary_refresh_config.enabled
+            and not concept_summary_refresh_config.manual_only
+        ):
             # Environment variable override
             concept_summary_refresh_enabled = (
                 os.getenv("CONCEPT_SUMMARY_REFRESH_ENABLED", "true").lower() == "true"
@@ -320,7 +339,10 @@ class SchedulerService:
                         "description": concept_summary_refresh_config.description,
                     },
                 )
-        elif concept_summary_refresh_config.enabled and concept_summary_refresh_config.manual_only:
+        elif (
+            concept_summary_refresh_config.enabled
+            and concept_summary_refresh_config.manual_only
+        ):
             self.logger.info(
                 "scheduler.main._register_jobs: Concept summary refresh job is enabled but set to manual_only, skipping automatic scheduling",
                 extra={
@@ -657,7 +679,9 @@ class SchedulerService:
                     "job_id": job_id,
                     "success": stats["success"],
                     "top_concepts_success": stats["top_concepts_stats"]["success"],
-                    "trending_topics_success": stats["trending_topics_stats"]["success"],
+                    "trending_topics_success": stats["trending_topics_stats"][
+                        "success"
+                    ],
                     "duration": stats["duration"],
                 },
             )

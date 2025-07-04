@@ -72,25 +72,18 @@ concepts = neo4j_manager.create_concepts(promoted_concept_inputs)
 # - Timestamp and version tracking
 ```
 
-### Step 4: Concept Summary Generation
+### Step 4: Automated Concept Summary Generation
 
-The final step generates rich, detailed Markdown files for each concept using the Concept Summary Agent, which employs a RAG (Retrieval-Augmented Generation) workflow to create comprehensive concept pages:
+The final step of generating rich, detailed Markdown files for each concept is now automated. This process is handled by the `concept_summary_refresh` scheduled job, which runs daily.
 
-```python
-from aclarai_shared.concept_summary_agent import ConceptSummaryAgent
+The job uses the **Concept Summary Agent** to create comprehensive `[[Concept]]` pages. The agent employs a sophisticated RAG (Retrieval-Augmented Generation) workflow that automatically:
 
-# Initialize the agent
-agent = ConceptSummaryAgent()
+- Retrieves supporting claims and summaries from Neo4j.
+- Finds related concepts via vector similarity search.
+- Generates intelligent content using an LLM.
+- Creates properly formatted Markdown files using atomic writes to prevent data corruption.
 
-# Generate pages for all canonical concepts
-result = agent.run_agent()
-
-# The agent automatically:
-# - Retrieves supporting claims and summaries from Neo4j
-# - Finds related concepts via vector similarity search
-# - Generates intelligent content using LLM
-# - Creates properly formatted Markdown files atomically
-```
+This automation ensures that your concept pages are consistently and regularly updated without manual intervention, reflecting the latest state of your knowledge graph.
 
 The Concept Summary Agent uses a sophisticated RAG workflow to create content:
 

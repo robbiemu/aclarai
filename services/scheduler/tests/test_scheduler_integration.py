@@ -6,7 +6,7 @@ Tests the complete scheduler functionality against live Neo4j database.
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 import pytest
 from aclarai_scheduler.vault_sync import VaultSyncJob
@@ -239,45 +239,59 @@ This is another test block to verify batch processing.
     def test_concept_highlight_refresh_job_registration(self):
         """Test that concept highlight refresh job can be registered in scheduler."""
         from aclarai_scheduler.main import SchedulerService
-        
+
         with patch.dict(os.environ, {"CONCEPT_HIGHLIGHT_REFRESH_ENABLED": "true"}):
             scheduler_service = SchedulerService()
             scheduler_service._setup_scheduler()
-            
+
             # Test that the job configuration exists
-            assert hasattr(scheduler_service.config.scheduler.jobs, 'concept_highlight_refresh')
-            assert scheduler_service.config.scheduler.jobs.concept_highlight_refresh.enabled is True
-            
+            assert hasattr(
+                scheduler_service.config.scheduler.jobs, "concept_highlight_refresh"
+            )
+            assert (
+                scheduler_service.config.scheduler.jobs.concept_highlight_refresh.enabled
+                is True
+            )
+
             # Test that the job instance exists
-            assert hasattr(scheduler_service, 'concept_highlight_refresh_job')
+            assert hasattr(scheduler_service, "concept_highlight_refresh_job")
             assert scheduler_service.concept_highlight_refresh_job is not None
 
     def test_concept_summary_refresh_job_registration(self):
         """Test that concept summary refresh job can be registered in scheduler."""
         from aclarai_scheduler.main import SchedulerService
-        
+
         with patch.dict(os.environ, {"CONCEPT_SUMMARY_REFRESH_ENABLED": "true"}):
             scheduler_service = SchedulerService()
             scheduler_service._setup_scheduler()
-            
+
             # Test that the job configuration exists
-            assert hasattr(scheduler_service.config.scheduler.jobs, 'concept_summary_refresh')
-            assert scheduler_service.config.scheduler.jobs.concept_summary_refresh.enabled is True
-            
+            assert hasattr(
+                scheduler_service.config.scheduler.jobs, "concept_summary_refresh"
+            )
+            assert (
+                scheduler_service.config.scheduler.jobs.concept_summary_refresh.enabled
+                is True
+            )
+
             # Test that the job instance exists
-            assert hasattr(scheduler_service, 'concept_summary_refresh_job')
+            assert hasattr(scheduler_service, "concept_summary_refresh_job")
             assert scheduler_service.concept_summary_refresh_job is not None
 
     def test_concept_highlight_refresh_job_execution(self):
         """Test that concept highlight refresh job can be executed."""
         from aclarai_scheduler.main import SchedulerService
-        
-        with patch("aclarai_scheduler.concept_highlight_refresh.TopConceptsJob") as mock_top_concepts:
-            with patch("aclarai_scheduler.concept_highlight_refresh.TrendingTopicsJob") as mock_trending_topics:
+
+        with patch(
+            "aclarai_scheduler.concept_highlight_refresh.TopConceptsJob"
+        ) as mock_top_concepts:
+            with patch(
+                "aclarai_scheduler.concept_highlight_refresh.TrendingTopicsJob"
+            ) as mock_trending_topics:
                 # Mock the job instances
                 mock_top_concepts_job = mock_top_concepts.return_value
                 mock_trending_topics_job = mock_trending_topics.return_value
-                
+
                 # Mock successful returns
                 mock_top_concepts_job.run_job.return_value = {
                     "success": True,
@@ -288,7 +302,7 @@ This is another test block to verify batch processing.
                     "duration": 1.0,
                     "error_details": [],
                 }
-                
+
                 mock_trending_topics_job.run_job.return_value = {
                     "success": True,
                     "concepts_analyzed": 8,
@@ -299,10 +313,10 @@ This is another test block to verify batch processing.
                     "duration": 0.5,
                     "error_details": [],
                 }
-                
+
                 scheduler_service = SchedulerService()
                 result = scheduler_service._run_concept_highlight_refresh_job()
-                
+
                 assert result["success"] is True
                 assert result["top_concepts_stats"]["success"] is True
                 assert result["trending_topics_stats"]["success"] is True
@@ -311,17 +325,25 @@ This is another test block to verify batch processing.
     def test_concept_summary_refresh_job_execution(self):
         """Test that concept summary refresh job can be executed."""
         from aclarai_scheduler.main import SchedulerService
-        
-        with patch("aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent") as mock_agent:
-            with patch("aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager") as mock_neo4j:
+
+        with patch(
+            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
+        ) as mock_agent:
+            with patch(
+                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
+            ) as mock_neo4j:
                 scheduler_service = SchedulerService()
-                
+
                 # Mock the job methods
-                scheduler_service.concept_summary_refresh_job._get_canonical_concepts = Mock(return_value=["Test Concept"])
-                scheduler_service.concept_summary_refresh_job._process_concept = Mock(return_value=(True, True))
-                
+                scheduler_service.concept_summary_refresh_job._get_canonical_concepts = Mock(
+                    return_value=["Test Concept"]
+                )
+                scheduler_service.concept_summary_refresh_job._process_concept = Mock(
+                    return_value=(True, True)
+                )
+
                 result = scheduler_service._run_concept_summary_refresh_job()
-                
+
                 assert result["success"] is True
                 assert result["concepts_processed"] >= 0
                 assert result["errors"] == 0
