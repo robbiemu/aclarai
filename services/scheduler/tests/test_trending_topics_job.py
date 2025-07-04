@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+
 from services.scheduler.aclarai_scheduler.trending_topics_job import TrendingTopicsJob
 from shared.aclarai_shared.config import TrendingTopicsJobConfig
 
@@ -73,7 +74,9 @@ def mock_neo4j_manager():
 
 def test_trending_topics_job_initialization(mock_config):
     """Test that TrendingTopicsJob initializes correctly."""
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         job = TrendingTopicsJob(config=mock_config)
         assert job.config == mock_config
         assert job.job_config == mock_config.scheduler.jobs.trending_topics
@@ -84,9 +87,11 @@ def test_get_time_windows():
     """Test time window calculation."""
     job_config = TrendingTopicsJobConfig(window_days=7)
 
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         with patch(
-            "aclarai_scheduler.trending_topics_job.load_config"
+            "services.scheduler.aclarai_scheduler.trending_topics_job.load_config"
         ) as mock_load_config:
             mock_config = Mock()
             mock_config.scheduler.jobs.trending_topics = job_config
@@ -96,7 +101,7 @@ def test_get_time_windows():
             job = TrendingTopicsJob(config=mock_config)
 
             with patch(
-                "aclarai_scheduler.trending_topics_job.datetime"
+                "services.scheduler.aclarai_scheduler.trending_topics_job.datetime"
             ) as mock_datetime:
                 mock_now = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
                 mock_datetime.now.return_value = mock_now
@@ -118,9 +123,11 @@ def test_select_trending_concepts():
     """Test concept selection logic."""
     job_config = TrendingTopicsJobConfig(percent=50)  # Select top 50%
 
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         with patch(
-            "aclarai_scheduler.trending_topics_job.load_config"
+            "services.scheduler.aclarai_scheduler.trending_topics_job.load_config"
         ) as mock_load_config:
             mock_config = Mock()
             mock_config.scheduler.jobs.trending_topics = job_config
@@ -148,9 +155,11 @@ def test_generate_markdown_content():
     """Test markdown content generation."""
     job_config = TrendingTopicsJobConfig()
 
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         with patch(
-            "aclarai_scheduler.trending_topics_job.load_config"
+            "services.scheduler.aclarai_scheduler.trending_topics_job.load_config"
         ) as mock_load_config:
             mock_config = Mock()
             mock_config.scheduler.jobs.trending_topics = job_config
@@ -187,9 +196,11 @@ def test_get_target_file_path():
     """Test target file path generation with date."""
     job_config = TrendingTopicsJobConfig(target_file="Trending Topics - {date}.md")
 
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         with patch(
-            "aclarai_scheduler.trending_topics_job.load_config"
+            "services.scheduler.aclarai_scheduler.trending_topics_job.load_config"
         ) as mock_load_config:
             mock_config = Mock()
             mock_config.scheduler.jobs.trending_topics = job_config
@@ -212,9 +223,11 @@ def test_write_file_atomically():
     """Test atomic file writing."""
     job_config = TrendingTopicsJobConfig()
 
-    with patch("aclarai_scheduler.trending_topics_job.Neo4jGraphManager"):
+    with patch(
+        "services.scheduler.aclarai_scheduler.trending_topics_job.Neo4jGraphManager"
+    ):
         with patch(
-            "aclarai_scheduler.trending_topics_job.load_config"
+            "services.scheduler.aclarai_scheduler.trending_topics_job.load_config"
         ) as mock_load_config:
             mock_config = Mock()
             mock_config.scheduler.jobs.trending_topics = job_config
@@ -237,7 +250,8 @@ def test_write_file_atomically():
 def test_run_job_success(mock_config, mock_neo4j_manager):
     """Test successful job execution."""
     with patch(
-        "aclarai_scheduler.trending_topics_job.load_config", return_value=mock_config
+        "services.scheduler.aclarai_scheduler.trending_topics_job.load_config",
+        return_value=mock_config,
     ):
         job = TrendingTopicsJob(config=mock_config, neo4j_manager=mock_neo4j_manager)
 
@@ -259,7 +273,8 @@ def test_run_job_no_concepts(mock_config):
     mock_neo4j_manager.execute_query.return_value = []
 
     with patch(
-        "aclarai_scheduler.trending_topics_job.load_config", return_value=mock_config
+        "services.scheduler.aclarai_scheduler.trending_topics_job.load_config",
+        return_value=mock_config,
     ):
         job = TrendingTopicsJob(config=mock_config, neo4j_manager=mock_neo4j_manager)
 
@@ -283,7 +298,8 @@ def test_run_job_database_error(mock_config):
     )
 
     with patch(
-        "aclarai_scheduler.trending_topics_job.load_config", return_value=mock_config
+        "services.scheduler.aclarai_scheduler.trending_topics_job.load_config",
+        return_value=mock_config,
     ):
         job = TrendingTopicsJob(config=mock_config, neo4j_manager=mock_neo4j_manager)
 
