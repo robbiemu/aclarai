@@ -89,6 +89,18 @@ The following jobs are included with aclarai by default.
 -   **Description:** This job analyzes the creation timestamps of claim-concept relationships to identify concepts with the highest growth in mentions over a recent period. It writes the results to a `Trending Topics - <date>.md` file.
 -   **Default `cron`:** `"0 5 * * *"` (Daily at 5:00 AM)
 
+### Concept Highlight Refresh Job
+
+-   **ID:** `concept_highlight_refresh`
+-   **Description:** Combined job that executes both the Top Concepts and Trending Topics jobs in a single scheduled execution. This ensures both highlight files are generated together and reduces scheduler overhead.
+-   **Default `cron`:** `"0 6 * * *"` (Daily at 6:00 AM)
+
+### Concept Summary Refresh Job
+
+-   **ID:** `concept_summary_refresh`
+-   **Description:** Generates detailed Markdown pages for all canonical concepts in the knowledge graph, using RAG workflows to include relevant claims, summaries, and related concepts. Creates or updates `[[Concept]]` pages with structured content.
+-   **Default `cron`:** `"0 7 * * *"` (Daily at 7:00 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.

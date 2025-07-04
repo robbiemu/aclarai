@@ -100,6 +100,30 @@ top_concepts:
   percent: null
   target_file: "Top Concepts.md"
 ```
+
+### `concept_highlight_refresh`
+A combined job that executes both the Top Concepts and Trending Topics jobs in a single scheduled execution. This ensures both highlight files are generated together and reduces scheduler overhead.
+
+**Default Configuration:**
+```yaml
+concept_highlight_refresh:
+  enabled: true
+  manual_only: false
+  cron: "0 6 * * *"  # 6 AM daily
+  description: "Generate both Top Concepts and Trending Topics highlight files"
+```
+
+### `concept_summary_refresh`
+Generates detailed Markdown pages for all canonical concepts in the knowledge graph, using RAG workflows to include relevant claims, summaries, and related concepts.
+
+**Default Configuration:**
+```yaml
+concept_summary_refresh:
+  enabled: true
+  manual_only: false
+  cron: "0 7 * * *"  # 7 AM daily
+  description: "Generate concept summary pages for all canonical concepts"
+```
 The `metric` parameter specifies the algorithm to use for identifying top concepts (e.g., `pagerank`). `count` determines the top N concepts to include, while `percent` specifies the top N% of concepts. `target_file` defines the output filename for the generated Markdown file.
 
 ## Job Execution Logic
