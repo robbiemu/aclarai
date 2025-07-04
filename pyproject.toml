@@ -130,7 +130,9 @@ module = [
     "pika",
     "pika.*",
     "llama_index.vector_stores.types",
-    "tavily"
+    "tavily",
+    "sklearn",
+    "sklearn.*"
 ]
 ignore_missing_imports = true
 

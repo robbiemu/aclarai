@@ -97,6 +97,14 @@ The Highlight & Summary section configures concept highlight jobs that generate 
 
 #### 🕒 Automation & Scheduler Control
 
+**Concept Clustering Configuration**:
+- **Similarity Threshold** (0.0-1.0): Minimum cosine similarity for concepts to be clustered together.
+- **Min Concepts** (Integer): Minimum number of concepts required to form a cluster.
+- **Max Concepts** (Integer): Maximum number of concepts allowed in a cluster.
+- **Algorithm**: Clustering algorithm to use ("dbscan" or "hierarchical").
+- **Cache TTL** (Seconds): Time-to-live for cached cluster assignments.
+- **Use Persistent Cache** (true/false): Whether to use persistent storage for the cache.
+
 **Concept Summary Configuration**:
 - **Model**: LLM model for generating concept definitions (default: uses main LLM)
 - **Max Examples** (1-20): Maximum number of examples to include per concept (default: 5)
@@ -174,6 +182,17 @@ concept_highlights:
 
 scheduler:
   jobs:
+    concept_clustering:
+      enabled: true
+      manual_only: false
+      cron: "0 2 * * *"  # 2 AM daily
+      description: "Group related concepts into thematic clusters"
+      similarity_threshold: 0.92
+      min_concepts: 3
+      max_concepts: 15
+      algorithm: "dbscan"
+      cache_ttl: 3600
+      use_persistent_cache: true
     top_concepts:
       enabled: true
       manual_only: false

@@ -124,6 +124,24 @@ concept_summary_refresh:
   cron: "0 7 * * *"  # 7 AM daily
   description: "Generate concept summary pages for all canonical concepts"
 ```
+
+### `concept_clustering`
+Groups related concepts into thematic clusters using their embeddings.
+
+**Default Configuration:**
+```yaml
+concept_clustering:
+  enabled: true
+  manual_only: false
+  cron: "0 2 * * *"  # 2 AM daily
+  description: "Group related concepts into thematic clusters"
+  similarity_threshold: 0.92
+  min_concepts: 3
+  max_concepts: 15
+  algorithm: "dbscan"
+  cache_ttl: 3600
+  use_persistent_cache: true
+```
 The `metric` parameter specifies the algorithm to use for identifying top concepts (e.g., `pagerank`). `count` determines the top N concepts to include, while `percent` specifies the top N% of concepts. `target_file` defines the output filename for the generated Markdown file.
 
 ## Job Execution Logic

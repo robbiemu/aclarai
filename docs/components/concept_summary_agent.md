@@ -64,6 +64,39 @@ The agent delegates information retrieval to specialized sub-agents, each utiliz
 | **Related Concepts** | `RelatedConceptsAgent` | `VectorSearchTool` | Vector Store | Find semantically similar concepts based on vector embeddings. |
 | **Summaries** | (Direct Query) | (N/A) | Neo4j Graph | Retrieve contextual summaries related to the concept. (Currently a direct query, future work may integrate an agent) |
 | **Utterances** | (Direct Query) | (N/A) | Vector Store | Find natural language usage examples related to the concept. (Currently a direct query, future work may integrate an agent) |
+| **Concept Clusters** | `ConceptClusteringJob` | `get_cluster_assignments()` | In-memory Cache | Retrieve pre-computed concept groupings for generating cluster-level summaries. |
+
+### Integration with Concept Clustering
+
+The Concept Summary Agent is a primary consumer of the concept clustering job's output. It retrieves pre-computed concept clusters to inform the generation of concept summaries, particularly for creating higher-level summaries or for navigating related concepts within a thematic group.
+
+#### How it Uses Clusters:
+
+1.  **Cluster-Aware Summarization**: When generating a summary for a concept, the agent can query the cached cluster assignments to identify other concepts belonging to the same cluster. This allows for the creation of more cohesive and contextually rich summaries that encompass the broader theme of the cluster.
+2.  **Enhanced "See Also" Links**: Instead of just linking to individual related concepts, the agent can leverage cluster information to suggest entire clusters of related concepts, providing a more structured and comprehensive navigation experience for the user.
+3.  **Batch Processing**: The agent can potentially process concepts in a cluster together, optimizing retrieval and generation tasks by reducing redundant queries or LLM calls for highly related concepts.
+
+#### Accessing Cluster Data:
+
+The agent accesses the cluster assignments via the `get_cluster_assignments()` method of the `ConceptClusteringJob`. This method returns a dictionary mapping concept IDs to their assigned cluster IDs, or `None` if the cache is empty or expired.
+
+```python
+from aclarai_shared.concept_clustering_job import ConceptClusteringJob
+
+# ... (within ConceptSummaryAgent or a similar context)
+
+clustering_job = ConceptClusteringJob(config) # Assuming config is available
+cluster_assignments = clustering_job.get_cluster_assignments()
+
+if cluster_assignments:
+    for concept_id, cluster_id in cluster_assignments.items():
+        # Use cluster_id to group or process concepts
+        pass
+else:
+    # Handle cases where cluster data is not available or expired
+    # This might involve triggering a re-clustering or proceeding without cluster context
+    pass
+```
 
 ### Output Format
 

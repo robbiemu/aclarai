@@ -4,7 +4,7 @@ These tests validate the clustering logic and configuration handling.
 """
 
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -12,7 +12,6 @@ import pytest
 from services.scheduler.aclarai_scheduler.concept_clustering_job import (
     ClusterAssignment,
     ConceptClusteringJob,
-    ConceptClusteringJobStats,
 )
 from shared.aclarai_shared.config import ConceptClusteringJobConfig
 
@@ -104,7 +103,9 @@ class TestConceptClusteringJob:
         assert job.vector_store == mock_vector_store
         assert job.job_config.similarity_threshold == 0.8
 
-    def test_get_concept_data_success(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_concept_data_success(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test successful concept data retrieval."""
         # Mock Neo4j response
         mock_neo4j_manager.execute_query.return_value = [
@@ -125,7 +126,9 @@ class TestConceptClusteringJob:
         assert concepts[0] == ("concept1", "concept1")
         mock_neo4j_manager.execute_query.assert_called_once()
 
-    def test_get_concept_data_no_results(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_concept_data_no_results(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test concept data retrieval with no results."""
         mock_neo4j_manager.execute_query.return_value = []
 
@@ -139,7 +142,9 @@ class TestConceptClusteringJob:
 
         assert len(concepts) == 0
 
-    def test_get_concept_data_exception(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_concept_data_exception(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test concept data retrieval with exception."""
         mock_neo4j_manager.execute_query.side_effect = Exception("Neo4j error")
 
@@ -153,7 +158,9 @@ class TestConceptClusteringJob:
 
         assert len(concepts) == 0
 
-    def test_perform_clustering_dbscan(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_perform_clustering_dbscan(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test DBSCAN clustering."""
         job = ConceptClusteringJob(
             config=mock_config,
@@ -163,13 +170,15 @@ class TestConceptClusteringJob:
 
         # Create mock embeddings for clustering
         # Two groups of similar vectors
-        embeddings = np.array([
-            [1.0, 0.0, 0.0],  # Group 1
-            [0.9, 0.1, 0.0],  # Group 1
-            [0.0, 1.0, 0.0],  # Group 2
-            [0.0, 0.9, 0.1],  # Group 2
-            [0.5, 0.5, 0.5],  # Potential outlier
-        ])
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],  # Group 1
+                [0.9, 0.1, 0.0],  # Group 1
+                [0.0, 1.0, 0.0],  # Group 2
+                [0.0, 0.9, 0.1],  # Group 2
+                [0.5, 0.5, 0.5],  # Potential outlier
+            ]
+        )
         concept_names = ["concept1", "concept2", "concept3", "concept4", "concept5"]
 
         cluster_assignment = job._perform_clustering(embeddings, concept_names)
@@ -181,7 +190,9 @@ class TestConceptClusteringJob:
         # Basic validation that clustering worked
         assert len(assignments) + len(cluster_assignment.outliers) == len(concept_names)
 
-    def test_perform_clustering_hierarchical(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_perform_clustering_hierarchical(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test hierarchical clustering."""
         # Update config to use hierarchical clustering
         mock_config.scheduler.jobs.concept_clustering.algorithm = "hierarchical"
@@ -193,12 +204,14 @@ class TestConceptClusteringJob:
         )
 
         # Create mock embeddings
-        embeddings = np.array([
-            [1.0, 0.0, 0.0],
-            [0.9, 0.1, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.9, 0.1],
-        ])
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.9, 0.1, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.9, 0.1],
+            ]
+        )
         concept_names = ["concept1", "concept2", "concept3", "concept4"]
 
         cluster_assignment = job._perform_clustering(embeddings, concept_names)
@@ -207,7 +220,9 @@ class TestConceptClusteringJob:
         assignments = cluster_assignment.get_cluster_assignments()
         assert len(assignments) == len(concept_names)
 
-    def test_perform_clustering_empty_embeddings(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_perform_clustering_empty_embeddings(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test clustering with empty embeddings."""
         job = ConceptClusteringJob(
             config=mock_config,
@@ -240,7 +255,9 @@ class TestConceptClusteringJob:
         assert job._cluster_cache is not None
         assert len(job._cluster_cache) == 2
 
-    def test_get_cluster_assignments_cache_hit(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_cluster_assignments_cache_hit(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test getting cluster assignments from cache."""
         job = ConceptClusteringJob(
             config=mock_config,
@@ -256,7 +273,9 @@ class TestConceptClusteringJob:
 
         assert assignments == {"concept1": 0, "concept2": 0}
 
-    def test_get_cluster_assignments_cache_miss(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_cluster_assignments_cache_miss(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test getting cluster assignments with no cache."""
         job = ConceptClusteringJob(
             config=mock_config,
@@ -268,7 +287,9 @@ class TestConceptClusteringJob:
 
         assert assignments is None
 
-    def test_get_cluster_assignments_cache_expired(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_get_cluster_assignments_cache_expired(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test getting cluster assignments with expired cache."""
         job = ConceptClusteringJob(
             config=mock_config,
@@ -278,13 +299,17 @@ class TestConceptClusteringJob:
 
         # Set up expired cache
         job._cluster_cache = {"concept1": 0}
-        job._cache_timestamp = time.time() - (mock_config.scheduler.jobs.concept_clustering.cache_ttl + 1)
+        job._cache_timestamp = time.time() - (
+            mock_config.scheduler.jobs.concept_clustering.cache_ttl + 1
+        )
 
         assignments = job.get_cluster_assignments()
 
         assert assignments is None
 
-    def test_run_job_no_concepts(self, mock_config, mock_neo4j_manager, mock_vector_store):
+    def test_run_job_no_concepts(
+        self, mock_config, mock_neo4j_manager, mock_vector_store
+    ):
         """Test running job with no concepts."""
         mock_neo4j_manager.execute_query.return_value = []
 
@@ -310,12 +335,8 @@ class TestConceptClusteringJob:
 
         # Mock vector store response
         mock_vector_store.similarity_search.side_effect = [
-            [
-                ({"embedding": [1.0, 0.0, 0.0]}, 0.95)
-            ],
-            [
-                ({"embedding": [0.0, 1.0, 0.0]}, 0.95)
-            ],
+            [({"embedding": [1.0, 0.0, 0.0]}, 0.95)],
+            [({"embedding": [0.0, 1.0, 0.0]}, 0.95)],
         ]
 
         job = ConceptClusteringJob(
