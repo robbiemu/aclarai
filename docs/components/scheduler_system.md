@@ -13,6 +13,7 @@ Key responsibilities:
 -   **Reprocessing Tasks**: Handles content marked for reprocessing by other parts of the system.
 -   **Concept Hygiene**: (Future) Performs deduplication and refinement operations.
 -   **Concept Highlighting**: Identifies and highlights the most central or trending concepts in the knowledge graph, generating summary pages like 'Top Concepts' and 'Trending Topics'.
+-   **Concept Summary Generation**: Creates detailed Markdown pages for canonical concepts using RAG workflows to include relevant claims, summaries, and related concepts.
 
 ## Architecture
 
@@ -50,6 +51,24 @@ A dedicated job (`aclarai_scheduler.concept_refresh`) for maintaining the concep
 -   **File Scanning**: Iterates through all Tier 3 concept files.
 -   **Hash Comparison**: Compares the hash of the file's semantic content with the hash stored in the corresponding `:Concept` node in Neo4j.
 -   **Conditional Updates**: If hashes differ, it re-embeds the concept and updates both the vector store and the Neo4j node.
+
+### ConceptHighlightRefreshJob
+
+A combined job (`aclarai_scheduler.concept_highlight_refresh`) that executes both top concepts and trending topics analysis in a single scheduled execution.
+
+-   **Top Concepts Generation**: Runs PageRank analysis to identify the most important concepts and generates `Top Concepts.md`.
+-   **Trending Topics Generation**: Analyzes claim-concept relationships to identify concepts with high growth in mentions and generates `Trending Topics - <date>.md`.
+-   **Atomic Writes**: Ensures both files are written atomically to prevent corruption.
+-   **Vault Sync Support**: Generated files include proper `aclarai:id` and `ver=` markers for sync detection.
+
+### ConceptSummaryRefreshJob
+
+A job (`aclarai_scheduler.concept_summary_refresh`) that generates detailed Markdown pages for all canonical concepts in the knowledge graph.
+
+-   **Concept Querying**: Retrieves all canonical concepts from the Neo4j knowledge graph.
+-   **RAG Processing**: Uses the ConceptSummaryAgent to generate structured content including relevant claims, summaries, and related concepts.
+-   **Conditional Processing**: Can skip concepts with insufficient claims based on configuration.
+-   **Atomic Writes**: Ensures all generated `[[Concept]]` pages are written atomically with proper vault sync markers.
 
 ## Configuration
 

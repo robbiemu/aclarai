@@ -243,6 +243,22 @@ class SchedulerJobsConfig:
             target_file="Trending Topics - {date}.md",
         )
     )
+    concept_highlight_refresh: JobConfig = field(
+        default_factory=lambda: JobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 6 * * *",  # 6 AM daily
+            description="Generate both Top Concepts and Trending Topics highlight files",
+        )
+    )
+    concept_summary_refresh: JobConfig = field(
+        default_factory=lambda: JobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 7 * * *",  # 7 AM daily
+            description="Generate concept summary pages for all canonical concepts",
+        )
+    )
 
 
 @dataclass

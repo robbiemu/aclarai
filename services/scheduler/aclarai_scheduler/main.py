@@ -20,6 +20,8 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
+from .concept_highlight_refresh import ConceptHighlightRefreshJob, ConceptHighlightRefreshJobStats
+from .concept_summary_refresh import ConceptSummaryRefreshJob, ConceptSummaryRefreshJobStats
 from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
 from .trending_topics_job import TrendingTopicsJob, TrendingTopicsJobStats
 from .vault_sync import VaultSyncJob
@@ -41,6 +43,8 @@ class SchedulerService:
         self.concept_refresh_job = ConceptEmbeddingRefreshJob(self.config)
         self.top_concepts_job = TopConceptsJob(self.config)
         self.trending_topics_job = TrendingTopicsJob(self.config)
+        self.concept_highlight_refresh_job = ConceptHighlightRefreshJob(self.config)
+        self.concept_summary_refresh_job = ConceptSummaryRefreshJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -243,6 +247,88 @@ class SchedulerService:
                     "job_id": "trending_topics",
                     "manual_only": True,
                     "description": trending_topics_config.description,
+                },
+            )
+
+        # Register concept highlight refresh job
+        concept_highlight_refresh_config = self.config.scheduler.jobs.concept_highlight_refresh
+        if concept_highlight_refresh_config.enabled and not concept_highlight_refresh_config.manual_only:
+            # Environment variable override
+            concept_highlight_refresh_enabled = (
+                os.getenv("CONCEPT_HIGHLIGHT_REFRESH_ENABLED", "true").lower() == "true"
+            )
+            concept_highlight_refresh_cron = os.getenv(
+                "CONCEPT_HIGHLIGHT_REFRESH_CRON", concept_highlight_refresh_config.cron
+            )
+            if concept_highlight_refresh_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_concept_highlight_refresh_job,
+                    trigger=CronTrigger.from_crontab(concept_highlight_refresh_cron),
+                    id="concept_highlight_refresh",
+                    name="Concept Highlight Refresh Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered concept highlight refresh job with cron '{concept_highlight_refresh_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "concept_highlight_refresh",
+                        "cron": concept_highlight_refresh_cron,
+                        "description": concept_highlight_refresh_config.description,
+                    },
+                )
+        elif concept_highlight_refresh_config.enabled and concept_highlight_refresh_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Concept highlight refresh job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "concept_highlight_refresh",
+                    "manual_only": True,
+                    "description": concept_highlight_refresh_config.description,
+                },
+            )
+
+        # Register concept summary refresh job
+        concept_summary_refresh_config = self.config.scheduler.jobs.concept_summary_refresh
+        if concept_summary_refresh_config.enabled and not concept_summary_refresh_config.manual_only:
+            # Environment variable override
+            concept_summary_refresh_enabled = (
+                os.getenv("CONCEPT_SUMMARY_REFRESH_ENABLED", "true").lower() == "true"
+            )
+            concept_summary_refresh_cron = os.getenv(
+                "CONCEPT_SUMMARY_REFRESH_CRON", concept_summary_refresh_config.cron
+            )
+            if concept_summary_refresh_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_concept_summary_refresh_job,
+                    trigger=CronTrigger.from_crontab(concept_summary_refresh_cron),
+                    id="concept_summary_refresh",
+                    name="Concept Summary Refresh Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered concept summary refresh job with cron '{concept_summary_refresh_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "concept_summary_refresh",
+                        "cron": concept_summary_refresh_cron,
+                        "description": concept_summary_refresh_config.description,
+                    },
+                )
+        elif concept_summary_refresh_config.enabled and concept_summary_refresh_config.manual_only:
+            self.logger.info(
+                "scheduler.main._register_jobs: Concept summary refresh job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "concept_summary_refresh",
+                    "manual_only": True,
+                    "description": concept_summary_refresh_config.description,
                 },
             )
 
@@ -509,6 +595,174 @@ class SchedulerService:
                 "file_written": False,
                 "window_start": "",
                 "window_end": "",
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_concept_highlight_refresh_job(self) -> ConceptHighlightRefreshJobStats:
+        """Execute the concept highlight refresh job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_concept_highlight_refresh_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_highlight_refresh_job",
+                },
+            )
+            return {
+                "success": True,
+                "top_concepts_stats": {
+                    "success": False,
+                    "concepts_analyzed": 0,
+                    "top_concepts_selected": 0,
+                    "file_written": False,
+                    "pagerank_executed": False,
+                    "duration": 0.0,
+                    "error_details": ["Automation is paused"],
+                },
+                "trending_topics_stats": {
+                    "success": False,
+                    "concepts_analyzed": 0,
+                    "trending_concepts_selected": 0,
+                    "file_written": False,
+                    "window_start": "",
+                    "window_end": "",
+                    "duration": 0.0,
+                    "error_details": ["Automation is paused"],
+                },
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"concept_highlight_refresh_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_concept_highlight_refresh_job: Starting concept highlight refresh job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_concept_highlight_refresh_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the concept highlight refresh job
+            stats = self.concept_highlight_refresh_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_concept_highlight_refresh_job: Concept highlight refresh job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_highlight_refresh_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "top_concepts_success": stats["top_concepts_stats"]["success"],
+                    "trending_topics_success": stats["trending_topics_stats"]["success"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_concept_highlight_refresh_job: Concept highlight refresh job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_highlight_refresh_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "top_concepts_stats": {
+                    "success": False,
+                    "concepts_analyzed": 0,
+                    "top_concepts_selected": 0,
+                    "file_written": False,
+                    "pagerank_executed": False,
+                    "duration": 0.0,
+                    "error_details": [str(e)],
+                },
+                "trending_topics_stats": {
+                    "success": False,
+                    "concepts_analyzed": 0,
+                    "trending_concepts_selected": 0,
+                    "file_written": False,
+                    "window_start": "",
+                    "window_end": "",
+                    "duration": 0.0,
+                    "error_details": [str(e)],
+                },
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_concept_summary_refresh_job(self) -> ConceptSummaryRefreshJobStats:
+        """Execute the concept summary refresh job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_concept_summary_refresh_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_summary_refresh_job",
+                },
+            )
+            return {
+                "success": True,
+                "concepts_processed": 0,
+                "concepts_updated": 0,
+                "concepts_skipped": 0,
+                "errors": 0,
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"concept_summary_refresh_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_concept_summary_refresh_job: Starting concept summary refresh job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_concept_summary_refresh_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the concept summary refresh job
+            stats = self.concept_summary_refresh_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_concept_summary_refresh_job: Concept summary refresh job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_summary_refresh_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "concepts_processed": stats["concepts_processed"],
+                    "concepts_updated": stats["concepts_updated"],
+                    "concepts_skipped": stats["concepts_skipped"],
+                    "errors": stats["errors"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_concept_summary_refresh_job: Concept summary refresh job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_summary_refresh_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "concepts_processed": 0,
+                "concepts_updated": 0,
+                "concepts_skipped": 0,
+                "errors": 1,
                 "duration": time.time() - job_start_time,
                 "error_details": [str(e)],
             }
