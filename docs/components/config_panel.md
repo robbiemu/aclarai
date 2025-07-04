@@ -63,9 +63,11 @@ The panel is organized into several collapsible sections using `gr.Group()`:
     *   Claim Link Strength
     *   🪟 Context Window Parameters (Previous Sentences `p`, Following Sentences `f` for Claimify)
 *   **⏰ Scheduler Job Controls**:
+    Controls for enabling, disabling, and scheduling periodic jobs. For a detailed list of all available jobs and their specific parameters, see the [Scheduler Job Configuration](./scheduler_job_configuration.md) documentation.
     *   🔄 Concept Embedding Refresh (Enabled, Manual Only, Cron Schedule)
     *   📁 Vault Sync (Enabled, Manual Only, Cron Schedule)
 *   **🧠 Highlight & Summary**:
+    Configures the automated generation of vault-wide summary pages like "Top Concepts" and "Trending Topics". This section corresponds to features planned for implementation in Sprints 9 and 10.
     *   🤖 Writing Agent (Model for Trending Concepts Agent - synchronized with the one in Model Settings)
     *   🏆 Top Concepts (Ranking Metric, Count, Percent, Target File with preview)
     *   📈 Trending Topics (Window Days, Count, Percent, Min Mentions, Target File with preview)
@@ -143,7 +145,7 @@ logger.error(
 ## Related Documentation
 
 *   [Configuration Panel Design](../arch/design_config_panel.md) - Detailed design specification.
-*   [Configuration Guide](../guides/configuration_guide.md) - General guide on Aclarai configuration.
 *   `settings/aclarai.config.yaml` - The user's configuration file.
 *   `shared/aclarai_shared/aclarai.config.default.yaml` - Default system configuration.
 *   [UI System](./ui_system.md) - Overview of the UI system.
+*   [Scheduler Job Configuration](./scheduler_job_configuration.md) - Detailed guide to all configurable jobs.
