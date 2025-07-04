@@ -891,6 +891,16 @@ def create_configuration_panel() -> gr.Blocks:
                 "Configure concept highlight jobs that generate global summary pages for your vault."
             )
 
+            # Model selection for concept highlights
+            with gr.Group():
+                gr.Markdown("### 🤖 Writing Agent")
+                trending_concepts_agent_summary_input = gr.Textbox(
+                    label="Model for Trending Concepts Agent",
+                    value=initial_values[7],  # trending_concepts_agent from initial_values
+                    placeholder="gpt-4",
+                    info="LLM model used to generate concept highlight content (also configured in Model & Embedding Settings)",
+                )
+
             with gr.Group():
                 gr.Markdown("### 🏆 Top Concepts")
                 gr.Markdown("Generate ranked lists of most important concepts")
@@ -1005,6 +1015,25 @@ def create_configuration_panel() -> gr.Blocks:
                     outputs=[trending_topics_preview],
                 )
 
+                # Synchronize trending concepts agent inputs
+                def sync_trending_agent_to_summary(value: str) -> str:
+                    return value
+
+                def sync_trending_agent_to_main(value: str) -> str:
+                    return value
+
+                trending_concepts_agent_input.change(
+                    fn=sync_trending_agent_to_summary,
+                    inputs=[trending_concepts_agent_input],
+                    outputs=[trending_concepts_agent_summary_input],
+                )
+
+                trending_concepts_agent_summary_input.change(
+                    fn=sync_trending_agent_to_main,
+                    inputs=[trending_concepts_agent_summary_input],
+                    outputs=[trending_concepts_agent_input],
+                )
+
         # Save Section
         with gr.Group():
             gr.Markdown("## 💾 Save Configuration")
@@ -1021,7 +1050,11 @@ def create_configuration_panel() -> gr.Blocks:
             """Reload configuration from file."""
             try:
                 values = load_current_config()
-                return values + ("🔄 **Configuration reloaded from file.**",)
+                # Insert the trending_concepts_agent value again after the original one for the summary input
+                values_list = list(values)
+                # Insert at position 8 (after trending_concepts_agent which is at position 7)
+                values_list.insert(8, values[7])  # Duplicate trending_concepts_agent value
+                return tuple(values_list) + ("🔄 **Configuration reloaded from file.**",)
             except Exception as e:
                 logger.error(
                     "Failed to reload configuration",
@@ -1033,7 +1066,10 @@ def create_configuration_panel() -> gr.Blocks:
                         "error_type": type(e).__name__,
                     },
                 )
-                return initial_values + (
+                # For initial_values, also insert the duplicate value
+                initial_list = list(initial_values)
+                initial_list.insert(8, initial_values[7])
+                return tuple(initial_list) + (
                     f"❌ **Error reloading configuration:** {str(e)}",
                 )
 
@@ -1089,6 +1125,7 @@ def create_configuration_panel() -> gr.Blocks:
                 concept_summary_input,
                 subject_summary_input,
                 trending_concepts_agent_input,
+                trending_concepts_agent_summary_input,  # Add the new input
                 fallback_plugin_input,
                 utterance_embedding_input,
                 concept_embedding_input,
