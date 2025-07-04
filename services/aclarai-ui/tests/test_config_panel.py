@@ -101,93 +101,153 @@ class TestConceptHighlightsValidation:
     def test_concept_highlights_mutual_exclusivity_validation(self):
         """Test that count and percent are mutually exclusive."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test that using both count and percent triggers validation error
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 25, 5.0, "Top Concepts.md",  # Both count and percent non-zero
-            7, 0, 5.0, 2, "Trending Topics - {date}.md"
+            "pagerank",
+            25,
+            5.0,
+            "Top Concepts.md",  # Both count and percent non-zero
+            7,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",
         )
-        
+
         assert not is_valid
-        assert any("count and percent cannot both be used" in error.lower() for error in errors)
+        assert any(
+            "count and percent cannot both be used" in error.lower() for error in errors
+        )
 
     def test_concept_highlights_metric_validation(self):
         """Test that metric is validated correctly."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test invalid metric
         is_valid, errors = validate_concept_highlights_config(
-            "invalid_metric", 25, 0.0, "Top Concepts.md",
-            7, 0, 5.0, 2, "Trending Topics - {date}.md"
+            "invalid_metric",
+            25,
+            0.0,
+            "Top Concepts.md",
+            7,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",
         )
-        
+
         assert not is_valid
-        assert any("metric must be either 'pagerank' or 'degree'" in error.lower() for error in errors)
+        assert any(
+            "metric must be either 'pagerank' or 'degree'" in error.lower()
+            for error in errors
+        )
 
     def test_concept_highlights_filename_validation(self):
         """Test that target filenames are validated."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test empty filename
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 25, 0.0, "",  # Empty filename
-            7, 0, 5.0, 2, "Trending Topics - {date}.md"
+            "pagerank",
+            25,
+            0.0,
+            "",  # Empty filename
+            7,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",
         )
-        
+
         assert not is_valid
         assert any("target_file cannot be empty" in error.lower() for error in errors)
 
     def test_concept_highlights_percentage_range_validation(self):
         """Test that percentages are within valid range."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test percentage > 100
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 0, 150.0, "Top Concepts.md",  # Percentage > 100
-            7, 0, 5.0, 2, "Trending Topics - {date}.md"
+            "pagerank",
+            0,
+            150.0,
+            "Top Concepts.md",  # Percentage > 100
+            7,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",
         )
-        
+
         assert not is_valid
-        assert any("percent must be between 0 and 100" in error.lower() for error in errors)
+        assert any(
+            "percent must be between 0 and 100" in error.lower() for error in errors
+        )
 
     def test_concept_highlights_valid_configuration(self):
         """Test that valid concept highlights configuration passes validation."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test valid configuration
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 25, 0.0, "Top Concepts.md",
-            7, 0, 5.0, 2, "Trending Topics - {date}.md"
+            "pagerank",
+            25,
+            0.0,
+            "Top Concepts.md",
+            7,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",
         )
-        
+
         assert is_valid
         assert len(errors) == 0
 
     def test_concept_highlights_window_days_validation(self):
         """Test that window_days is validated correctly."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test window_days < 1
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 25, 0.0, "Top Concepts.md",
-            0, 0, 5.0, 2, "Trending Topics - {date}.md"  # window_days = 0
+            "pagerank",
+            25,
+            0.0,
+            "Top Concepts.md",
+            0,
+            0,
+            5.0,
+            2,
+            "Trending Topics - {date}.md",  # window_days = 0
         )
-        
+
         assert not is_valid
-        assert any("window_days must be at least 1" in error.lower() for error in errors)
+        assert any(
+            "window_days must be at least 1" in error.lower() for error in errors
+        )
 
     def test_concept_highlights_min_mentions_validation(self):
         """Test that min_mentions is validated correctly."""
         from aclarai_ui.config_panel import validate_concept_highlights_config
-        
+
         # Test negative min_mentions
         is_valid, errors = validate_concept_highlights_config(
-            "pagerank", 25, 0.0, "Top Concepts.md",
-            7, 0, 5.0, -1, "Trending Topics - {date}.md"  # min_mentions = -1
+            "pagerank",
+            25,
+            0.0,
+            "Top Concepts.md",
+            7,
+            0,
+            5.0,
+            -1,
+            "Trending Topics - {date}.md",  # min_mentions = -1
         )
-        
+
         assert not is_valid
-        assert any("min_mentions must be non-negative" in error.lower() for error in errors)
+        assert any(
+            "min_mentions must be non-negative" in error.lower() for error in errors
+        )
 
 
 class TestValidationFunctions:

@@ -10,8 +10,8 @@ Follows the design specification from docs/arch/design_config_panel.md
 import copy
 import logging
 import re
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import gradio as gr
@@ -61,6 +61,7 @@ class ConfigData:
     trending_topics_percent: float
     trending_topics_min_mentions: int
     trending_topics_target_file: str
+
 
 logger = logging.getLogger("aclarai-ui.config_panel")
 
@@ -523,81 +524,81 @@ def create_configuration_panel() -> gr.Blocks:
             )
 
     def save_configuration(
-    claimify_default: str,
-    claimify_selection: str,
-    claimify_disambiguation: str,
-    claimify_decomposition: str,
-    concept_linker: str,
-    concept_summary: str,
-    subject_summary: str,
-    trending_concepts_agent: str,
-    fallback_plugin: str,
-    utterance_embedding: str,
-    concept_embedding: str,
-    summary_embedding: str,
-    fallback_embedding: str,
-    concept_merge: float,
-    claim_link_strength: float,
-    window_p: int,
-    window_f: int,
-    concept_refresh_enabled: bool,
-    concept_refresh_manual_only: bool,
-    concept_refresh_cron: str,
-    vault_sync_enabled: bool,
-    vault_sync_manual_only: bool,
-    vault_sync_cron: str,
-    # Concept highlights parameters
-    top_concepts_metric: str,
-    top_concepts_count: int,
-    top_concepts_percent: float,
-    top_concepts_target_file: str,
-    trending_topics_window_days: int,
-    trending_topics_count: int,
-    trending_topics_percent: float,
-    trending_topics_min_mentions: int,
-    trending_topics_target_file: str,
-) -> str:
-    """Save configuration changes to YAML file."""
-    
-    # Immediately pack arguments into the dataclass for structured access
-    config_to_save = ConfigData(
-        claimify_default=claimify_default,
-        claimify_selection=claimify_selection,
-        claimify_disambiguation=claimify_disambiguation,
-        claimify_decomposition=claimify_decomposition,
-        concept_linker=concept_linker,
-        concept_summary=concept_summary,
-        subject_summary=subject_summary,
-        trending_concepts_agent=trending_concepts_agent,
-        fallback_plugin=fallback_plugin,
-        utterance_embedding=utterance_embedding,
-        concept_embedding=concept_embedding,
-        summary_embedding=summary_embedding,
-        fallback_embedding=fallback_embedding,
-        concept_merge=concept_merge,
-        claim_link_strength=claim_link_strength,
-        window_p=window_p,
-        window_f=window_f,
-        concept_refresh_enabled=concept_refresh_enabled,
-        concept_refresh_manual_only=concept_refresh_manual_only,
-        concept_refresh_cron=concept_refresh_cron,
-        vault_sync_enabled=vault_sync_enabled,
-        vault_sync_manual_only=vault_sync_manual_only,
-        vault_sync_cron=vault_sync_cron,
-        top_concepts_metric=top_concepts_metric,
-        top_concepts_count=top_concepts_count,
-        top_concepts_percent=top_concepts_percent,
-        top_concepts_target_file=top_concepts_target_file,
-        trending_topics_window_days=trending_topics_window_days,
-        trending_topics_count=trending_topics_count,
-        trending_topics_percent=trending_topics_percent,
-        trending_topics_min_mentions=trending_topics_min_mentions,
-        trending_topics_target_file=trending_topics_target_file,
-    )
+        claimify_default: str,
+        claimify_selection: str,
+        claimify_disambiguation: str,
+        claimify_decomposition: str,
+        concept_linker: str,
+        concept_summary: str,
+        subject_summary: str,
+        trending_concepts_agent: str,
+        fallback_plugin: str,
+        utterance_embedding: str,
+        concept_embedding: str,
+        summary_embedding: str,
+        fallback_embedding: str,
+        concept_merge: float,
+        claim_link_strength: float,
+        window_p: int,
+        window_f: int,
+        concept_refresh_enabled: bool,
+        concept_refresh_manual_only: bool,
+        concept_refresh_cron: str,
+        vault_sync_enabled: bool,
+        vault_sync_manual_only: bool,
+        vault_sync_cron: str,
+        # Concept highlights parameters
+        top_concepts_metric: str,
+        top_concepts_count: int,
+        top_concepts_percent: float,
+        top_concepts_target_file: str,
+        trending_topics_window_days: int,
+        trending_topics_count: int,
+        trending_topics_percent: float,
+        trending_topics_min_mentions: int,
+        trending_topics_target_file: str,
+    ) -> str:
+        """Save configuration changes to YAML file."""
 
-    try:
-        # Validate all inputs
-        validation_errors = []
+        # Immediately pack arguments into the dataclass for structured access
+        ConfigData(
+            claimify_default=claimify_default,
+            claimify_selection=claimify_selection,
+            claimify_disambiguation=claimify_disambiguation,
+            claimify_decomposition=claimify_decomposition,
+            concept_linker=concept_linker,
+            concept_summary=concept_summary,
+            subject_summary=subject_summary,
+            trending_concepts_agent=trending_concepts_agent,
+            fallback_plugin=fallback_plugin,
+            utterance_embedding=utterance_embedding,
+            concept_embedding=concept_embedding,
+            summary_embedding=summary_embedding,
+            fallback_embedding=fallback_embedding,
+            concept_merge=concept_merge,
+            claim_link_strength=claim_link_strength,
+            window_p=window_p,
+            window_f=window_f,
+            concept_refresh_enabled=concept_refresh_enabled,
+            concept_refresh_manual_only=concept_refresh_manual_only,
+            concept_refresh_cron=concept_refresh_cron,
+            vault_sync_enabled=vault_sync_enabled,
+            vault_sync_manual_only=vault_sync_manual_only,
+            vault_sync_cron=vault_sync_cron,
+            top_concepts_metric=top_concepts_metric,
+            top_concepts_count=top_concepts_count,
+            top_concepts_percent=top_concepts_percent,
+            top_concepts_target_file=top_concepts_target_file,
+            trending_topics_window_days=trending_topics_window_days,
+            trending_topics_count=trending_topics_count,
+            trending_topics_percent=trending_topics_percent,
+            trending_topics_min_mentions=trending_topics_min_mentions,
+            trending_topics_target_file=trending_topics_target_file,
+        )
+
+        try:
+            # Validate all inputs
+            validation_errors = []
             # Validate model names
             models_to_validate = [
                 ("Claimify Default", claimify_default),
@@ -1172,7 +1173,7 @@ def create_configuration_panel() -> gr.Blocks:
             try:
                 # This now returns the complete ConfigData object
                 config = load_current_config()
-                
+
                 # The return tuple MUST be constructed in the exact order expected by the
                 # Gradio `outputs` list. This is now much safer as we pull from named
                 # attributes, reducing the risk of misordering.
@@ -1185,20 +1186,18 @@ def create_configuration_panel() -> gr.Blocks:
                     config.concept_linker,
                     config.concept_summary,
                     config.subject_summary,
-                    config.trending_concepts_agent, # For the main model section
-                    config.trending_concepts_agent, # For the "Highlight & Summary" section
+                    config.trending_concepts_agent,  # For the main model section
+                    config.trending_concepts_agent,  # For the "Highlight & Summary" section
                     config.fallback_plugin,
                     config.utterance_embedding,
                     config.concept_embedding,
                     config.summary_embedding,
                     config.fallback_embedding,
-
                     # --- Section: Thresholds & Parameters ---
                     config.concept_merge,
                     config.claim_link_strength,
                     config.window_p,
                     config.window_f,
-
                     # --- Section: Automation & Scheduler Control ---
                     config.concept_refresh_enabled,
                     config.concept_refresh_manual_only,
@@ -1206,7 +1205,6 @@ def create_configuration_panel() -> gr.Blocks:
                     config.vault_sync_enabled,
                     config.vault_sync_manual_only,
                     config.vault_sync_cron,
-
                     # --- Section: Highlight & Summary ---
                     config.top_concepts_metric,
                     config.top_concepts_count,
@@ -1217,7 +1215,6 @@ def create_configuration_panel() -> gr.Blocks:
                     config.trending_topics_percent,
                     config.trending_topics_min_mentions,
                     config.trending_topics_target_file,
-                    
                     # Finally, the status message
                     "🔄 **Configuration reloaded from file.**",
                 )
