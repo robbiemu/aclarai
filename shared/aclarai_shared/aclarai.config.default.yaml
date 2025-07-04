@@ -307,6 +307,12 @@ scheduler:
       algorithm: "dbscan"
       cache_ttl: 3600
       use_persistent_cache: true
+    
+    subject_summary_refresh:
+      enabled: true
+      manual_only: false
+      cron: "0 6 * * *"  # 6 AM daily (after clustering at 2 AM)
+      description: "Generate [[Subject:XYZ]] pages from concept clusters"
 
 # Feature flags
 features:

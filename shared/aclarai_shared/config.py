@@ -297,6 +297,14 @@ class SchedulerJobsConfig:
             use_persistent_cache=True,
         )
     )
+    subject_summary_refresh: JobConfig = field(
+        default_factory=lambda: JobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 6 * * *",  # 6 AM daily (after clustering at 2 AM)
+            description="Generate [[Subject:XYZ]] pages from concept clusters",
+        )
+    )
 
 
 @dataclass

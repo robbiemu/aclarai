@@ -29,6 +29,10 @@ from .concept_summary_refresh import (
     ConceptSummaryRefreshJob,
     ConceptSummaryRefreshJobStats,
 )
+from .subject_summary_refresh import (
+    SubjectSummaryRefreshJob,
+    SubjectSummaryRefreshJobStats,
+)
 from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
 from .trending_topics_job import TrendingTopicsJob, TrendingTopicsJobStats
 from .vault_sync import VaultSyncJob
@@ -52,6 +56,7 @@ class SchedulerService:
         self.trending_topics_job = TrendingTopicsJob(self.config)
         self.concept_highlight_refresh_job = ConceptHighlightRefreshJob(self.config)
         self.concept_summary_refresh_job = ConceptSummaryRefreshJob(self.config)
+        self.subject_summary_refresh_job = SubjectSummaryRefreshJob(self.config)
         self.concept_clustering_job = ConceptClusteringJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -399,6 +404,52 @@ class SchedulerService:
                     "job_id": "concept_clustering",
                     "manual_only": True,
                     "description": concept_clustering_config.description,
+                },
+            )
+
+        # Register subject summary refresh job
+        subject_summary_refresh_config = self.config.scheduler.jobs.subject_summary_refresh
+        if (
+            subject_summary_refresh_config.enabled
+            and not subject_summary_refresh_config.manual_only
+        ):
+            # Environment variable override
+            subject_summary_refresh_enabled = (
+                os.getenv("SUBJECT_SUMMARY_REFRESH_ENABLED", "true").lower() == "true"
+            )
+            subject_summary_refresh_cron = os.getenv(
+                "SUBJECT_SUMMARY_REFRESH_CRON", subject_summary_refresh_config.cron
+            )
+            if subject_summary_refresh_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_subject_summary_refresh_job,
+                    trigger=CronTrigger.from_crontab(subject_summary_refresh_cron),
+                    id="subject_summary_refresh",
+                    name="Subject Summary Refresh Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered subject summary refresh job with cron '{subject_summary_refresh_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "subject_summary_refresh",
+                        "cron": subject_summary_refresh_cron,
+                        "description": subject_summary_refresh_config.description,
+                    },
+                )
+        elif (
+            subject_summary_refresh_config.enabled and subject_summary_refresh_config.manual_only
+        ):
+            self.logger.info(
+                "scheduler.main._register_jobs: Subject summary refresh job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "subject_summary_refresh",
+                    "manual_only": True,
+                    "description": subject_summary_refresh_config.description,
                 },
             )
 
@@ -908,6 +959,76 @@ class SchedulerService:
                 "concepts_clustered": 0,
                 "concepts_outliers": 0,
                 "cache_updated": False,
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_subject_summary_refresh_job(self) -> SubjectSummaryRefreshJobStats:
+        """Execute the subject summary refresh job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_subject_summary_refresh_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_subject_summary_refresh_job",
+                },
+            )
+            return {
+                "success": True,
+                "clusters_processed": 0,
+                "subjects_generated": 0,
+                "subjects_skipped": 0,
+                "errors": 0,
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"subject_summary_refresh_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_subject_summary_refresh_job: Starting subject summary refresh job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_subject_summary_refresh_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the subject summary refresh job
+            stats = self.subject_summary_refresh_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_subject_summary_refresh_job: Subject summary refresh job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_subject_summary_refresh_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "clusters_processed": stats["clusters_processed"],
+                    "subjects_generated": stats["subjects_generated"],
+                    "subjects_skipped": stats["subjects_skipped"],
+                    "errors": stats["errors"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_subject_summary_refresh_job: Subject summary refresh job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_subject_summary_refresh_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "clusters_processed": 0,
+                "subjects_generated": 0,
+                "subjects_skipped": 0,
+                "errors": 1,
                 "duration": time.time() - job_start_time,
                 "error_details": [str(e)],
             }
