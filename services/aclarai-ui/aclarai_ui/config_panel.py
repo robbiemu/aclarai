@@ -11,10 +11,56 @@ import copy
 import logging
 import re
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 import gradio as gr
 import yaml
+
+
+@dataclass
+class ConfigData:
+    """A structured container for all UI configuration values."""
+
+    # --- Section: Model & Embedding Settings ---
+    claimify_default: str
+    claimify_selection: str
+    claimify_disambiguation: str
+    claimify_decomposition: str
+    concept_linker: str
+    concept_summary: str
+    subject_summary: str
+    trending_concepts_agent: str
+    fallback_plugin: str
+    utterance_embedding: str
+    concept_embedding: str
+    summary_embedding: str
+    fallback_embedding: str
+
+    # --- Section: Thresholds & Parameters ---
+    concept_merge: float
+    claim_link_strength: float
+    window_p: int
+    window_f: int
+
+    # --- Section: Automation & Scheduler Control ---
+    concept_refresh_enabled: bool
+    concept_refresh_manual_only: bool
+    concept_refresh_cron: str
+    vault_sync_enabled: bool
+    vault_sync_manual_only: bool
+    vault_sync_cron: str
+
+    # --- Section: Highlight & Summary ---
+    top_concepts_metric: str
+    top_concepts_count: int
+    top_concepts_percent: float
+    top_concepts_target_file: str
+    trending_topics_window_days: int
+    trending_topics_count: int
+    trending_topics_percent: float
+    trending_topics_min_mentions: int
+    trending_topics_target_file: str
 
 logger = logging.getLogger("aclarai-ui.config_panel")
 
@@ -307,42 +353,8 @@ def create_configuration_panel() -> gr.Blocks:
     """Create the configuration panel interface."""
     config_manager = ConfigurationManager()
 
-    def load_current_config() -> Tuple[
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,
-        str,  # summary_embedding
-        str,  # fallback_embedding
-        float,
-        float,
-        int,
-        int,
-        bool,
-        bool,
-        str,
-        bool,
-        bool,
-        str,
-        # Concept highlights configuration
-        str,  # top_concepts_metric
-        int,  # top_concepts_count
-        float,  # top_concepts_percent
-        str,  # top_concepts_target_file
-        int,  # trending_topics_window_days
-        int,  # trending_topics_count
-        float,  # trending_topics_percent
-        int,  # trending_topics_min_mentions
-        str,  # trending_topics_target_file
-    ]:
-        """Load current configuration values for UI display."""
+    def load_current_config() -> ConfigData:
+        """Load current configuration values into a structured dataclass."""
         try:
             config = config_manager.load_config()
             # Extract model configurations
@@ -429,40 +441,39 @@ def create_configuration_panel() -> gr.Blocks:
                 "target_file", "Trending Topics - {date}.md"
             )
 
-            return (
-                claimify_default,
-                claimify_selection,
-                claimify_disambiguation,
-                claimify_decomposition,
-                concept_linker,
-                concept_summary,
-                subject_summary,
-                trending_concepts_agent,
-                fallback_plugin,
-                utterance_embedding,
-                concept_embedding,
-                summary_embedding,
-                fallback_embedding,
-                concept_merge,
-                claim_link_strength,
-                window_p,
-                window_f,
-                concept_refresh_enabled,
-                concept_refresh_manual_only,
-                concept_refresh_cron,
-                vault_sync_enabled,
-                vault_sync_manual_only,
-                vault_sync_cron,
-                # Concept highlights values
-                top_concepts_metric,
-                top_concepts_count,
-                top_concepts_percent,
-                top_concepts_target_file,
-                trending_topics_window_days,
-                trending_topics_count,
-                trending_topics_percent,
-                trending_topics_min_mentions,
-                trending_topics_target_file,
+            return ConfigData(
+                claimify_default=claimify_default,
+                claimify_selection=claimify_selection,
+                claimify_disambiguation=claimify_disambiguation,
+                claimify_decomposition=claimify_decomposition,
+                concept_linker=concept_linker,
+                concept_summary=concept_summary,
+                subject_summary=subject_summary,
+                trending_concepts_agent=trending_concepts_agent,
+                fallback_plugin=fallback_plugin,
+                utterance_embedding=utterance_embedding,
+                concept_embedding=concept_embedding,
+                summary_embedding=summary_embedding,
+                fallback_embedding=fallback_embedding,
+                concept_merge=concept_merge,
+                claim_link_strength=claim_link_strength,
+                window_p=window_p,
+                window_f=window_f,
+                concept_refresh_enabled=concept_refresh_enabled,
+                concept_refresh_manual_only=concept_refresh_manual_only,
+                concept_refresh_cron=concept_refresh_cron,
+                vault_sync_enabled=vault_sync_enabled,
+                vault_sync_manual_only=vault_sync_manual_only,
+                vault_sync_cron=vault_sync_cron,
+                top_concepts_metric=top_concepts_metric,
+                top_concepts_count=top_concepts_count,
+                top_concepts_percent=top_concepts_percent,
+                top_concepts_target_file=top_concepts_target_file,
+                trending_topics_window_days=trending_topics_window_days,
+                trending_topics_count=trending_topics_count,
+                trending_topics_percent=trending_topics_percent,
+                trending_topics_min_mentions=trending_topics_min_mentions,
+                trending_topics_target_file=trending_topics_target_file,
             )
         except Exception as e:
             logger.error(
@@ -475,82 +486,118 @@ def create_configuration_panel() -> gr.Blocks:
                     "error_type": type(e).__name__,
                 },
             )
-            # Return defaults
-            return (
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo",
-                "gpt-3.5-turbo",
-                "gpt-4",
-                "gpt-3.5-turbo",
-                "gpt-4",
-                "gpt-3.5-turbo",
-                "sentence-transformers/all-MiniLM-L6-v2",
-                "text-embedding-3-small",
-                "sentence-transformers/all-MiniLM-L6-v2",
-                "sentence-transformers/all-mpnet-base-v2",
-                0.90,
-                0.60,
-                3,
-                1,
-                True,
-                False,
-                "0 3 * * *",
-                True,
-                False,
-                "*/30 * * * *",
-                # Concept highlights defaults
-                "pagerank",
-                25,
-                0.0,
-                "Top Concepts.md",
-                7,
-                0,
-                5.0,
-                2,
-                "Trending Topics - {date}.md",
+            # Return a ConfigData instance with default values
+            return ConfigData(
+                claimify_default="gpt-3.5-turbo",
+                claimify_selection="gpt-3.5-turbo",
+                claimify_disambiguation="gpt-3.5-turbo",
+                claimify_decomposition="gpt-3.5-turbo",
+                concept_linker="gpt-3.5-turbo",
+                concept_summary="gpt-4",
+                subject_summary="gpt-3.5-turbo",
+                trending_concepts_agent="gpt-4",
+                fallback_plugin="gpt-3.5-turbo",
+                utterance_embedding="sentence-transformers/all-MiniLM-L6-v2",
+                concept_embedding="text-embedding-3-small",
+                summary_embedding="sentence-transformers/all-MiniLM-L6-v2",
+                fallback_embedding="sentence-transformers/all-mpnet-base-v2",
+                concept_merge=0.90,
+                claim_link_strength=0.60,
+                window_p=3,
+                window_f=1,
+                concept_refresh_enabled=True,
+                concept_refresh_manual_only=False,
+                concept_refresh_cron="0 3 * * *",
+                vault_sync_enabled=True,
+                vault_sync_manual_only=False,
+                vault_sync_cron="*/30 * * * *",
+                top_concepts_metric="pagerank",
+                top_concepts_count=25,
+                top_concepts_percent=0.0,
+                top_concepts_target_file="Top Concepts.md",
+                trending_topics_window_days=7,
+                trending_topics_count=0,
+                trending_topics_percent=5.0,
+                trending_topics_min_mentions=2,
+                trending_topics_target_file="Trending Topics - {date}.md",
             )
 
     def save_configuration(
-        claimify_default: str,
-        claimify_selection: str,
-        claimify_disambiguation: str,
-        claimify_decomposition: str,
-        concept_linker: str,
-        concept_summary: str,
-        subject_summary: str,
-        trending_concepts_agent: str,
-        fallback_plugin: str,
-        utterance_embedding: str,
-        concept_embedding: str,
-        summary_embedding: str,
-        fallback_embedding: str,
-        concept_merge: float,
-        claim_link_strength: float,
-        window_p: int,
-        window_f: int,
-        concept_refresh_enabled: bool,
-        concept_refresh_manual_only: bool,
-        concept_refresh_cron: str,
-        vault_sync_enabled: bool,
-        vault_sync_manual_only: bool,
-        vault_sync_cron: str,
-        # Concept highlights parameters
-        top_concepts_metric: str,
-        top_concepts_count: int,
-        top_concepts_percent: float,
-        top_concepts_target_file: str,
-        trending_topics_window_days: int,
-        trending_topics_count: int,
-        trending_topics_percent: float,
-        trending_topics_min_mentions: int,
-        trending_topics_target_file: str,
-    ) -> str:
-        """Save configuration changes to YAML file."""
-        try:
-            # Validate all inputs
-            validation_errors = []
+    claimify_default: str,
+    claimify_selection: str,
+    claimify_disambiguation: str,
+    claimify_decomposition: str,
+    concept_linker: str,
+    concept_summary: str,
+    subject_summary: str,
+    trending_concepts_agent: str,
+    fallback_plugin: str,
+    utterance_embedding: str,
+    concept_embedding: str,
+    summary_embedding: str,
+    fallback_embedding: str,
+    concept_merge: float,
+    claim_link_strength: float,
+    window_p: int,
+    window_f: int,
+    concept_refresh_enabled: bool,
+    concept_refresh_manual_only: bool,
+    concept_refresh_cron: str,
+    vault_sync_enabled: bool,
+    vault_sync_manual_only: bool,
+    vault_sync_cron: str,
+    # Concept highlights parameters
+    top_concepts_metric: str,
+    top_concepts_count: int,
+    top_concepts_percent: float,
+    top_concepts_target_file: str,
+    trending_topics_window_days: int,
+    trending_topics_count: int,
+    trending_topics_percent: float,
+    trending_topics_min_mentions: int,
+    trending_topics_target_file: str,
+) -> str:
+    """Save configuration changes to YAML file."""
+    
+    # Immediately pack arguments into the dataclass for structured access
+    config_to_save = ConfigData(
+        claimify_default=claimify_default,
+        claimify_selection=claimify_selection,
+        claimify_disambiguation=claimify_disambiguation,
+        claimify_decomposition=claimify_decomposition,
+        concept_linker=concept_linker,
+        concept_summary=concept_summary,
+        subject_summary=subject_summary,
+        trending_concepts_agent=trending_concepts_agent,
+        fallback_plugin=fallback_plugin,
+        utterance_embedding=utterance_embedding,
+        concept_embedding=concept_embedding,
+        summary_embedding=summary_embedding,
+        fallback_embedding=fallback_embedding,
+        concept_merge=concept_merge,
+        claim_link_strength=claim_link_strength,
+        window_p=window_p,
+        window_f=window_f,
+        concept_refresh_enabled=concept_refresh_enabled,
+        concept_refresh_manual_only=concept_refresh_manual_only,
+        concept_refresh_cron=concept_refresh_cron,
+        vault_sync_enabled=vault_sync_enabled,
+        vault_sync_manual_only=vault_sync_manual_only,
+        vault_sync_cron=vault_sync_cron,
+        top_concepts_metric=top_concepts_metric,
+        top_concepts_count=top_concepts_count,
+        top_concepts_percent=top_concepts_percent,
+        top_concepts_target_file=top_concepts_target_file,
+        trending_topics_window_days=trending_topics_window_days,
+        trending_topics_count=trending_topics_count,
+        trending_topics_percent=trending_topics_percent,
+        trending_topics_min_mentions=trending_topics_min_mentions,
+        trending_topics_target_file=trending_topics_target_file,
+    )
+
+    try:
+        # Validate all inputs
+        validation_errors = []
             # Validate model names
             models_to_validate = [
                 ("Claimify Default", claimify_default),
@@ -771,7 +818,7 @@ def create_configuration_panel() -> gr.Blocks:
             and context window settings. Changes are automatically saved to `settings/aclarai.config.yaml`."""
         )
         # Load initial values
-        initial_values = load_current_config()
+        initial_config = load_current_config()
         # Model & Embedding Settings Section
         with gr.Group():
             gr.Markdown("## 🤖 Model & Embedding Settings")
@@ -780,26 +827,26 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     claimify_default_input = gr.Textbox(
                         label="Default Model",
-                        value=initial_values[0],
+                        value=initial_config.claimify_default,
                         placeholder="gpt-4",
                         info="Default model for all Claimify stages",
                     )
                     claimify_selection_input = gr.Textbox(
                         label="Selection Model",
-                        value=initial_values[1],
+                        value=initial_config.claimify_selection,
                         placeholder="claude-3-opus",
                         info="Model for Claimify selection stage",
                     )
                 with gr.Row():
                     claimify_disambiguation_input = gr.Textbox(
                         label="Disambiguation Model",
-                        value=initial_values[2],
+                        value=initial_config.claimify_disambiguation,
                         placeholder="mistral-7b",
                         info="Model for Claimify disambiguation",
                     )
                     claimify_decomposition_input = gr.Textbox(
                         label="Decomposition Model",
-                        value=initial_values[3],
+                        value=initial_config.claimify_decomposition,
                         placeholder="gpt-4",
                         info="Model for Claimify decomposition",
                     )
@@ -808,32 +855,32 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     concept_linker_input = gr.Textbox(
                         label="Concept Linker",
-                        value=initial_values[4],
+                        value=initial_config.concept_linker,
                         placeholder="mistral-7b",
                         info="Used to classify Claim→Concept relationships",
                     )
                     concept_summary_input = gr.Textbox(
                         label="Concept Summary",
-                        value=initial_values[5],
+                        value=initial_config.concept_summary,
                         placeholder="gpt-4",
                         info="Generates individual [[Concept]] Markdown pages",
                     )
                 with gr.Row():
                     subject_summary_input = gr.Textbox(
                         label="Subject Summary",
-                        value=initial_values[6],
+                        value=initial_config.subject_summary,
                         placeholder="mistral-7b",
                         info="Generates [[Subject:XYZ]] pages from concept clusters",
                     )
                     trending_concepts_agent_input = gr.Textbox(
                         label="Trending Concepts Agent",
-                        value=initial_values[7],
+                        value=initial_config.trending_concepts_agent,
                         placeholder="gpt-4",
                         info="Writes newsletter-style blurbs for Top/Trending Concepts",
                     )
                 fallback_plugin_input = gr.Textbox(
                     label="Fallback Plugin",
-                    value=initial_values[8],
+                    value=initial_config.fallback_plugin,
                     placeholder="openrouter:gemma-2b",
                     info="Used when format detection fails",
                 )
@@ -842,26 +889,26 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     utterance_embedding_input = gr.Textbox(
                         label="Utterance Embeddings",
-                        value=initial_values[9],
+                        value=initial_config.utterance_embedding,
                         placeholder="all-MiniLM-L6-v2",
                         info="Embeddings for Tier 1 utterance blocks",
                     )
                     concept_embedding_input = gr.Textbox(
                         label="Concept Embeddings",
-                        value=initial_values[10],
+                        value=initial_config.concept_embedding,
                         placeholder="text-embedding-3-small",
                         info="Embeddings for Tier 3 concept files",
                     )
                 with gr.Row():
                     summary_embedding_input = gr.Textbox(
                         label="Summary Embeddings",
-                        value=initial_values[11],
+                        value=initial_config.summary_embedding,
                         placeholder="sentence-transformers/all-MiniLM-L6-v2",
                         info="Embeddings for Tier 2 summaries",
                     )
                     fallback_embedding_input = gr.Textbox(
                         label="Fallback Embeddings",
-                        value=initial_values[12],
+                        value=initial_config.fallback_embedding,
                         placeholder="sentence-transformers/all-mpnet-base-v2",
                         info="Used if other embedding configs fail or for general purpose",
                     )
@@ -871,7 +918,7 @@ def create_configuration_panel() -> gr.Blocks:
             with gr.Row():
                 concept_merge_input = gr.Number(
                     label="Concept Merge Threshold",
-                    value=initial_values[13],
+                    value=initial_config.concept_merge,
                     minimum=0.0,
                     maximum=1.0,
                     step=0.01,
@@ -879,7 +926,7 @@ def create_configuration_panel() -> gr.Blocks:
                 )
                 claim_link_strength_input = gr.Number(
                     label="Claim Link Strength",
-                    value=initial_values[14],
+                    value=initial_config.claim_link_strength,
                     minimum=0.0,
                     maximum=1.0,
                     step=0.01,
@@ -891,7 +938,7 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     window_p_input = gr.Number(
                         label="Previous Sentences (p)",
-                        value=initial_values[15],
+                        value=initial_config.window_p,
                         minimum=0,
                         maximum=10,
                         step=1,
@@ -899,7 +946,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                     window_f_input = gr.Number(
                         label="Following Sentences (f)",
-                        value=initial_values[16],
+                        value=initial_config.window_f,
                         minimum=0,
                         maximum=10,
                         step=1,
@@ -919,17 +966,17 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     concept_refresh_enabled_input = gr.Checkbox(
                         label="Enabled",
-                        value=initial_values[17],
+                        value=initial_config.concept_refresh_enabled,
                         info="Enable or disable this job completely",
                     )
                     concept_refresh_manual_only_input = gr.Checkbox(
                         label="Manual Only",
-                        value=initial_values[18],
+                        value=initial_config.concept_refresh_manual_only,
                         info="Job can only be triggered manually (not automatically scheduled)",
                     )
                 concept_refresh_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_values[19],
+                    value=initial_config.concept_refresh_cron,
                     placeholder="0 3 * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -940,17 +987,17 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     vault_sync_enabled_input = gr.Checkbox(
                         label="Enabled",
-                        value=initial_values[20],
+                        value=initial_config.vault_sync_enabled,
                         info="Enable or disable this job completely",
                     )
                     vault_sync_manual_only_input = gr.Checkbox(
                         label="Manual Only",
-                        value=initial_values[21],
+                        value=initial_config.vault_sync_manual_only,
                         info="Job can only be triggered manually (not automatically scheduled)",
                     )
                 vault_sync_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_values[22],
+                    value=initial_config.vault_sync_cron,
                     placeholder="*/30 * * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -967,9 +1014,7 @@ def create_configuration_panel() -> gr.Blocks:
                 gr.Markdown("### 🤖 Writing Agent")
                 trending_concepts_agent_summary_input = gr.Textbox(
                     label="Model for Trending Concepts Agent",
-                    value=initial_values[
-                        7
-                    ],  # trending_concepts_agent from initial_values
+                    value=initial_config.trending_concepts_agent,
                     placeholder="gpt-4",
                     info="LLM model used to generate concept highlight content (also configured in Model & Embedding Settings)",
                 )
@@ -980,13 +1025,13 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     top_concepts_metric_input = gr.Dropdown(
                         label="Ranking Metric",
-                        value=initial_values[23],
+                        value=initial_config.top_concepts_metric,
                         choices=["pagerank", "degree"],
                         info="Algorithm for ranking concepts (PageRank or simple degree centrality)",
                     )
                     top_concepts_count_input = gr.Number(
                         label="Count",
-                        value=initial_values[24],
+                        value=initial_config.top_concepts_count,
                         minimum=0,
                         maximum=1000,
                         step=1,
@@ -995,7 +1040,7 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     top_concepts_percent_input = gr.Number(
                         label="Percent",
-                        value=initial_values[25],
+                        value=initial_config.top_concepts_percent,
                         minimum=0.0,
                         maximum=100.0,
                         step=0.1,
@@ -1003,7 +1048,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                     top_concepts_target_file_input = gr.Textbox(
                         label="Target File",
-                        value=initial_values[26],
+                        value=initial_config.top_concepts_target_file,
                         placeholder="Top Concepts.md",
                         info="Output filename for the top concepts page",
                     )
@@ -1011,7 +1056,7 @@ def create_configuration_panel() -> gr.Blocks:
                 # Preview for top concepts filename
                 with gr.Row():
                     top_concepts_preview = gr.Markdown(
-                        value=f"**Preview:** `{initial_values[26]}`",
+                        value=f"**Preview:** `{initial_config.top_concepts_target_file}`",
                         label="Filename Preview",
                     )
 
@@ -1021,7 +1066,7 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     trending_topics_window_days_input = gr.Number(
                         label="Window Days",
-                        value=initial_values[27],
+                        value=initial_config.trending_topics_window_days,
                         minimum=1,
                         maximum=365,
                         step=1,
@@ -1029,7 +1074,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                     trending_topics_count_input = gr.Number(
                         label="Count",
-                        value=initial_values[28],
+                        value=initial_config.trending_topics_count,
                         minimum=0,
                         maximum=1000,
                         step=1,
@@ -1038,7 +1083,7 @@ def create_configuration_panel() -> gr.Blocks:
                 with gr.Row():
                     trending_topics_percent_input = gr.Number(
                         label="Percent",
-                        value=initial_values[29],
+                        value=initial_config.trending_topics_percent,
                         minimum=0.0,
                         maximum=100.0,
                         step=0.1,
@@ -1046,7 +1091,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                     trending_topics_min_mentions_input = gr.Number(
                         label="Min Mentions",
-                        value=initial_values[30],
+                        value=initial_config.trending_topics_min_mentions,
                         minimum=0,
                         maximum=100,
                         step=1,
@@ -1054,7 +1099,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                 trending_topics_target_file_input = gr.Textbox(
                     label="Target File",
-                    value=initial_values[31],
+                    value=initial_config.trending_topics_target_file,
                     placeholder="Trending Topics - {date}.md",
                     info="Output filename pattern for trending topics (use {date} for current date)",
                 )
@@ -1062,7 +1107,7 @@ def create_configuration_panel() -> gr.Blocks:
                 # Preview for trending topics filename
                 with gr.Row():
                     trending_topics_preview = gr.Markdown(
-                        value=f"**Preview:** `{initial_values[31].replace('{date}', '2024-01-01')}`",
+                        value=f"**Preview:** `{initial_config.trending_topics_target_file.replace('{date}', '2024-01-01')}`",
                         label="Filename Preview",
                     )
 
@@ -1123,16 +1168,57 @@ def create_configuration_panel() -> gr.Blocks:
 
         # Event handlers
         def reload_configuration() -> Tuple[Any, ...]:
-            """Reload configuration from file."""
+            """Reload configuration from file and return values for all UI components."""
             try:
-                values = load_current_config()
-                # Insert the trending_concepts_agent value again after the original one for the summary input
-                values_list = list(values)
-                # Insert at position 8 (after trending_concepts_agent which is at position 7)
-                values_list.insert(
-                    8, values[7]
-                )  # Duplicate trending_concepts_agent value
-                return tuple(values_list) + (
+                # This now returns the complete ConfigData object
+                config = load_current_config()
+                
+                # The return tuple MUST be constructed in the exact order expected by the
+                # Gradio `outputs` list. This is now much safer as we pull from named
+                # attributes, reducing the risk of misordering.
+                return (
+                    # --- Section: Model & Embedding Settings ---
+                    config.claimify_default,
+                    config.claimify_selection,
+                    config.claimify_disambiguation,
+                    config.claimify_decomposition,
+                    config.concept_linker,
+                    config.concept_summary,
+                    config.subject_summary,
+                    config.trending_concepts_agent, # For the main model section
+                    config.trending_concepts_agent, # For the "Highlight & Summary" section
+                    config.fallback_plugin,
+                    config.utterance_embedding,
+                    config.concept_embedding,
+                    config.summary_embedding,
+                    config.fallback_embedding,
+
+                    # --- Section: Thresholds & Parameters ---
+                    config.concept_merge,
+                    config.claim_link_strength,
+                    config.window_p,
+                    config.window_f,
+
+                    # --- Section: Automation & Scheduler Control ---
+                    config.concept_refresh_enabled,
+                    config.concept_refresh_manual_only,
+                    config.concept_refresh_cron,
+                    config.vault_sync_enabled,
+                    config.vault_sync_manual_only,
+                    config.vault_sync_cron,
+
+                    # --- Section: Highlight & Summary ---
+                    config.top_concepts_metric,
+                    config.top_concepts_count,
+                    config.top_concepts_percent,
+                    config.top_concepts_target_file,
+                    config.trending_topics_window_days,
+                    config.trending_topics_count,
+                    config.trending_topics_percent,
+                    config.trending_topics_min_mentions,
+                    config.trending_topics_target_file,
+                    
+                    # Finally, the status message
                     "🔄 **Configuration reloaded from file.**",
                 )
             except Exception as e:
@@ -1147,9 +1233,41 @@ def create_configuration_panel() -> gr.Blocks:
                     },
                 )
                 # For initial_values, also insert the duplicate value
-                initial_list = list(initial_values)
-                initial_list.insert(8, initial_values[7])
-                return tuple(initial_list) + (
+                initial_config = load_current_config()
+                return (
+                    initial_config.claimify_default,
+                    initial_config.claimify_selection,
+                    initial_config.claimify_disambiguation,
+                    initial_config.claimify_decomposition,
+                    initial_config.concept_linker,
+                    initial_config.concept_summary,
+                    initial_config.subject_summary,
+                    initial_config.trending_concepts_agent,
+                    initial_config.trending_concepts_agent,
+                    initial_config.fallback_plugin,
+                    initial_config.utterance_embedding,
+                    initial_config.concept_embedding,
+                    initial_config.summary_embedding,
+                    initial_config.fallback_embedding,
+                    initial_config.concept_merge,
+                    initial_config.claim_link_strength,
+                    initial_config.window_p,
+                    initial_config.window_f,
+                    initial_config.concept_refresh_enabled,
+                    initial_config.concept_refresh_manual_only,
+                    initial_config.concept_refresh_cron,
+                    initial_config.vault_sync_enabled,
+                    initial_config.vault_sync_manual_only,
+                    initial_config.vault_sync_cron,
+                    initial_config.top_concepts_metric,
+                    initial_config.top_concepts_count,
+                    initial_config.top_concepts_percent,
+                    initial_config.top_concepts_target_file,
+                    initial_config.trending_topics_window_days,
+                    initial_config.trending_topics_count,
+                    initial_config.trending_topics_percent,
+                    initial_config.trending_topics_min_mentions,
+                    initial_config.trending_topics_target_file,
                     f"❌ **Error reloading configuration:** {str(e)}",
                 )
 
