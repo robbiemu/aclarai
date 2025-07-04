@@ -89,7 +89,9 @@ class ConceptClusteringJob:
         self.vector_store = vector_store or aclaraiVectorStore(self.config)
 
         # Get job-specific configuration
-        self.job_config: ConceptClusteringJobConfig = self.config.scheduler.jobs.concept_clustering
+        self.job_config: ConceptClusteringJobConfig = (
+            self.config.scheduler.jobs.concept_clustering
+        )
 
         # Cache for cluster assignments
         self._cluster_cache: Optional[Dict[str, int]] = None
@@ -144,7 +146,9 @@ class ConceptClusteringJob:
             )
             return []
 
-    def _get_concept_embeddings(self, concept_names: List[str]) -> Tuple[np.ndarray, List[str]]:
+    def _get_concept_embeddings(
+        self, concept_names: List[str]
+    ) -> Tuple[np.ndarray, List[str]]:
         """
         Retrieve embeddings for the given concepts from the vector store.
 
@@ -165,7 +169,9 @@ class ConceptClusteringJob:
                     query_text=concept_name,
                     top_k=1,
                     similarity_threshold=0.9,  # High threshold to find exact matches
-                    filter_metadata={"collection": "concepts"}  # Filter to concepts collection
+                    filter_metadata={
+                        "collection": "concepts"
+                    },  # Filter to concepts collection
                 )
 
                 if results and len(results) > 0:
@@ -227,7 +233,9 @@ class ConceptClusteringJob:
             )
             return np.array([]), []
 
-    def _perform_clustering(self, embeddings: np.ndarray, concept_names: List[str]) -> ClusterAssignment:
+    def _perform_clustering(
+        self, embeddings: np.ndarray, concept_names: List[str]
+    ) -> ClusterAssignment:
         """
         Perform clustering on concept embeddings using the configured algorithm.
 
@@ -256,9 +264,7 @@ class ConceptClusteringJob:
                 # Convert similarity threshold to distance for DBSCAN
                 eps = 1.0 - self.job_config.similarity_threshold
                 clustering = DBSCAN(
-                    eps=eps,
-                    min_samples=self.job_config.min_concepts,
-                    metric="cosine"
+                    eps=eps, min_samples=self.job_config.min_concepts, metric="cosine"
                 )
                 labels = clustering.fit_predict(embeddings)
 
@@ -267,17 +273,19 @@ class ConceptClusteringJob:
                 # Calculate number of clusters dynamically based on similarity threshold
                 n_concepts = len(embeddings)
                 # Start with a reasonable number of clusters
-                n_clusters = max(2, min(n_concepts // self.job_config.min_concepts, n_concepts // 2))
+                n_clusters = max(
+                    2, min(n_concepts // self.job_config.min_concepts, n_concepts // 2)
+                )
 
                 clustering = AgglomerativeClustering(
-                    n_clusters=n_clusters,
-                    metric="cosine",
-                    linkage="average"
+                    n_clusters=n_clusters, metric="cosine", linkage="average"
                 )
                 labels = clustering.fit_predict(embeddings)
 
             else:
-                raise ValueError(f"Unsupported clustering algorithm: {self.job_config.algorithm}")
+                raise ValueError(
+                    f"Unsupported clustering algorithm: {self.job_config.algorithm}"
+                )
 
             logger.info(
                 f"concept_clustering_job._perform_clustering: Clustering completed using {self.job_config.algorithm}",
@@ -479,7 +487,9 @@ class ConceptClusteringJob:
             concept_names = [name for _, name in concept_data]
 
             # Step 2: Get embeddings for concepts
-            embeddings, valid_concept_names = self._get_concept_embeddings(concept_names)
+            embeddings, valid_concept_names = self._get_concept_embeddings(
+                concept_names
+            )
 
             if len(embeddings) == 0:
                 logger.warning(
@@ -493,12 +503,16 @@ class ConceptClusteringJob:
                 return stats
 
             # Step 3: Perform clustering
-            cluster_assignment = self._perform_clustering(embeddings, valid_concept_names)
+            cluster_assignment = self._perform_clustering(
+                embeddings, valid_concept_names
+            )
 
             # Step 4: Update statistics
             clusters = cluster_assignment.get_clusters()
             stats["clusters_formed"] = len(clusters)
-            stats["concepts_clustered"] = sum(len(concepts) for concepts in clusters.values())
+            stats["concepts_clustered"] = sum(
+                len(concepts) for concepts in clusters.values()
+            )
             stats["concepts_outliers"] = len(cluster_assignment.outliers)
 
             # Step 5: Update cache

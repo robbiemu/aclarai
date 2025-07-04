@@ -101,6 +101,12 @@ The following jobs are included with aclarai by default.
 -   **Description:** Generates detailed Markdown pages for all canonical concepts in the knowledge graph, using RAG workflows to include relevant claims, summaries, and related concepts. Creates or updates `[[Concept]]` pages with structured content.
 -   **Default `cron`:** `"0 7 * * *"` (Daily at 7:00 AM)
 
+### Concept Clustering Job
+
+-   **ID:** `concept_clustering`
+-   **Description:** Groups related concepts into thematic clusters using their embeddings. Uses DBSCAN or hierarchical clustering algorithms to form semantically coherent groups based on configurable similarity thresholds and size constraints. Caches cluster assignments for use by the Subject Summary Agent.
+-   **Default `cron`:** `"0 2 * * *"` (Daily at 2:00 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.

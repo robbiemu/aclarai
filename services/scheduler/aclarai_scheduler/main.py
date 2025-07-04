@@ -358,7 +358,10 @@ class SchedulerService:
 
         # Register concept clustering job
         concept_clustering_config = self.config.scheduler.jobs.concept_clustering
-        if concept_clustering_config.enabled and not concept_clustering_config.manual_only:
+        if (
+            concept_clustering_config.enabled
+            and not concept_clustering_config.manual_only
+        ):
             # Environment variable override
             concept_clustering_enabled = (
                 os.getenv("CONCEPT_CLUSTERING_ENABLED", "true").lower() == "true"
@@ -385,7 +388,9 @@ class SchedulerService:
                         "description": concept_clustering_config.description,
                     },
                 )
-        elif concept_clustering_config.enabled and concept_clustering_config.manual_only:
+        elif (
+            concept_clustering_config.enabled and concept_clustering_config.manual_only
+        ):
             self.logger.info(
                 "scheduler.main._register_jobs: Concept clustering job is enabled but set to manual_only, skipping automatic scheduling",
                 extra={
