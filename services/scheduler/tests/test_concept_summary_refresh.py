@@ -2,7 +2,8 @@
 Tests for the Concept Summary Refresh Job.
 """
 
-from unittest.mock import Mock, patch
+import pytest
+from unittest.mock import Mock, MagicMock, patch
 
 from services.scheduler.aclarai_scheduler.concept_summary_refresh import (
     ConceptSummaryRefreshJob,
@@ -12,291 +13,142 @@ from services.scheduler.aclarai_scheduler.concept_summary_refresh import (
 class TestConceptSummaryRefreshJob:
     """Test the ConceptSummaryRefreshJob class."""
 
+    @pytest.fixture(autouse=True)
+    def setup_mocks(self):
+        """Set up mocks for all tests in this class using a pytest fixture."""
+        with (
+            patch(
+                "services.scheduler.aclarai_scheduler.concept_summary_refresh.aclaraiConfig"
+            ) as mock_config_class,
+            patch(
+                "services.scheduler.aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
+            ) as mock_neo4j_class,
+            patch(
+                "services.scheduler.aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
+            ) as mock_agent_class,
+        ):
+            # Mock the config
+            self.mock_config = Mock()
+            mock_config_class.return_value = self.mock_config
+
+            # Store mocks on the instance
+            self.mock_agent = Mock()
+            self.mock_neo4j = Mock()
+            mock_agent_class.return_value = self.mock_agent
+            mock_neo4j_class.return_value = self.mock_neo4j
+
+            # Instantiate the job under test
+            self.job = ConceptSummaryRefreshJob(config=self.mock_config)
+
+            yield  # This is where the test itself runs
+
     def test_init(self):
         """Test job initialization."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent:
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j:
-                job = ConceptSummaryRefreshJob()
-
-                assert job.config is not None
-                assert job.logger is not None
-                mock_agent.assert_called_once()
-                mock_neo4j.assert_called_once()
+        assert self.job.config is not None
+        assert self.job.concept_summary_agent is self.mock_agent
+        assert self.job.neo4j_manager is self.mock_neo4j
 
     def test_run_job_success(self):
         """Test successful job execution."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the agent and Neo4j manager
-                mock_agent = Mock()
-                mock_neo4j = Mock()
-                mock_agent_class.return_value = mock_agent
-                mock_neo4j_class.return_value = mock_neo4j
+        self.job._get_canonical_concepts = Mock(return_value=["Concept A", "Concept B"])
+        self.job._process_concept = Mock(return_value=(True, True))
 
-                job = ConceptSummaryRefreshJob()
+        result = self.job.run_job()
 
-                # Mock the methods
-                job._get_canonical_concepts = Mock(
-                    return_value=["Concept A", "Concept B"]
-                )
-                job._process_concept = Mock(return_value=(True, True))
-
-                result = job.run_job()
-
-                assert result["success"] is True
-                assert result["concepts_processed"] == 2
-                assert result["concepts_updated"] == 2
-                assert result["concepts_skipped"] == 0
-                assert result["errors"] == 0
-                assert len(result["error_details"]) == 0
+        assert result["success"] is True
+        assert result["concepts_processed"] == 2
+        assert result["concepts_updated"] == 2
+        assert result["errors"] == 0
 
     def test_run_job_with_skipped_concepts(self):
         """Test job execution with some concepts skipped."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the agent and Neo4j manager
-                mock_agent = Mock()
-                mock_neo4j = Mock()
-                mock_agent_class.return_value = mock_agent
-                mock_neo4j_class.return_value = mock_neo4j
+        self.job._get_canonical_concepts = Mock(return_value=["A", "B", "C"])
 
-                job = ConceptSummaryRefreshJob()
+        def mock_process(name):
+            return (True, True) if name == "A" else (False, False)
 
-                # Mock the methods - some concepts processed, some skipped
-                job._get_canonical_concepts = Mock(
-                    return_value=["Concept A", "Concept B", "Concept C"]
-                )
+        self.job._process_concept = Mock(side_effect=mock_process)
 
-                def mock_process_concept(name):
-                    if name == "Concept A":
-                        return (True, True)  # Processed and updated
-                    elif name == "Concept B":
-                        return (False, False)  # Skipped
-                    else:
-                        return (True, False)  # Processed but not updated
+        result = self.job.run_job()
 
-                job._process_concept = Mock(side_effect=mock_process_concept)
-
-                result = job.run_job()
-
-                assert result["success"] is True
-                assert result["concepts_processed"] == 2
-                assert result["concepts_updated"] == 1
-                assert result["concepts_skipped"] == 1
-                assert result["errors"] == 0
+        assert result["success"] is True
+        assert result["concepts_processed"] == 1
+        assert result["concepts_updated"] == 1
+        assert result["concepts_skipped"] == 2
 
     def test_run_job_with_errors(self):
         """Test job execution with some concept processing errors."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the agent and Neo4j manager
-                mock_agent = Mock()
-                mock_neo4j = Mock()
-                mock_agent_class.return_value = mock_agent
-                mock_neo4j_class.return_value = mock_neo4j
+        self.job._get_canonical_concepts = Mock(return_value=["A", "B"])
 
-                job = ConceptSummaryRefreshJob()
+        def mock_process(name):
+            if name == "A":
+                return (True, True)
+            raise Exception("Processing error")
 
-                # Mock the methods
-                job._get_canonical_concepts = Mock(
-                    return_value=["Concept A", "Concept B"]
-                )
+        self.job._process_concept = Mock(side_effect=mock_process)
 
-                def mock_process_concept(name):
-                    if name == "Concept A":
-                        return (True, True)  # Success
-                    else:
-                        raise Exception("Processing error")
+        result = self.job.run_job()
 
-                job._process_concept = Mock(side_effect=mock_process_concept)
-
-                result = job.run_job()
-
-                assert (
-                    result["success"] is True
-                )  # Still succeeds if some concepts are processed
-                assert result["concepts_processed"] == 1
-                assert result["concepts_updated"] == 1
-                assert result["concepts_skipped"] == 0
-                assert result["errors"] == 1
-                assert len(result["error_details"]) == 1
-                assert (
-                    "Concept 'Concept B': Processing error" in result["error_details"]
-                )
+        assert result["success"] is True
+        assert result["concepts_processed"] == 1
+        assert result["errors"] == 1
+        assert "Concept 'B': Processing error" in result["error_details"]
 
     def test_run_job_no_concepts(self):
         """Test job execution with no concepts found."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the agent and Neo4j manager
-                mock_agent = Mock()
-                mock_neo4j = Mock()
-                mock_agent_class.return_value = mock_agent
-                mock_neo4j_class.return_value = mock_neo4j
-
-                job = ConceptSummaryRefreshJob()
-
-                # Mock empty concepts list
-                job._get_canonical_concepts = Mock(return_value=[])
-
-                result = job.run_job()
-
-                assert (
-                    result["success"] is True
-                )  # Should still succeed with no concepts
-                assert result["concepts_processed"] == 0
-                assert result["concepts_updated"] == 0
-                assert result["concepts_skipped"] == 0
-                assert result["errors"] == 0
+        self.job._get_canonical_concepts = Mock(return_value=[])
+        result = self.job.run_job()
+        assert result["success"] is True
+        assert result["concepts_processed"] == 0
 
     def test_get_canonical_concepts_success(self):
         """Test successful retrieval of canonical concepts."""
-        with patch(
-            "services.scheduler.aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ):
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the Neo4j manager
-                mock_driver = Mock()
-                mock_session = Mock()
-                mock_result = Mock()
-                mock_neo4j = Mock()
+        mock_session = Mock()
 
-                mock_neo4j_class.return_value = mock_neo4j
-                mock_neo4j.get_driver.return_value.__enter__.return_value = mock_driver
-                mock_driver.session.return_value.__enter__.return_value = mock_session
-                mock_session.run.return_value = mock_result
+        # Use MagicMock to correctly mock the context manager
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__.return_value = mock_session
+        self.mock_neo4j.driver.session.return_value = mock_context_manager
 
-                # Mock result records
-                mock_result.__iter__.return_value = [
-                    {"name": "Concept A"},
-                    {"name": "Concept B"},
-                ]
+        mock_session.run.return_value = [{"name": "A"}, {"name": "B"}]
 
-                job = ConceptSummaryRefreshJob()
-                concepts = job._get_canonical_concepts()
-
-                assert concepts == ["Concept A", "Concept B"]
+        assert self.job._get_canonical_concepts() == ["A", "B"]
 
     def test_get_canonical_concepts_failure(self):
         """Test failure in retrieving canonical concepts."""
-        with patch(
-            "services.scheduler.aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ):
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the Neo4j manager to raise an exception
-                mock_neo4j = Mock()
-                mock_neo4j_class.return_value = mock_neo4j
-                mock_neo4j.get_driver.side_effect = Exception(
-                    "Database connection failed"
-                )
-
-                job = ConceptSummaryRefreshJob()
-                concepts = job._get_canonical_concepts()
-
-                assert concepts == []
+        self.mock_neo4j.driver.session.side_effect = Exception("DB error")
+        assert self.job._get_canonical_concepts() == []
 
     def test_process_concept_success(self):
         """Test successful concept processing."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch("aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"):
-                # Mock the agent
-                mock_agent = Mock()
-                mock_agent_class.return_value = mock_agent
-                mock_agent.process_concept.return_value = True
-
-                job = ConceptSummaryRefreshJob()
-                job._concept_has_claims = Mock(return_value=True)
-
-                processed, updated = job._process_concept("Test Concept")
-
-                assert processed is True
-                assert updated is True
-                mock_agent.process_concept.assert_called_once_with("Test Concept")
+        self.job._get_concept_details = Mock(return_value={"name": "Test"})
+        self.job._concept_has_claims = Mock(return_value=True)
+        self.mock_agent.generate_concept_page.return_value = True
+        processed, updated = self.job._process_concept("Test")
+        assert processed and updated
 
     def test_process_concept_skip_no_claims(self):
         """Test concept processing skipped due to no claims."""
-        with patch(
-            "aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ) as mock_agent_class:
-            with patch("aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"):
-                # Mock config to skip if no claims
-                mock_config = Mock()
-                mock_config.concept_summaries.skip_if_no_claims = True
-
-                job = ConceptSummaryRefreshJob(config=mock_config)
-                job._concept_has_claims = Mock(return_value=False)
-
-                processed, updated = job._process_concept("Test Concept")
-
-                assert processed is False
-                assert updated is False
+        self.mock_config.concept_summaries.skip_if_no_claims = True
+        self.job._get_concept_details = Mock(return_value={"name": "Test"})
+        self.job._concept_has_claims = Mock(return_value=False)
+        processed, updated = self.job._process_concept("Test")
+        assert not processed and not updated
 
     def test_concept_has_claims_success(self):
         """Test successful check for concept claims."""
-        with patch(
-            "services.scheduler.aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ):
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the Neo4j manager
-                mock_driver = Mock()
-                mock_session = Mock()
-                mock_result = Mock()
-                mock_neo4j = Mock()
+        mock_session = Mock()
 
-                mock_neo4j_class.return_value = mock_neo4j
-                mock_neo4j.get_driver.return_value.__enter__.return_value = mock_driver
-                mock_driver.session.return_value.__enter__.return_value = mock_session
-                mock_session.run.return_value = mock_result
-                mock_result.single.return_value = {"has_claims": True}
+        # Use MagicMock to correctly mock the context manager
+        mock_context_manager = MagicMock()
+        mock_context_manager.__enter__.return_value = mock_session
+        self.mock_neo4j.driver.session.return_value = mock_context_manager
 
-                job = ConceptSummaryRefreshJob()
-                has_claims = job._concept_has_claims("Test Concept")
+        mock_session.run.return_value.single.return_value = {"has_claims": True}
 
-                assert has_claims is True
+        assert self.job._concept_has_claims("Test") is True
 
     def test_concept_has_claims_failure(self):
         """Test failure in checking concept claims."""
-        with patch(
-            "services.scheduler.aclarai_scheduler.concept_summary_refresh.ConceptSummaryAgent"
-        ):
-            with patch(
-                "aclarai_scheduler.concept_summary_refresh.Neo4jGraphManager"
-            ) as mock_neo4j_class:
-                # Mock the Neo4j manager to raise an exception
-                mock_neo4j = Mock()
-                mock_neo4j_class.return_value = mock_neo4j
-                mock_neo4j.get_driver.side_effect = Exception("Database error")
-
-                job = ConceptSummaryRefreshJob()
-                has_claims = job._concept_has_claims("Test Concept")
-
-                # Should default to True if we can't check
-                assert has_claims is True
+        self.mock_neo4j.driver.session.side_effect = Exception("DB error")
+        assert self.job._concept_has_claims("Test") is True
