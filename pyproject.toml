@@ -22,6 +22,8 @@ dependencies = [
     "en-core-web-sm",
     "llama-index>=0.12.44",
     "tavily-python>=0.7.8",
+    "apscheduler>=3.11.0",
+    "scikit-learn>=1.7.0",
 ]
 optional-dependencies = { dev = [
     "bandit>=1.8.0",
@@ -128,7 +130,9 @@ module = [
     "pika",
     "pika.*",
     "llama_index.vector_stores.types",
-    "tavily"
+    "tavily",
+    "sklearn",
+    "sklearn.*"
 ]
 ignore_missing_imports = true
 

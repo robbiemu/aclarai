@@ -13,6 +13,7 @@ Key responsibilities:
 -   **Reprocessing Tasks**: Handles content marked for reprocessing by other parts of the system.
 -   **Concept Hygiene**: (Future) Performs deduplication and refinement operations.
 -   **Concept Highlighting**: Identifies and highlights the most central or trending concepts in the knowledge graph, generating summary pages like 'Top Concepts' and 'Trending Topics'.
+-   **Concept Clustering**: Groups related concepts into thematic clusters based on their embeddings, providing input for other agents like the Subject Summary Agent.
 -   **Concept Summary Generation**: Creates detailed Markdown pages for canonical concepts using RAG workflows to include relevant claims, summaries, and related concepts.
 
 ## Architecture

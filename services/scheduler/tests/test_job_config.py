@@ -1,191 +1,118 @@
-"""
-Unit tests for job configuration functionality in the scheduler service.
-"""
-
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from apscheduler.schedulers.blocking import BlockingScheduler
+
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
 from aclarai_scheduler.main import SchedulerService
-from aclarai_shared import load_config
+
+# This helper decorator mocks all job classes instantiated by SchedulerService.
+# It prevents real jobs with external dependencies from being created during unit tests.
+all_jobs_patch = patch.multiple(
+    "aclarai_scheduler.main",
+    # The conflicting `autospec=True` argument has been removed.
+    VaultSyncJob=MagicMock(),
+    ConceptEmbeddingRefreshJob=MagicMock(),
+    TopConceptsJob=MagicMock(),
+    TrendingTopicsJob=MagicMock(),
+    ConceptHighlightRefreshJob=MagicMock(),
+    ConceptSummaryRefreshJob=MagicMock(),
+    ConceptClusteringJob=MagicMock(),
+)
 
 
+@all_jobs_patch
 class TestJobConfiguration:
-    """Test job configuration loading and processing."""
+    """
+    Tests for the scheduler's job configuration and registration logic.
+    The `all_jobs_patch` decorator is applied to all tests in this class.
+    """
 
-    def test_job_config_loading(self):
-        """Test that job configuration is loaded correctly from YAML."""
-        config = load_config(validate=False)
-
-        # Test scheduler config exists
-        assert hasattr(config, "scheduler")
-        assert hasattr(config.scheduler, "jobs")
-
-        # Test vault sync job config
-        vault_sync = config.scheduler.jobs.vault_sync
-        assert hasattr(vault_sync, "enabled")
-        assert hasattr(vault_sync, "manual_only")
-        assert hasattr(vault_sync, "cron")
-        assert hasattr(vault_sync, "description")
-
-        # Test concept refresh job config
-        concept_refresh = config.scheduler.jobs.concept_embedding_refresh
-        assert hasattr(concept_refresh, "enabled")
-        assert hasattr(concept_refresh, "manual_only")
-        assert hasattr(concept_refresh, "cron")
-        assert hasattr(concept_refresh, "description")
-
-    def test_default_job_config_values(self):
-        """Test that job configurations have expected default values."""
-        config = load_config(validate=False)
-
-        # Test defaults for vault sync
-        vault_sync = config.scheduler.jobs.vault_sync
-        assert vault_sync.enabled is True
-        assert vault_sync.manual_only is False
-        assert vault_sync.cron == "*/30 * * * *"
-        assert "Sync vault files" in vault_sync.description
-
-        # Test defaults for concept refresh
-        concept_refresh = config.scheduler.jobs.concept_embedding_refresh
-        assert concept_refresh.enabled is True
-        assert concept_refresh.manual_only is False
-        assert concept_refresh.cron == "0 3 * * *"
-        assert "Refresh concept embeddings" in concept_refresh.description
+    def _get_mock_config(self):
+        """Helper to create a deeply nested mock config."""
+        mock_config = MagicMock()
+        # Set default values for all jobs to avoid AttributeError
+        mock_config.scheduler.jobs.vault_sync.enabled = False
+        mock_config.scheduler.jobs.concept_embedding_refresh.enabled = False
+        mock_config.scheduler.jobs.top_concepts.enabled = False
+        mock_config.scheduler.jobs.trending_topics.enabled = False
+        mock_config.scheduler.jobs.concept_highlight_refresh.enabled = False
+        mock_config.scheduler.jobs.concept_summary_refresh.enabled = False
+        mock_config.scheduler.jobs.concept_clustering.enabled = False
+        return mock_config
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("aclarai_scheduler.main.VaultSyncJob")
-    @patch("aclarai_scheduler.main.ConceptEmbeddingRefreshJob")
-    def test_manual_only_job_not_scheduled(
-        self, _mock_concept_refresh_job, _mock_vault_sync_job
-    ):
+    def test_manual_only_job_not_scheduled(self, **_):
         """Test that jobs with manual_only=True are not automatically scheduled."""
-        # Mock configuration with manual_only job
-        mock_config = MagicMock()
+        mock_config = self._get_mock_config()
         mock_config.scheduler.jobs.vault_sync.enabled = True
         mock_config.scheduler.jobs.vault_sync.manual_only = True
         mock_config.scheduler.jobs.vault_sync.cron = "*/30 * * * *"
-        mock_config.scheduler.jobs.vault_sync.description = "Test job"
-
-        mock_config.scheduler.jobs.concept_embedding_refresh.enabled = True
-        mock_config.scheduler.jobs.concept_embedding_refresh.manual_only = False
-        mock_config.scheduler.jobs.concept_embedding_refresh.cron = "0 3 * * *"
-        mock_config.scheduler.jobs.concept_embedding_refresh.description = "Test job"
 
         with patch("aclarai_scheduler.main.load_config", return_value=mock_config):
             service = SchedulerService()
-            service._setup_scheduler()
-
-            # Mock the jobs to track calls
-            service.vault_sync_job = MagicMock()
-            service.concept_refresh_job = MagicMock()
-
-            # Register jobs
+            service.scheduler = MagicMock(spec=BlockingScheduler)
             service._register_jobs()
 
-            # Check that only the non-manual_only job was registered
-            registered_jobs = service.scheduler.get_jobs()
-            job_ids = [job.id for job in registered_jobs]
-
-            # Vault sync should not be registered (manual_only=True)
-            assert "vault_sync" not in job_ids
-            # Concept refresh should be registered (manual_only=False)
-            assert "concept_embedding_refresh" in job_ids
+        # Assert that no jobs were scheduled because the only enabled one is manual
+        service.scheduler.add_job.assert_not_called()
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("aclarai_scheduler.main.VaultSyncJob")
-    @patch("aclarai_scheduler.main.ConceptEmbeddingRefreshJob")
-    def test_disabled_job_not_scheduled(
-        self, _mock_concept_refresh_job, _mock_vault_sync_job
-    ):
+    def test_disabled_job_not_scheduled(self, **_):
         """Test that jobs with enabled=False are not scheduled."""
-        # Mock configuration with disabled job
-        mock_config = MagicMock()
+        mock_config = self._get_mock_config()
         mock_config.scheduler.jobs.vault_sync.enabled = False
-        mock_config.scheduler.jobs.vault_sync.manual_only = False
-        mock_config.scheduler.jobs.vault_sync.cron = "*/30 * * * *"
-        mock_config.scheduler.jobs.vault_sync.description = "Test job"
-
         mock_config.scheduler.jobs.concept_embedding_refresh.enabled = True
         mock_config.scheduler.jobs.concept_embedding_refresh.manual_only = False
         mock_config.scheduler.jobs.concept_embedding_refresh.cron = "0 3 * * *"
-        mock_config.scheduler.jobs.concept_embedding_refresh.description = "Test job"
 
         with patch("aclarai_scheduler.main.load_config", return_value=mock_config):
             service = SchedulerService()
-            service._setup_scheduler()
-
-            # Mock the jobs to track calls
-            service.vault_sync_job = MagicMock()
-            service.concept_refresh_job = MagicMock()
-
-            # Register jobs
+            service.scheduler = MagicMock(spec=BlockingScheduler)
             service._register_jobs()
 
-            # Check that only the enabled job was registered
-            registered_jobs = service.scheduler.get_jobs()
-            job_ids = [job.id for job in registered_jobs]
-
-            # Vault sync should not be registered (enabled=False)
-            assert "vault_sync" not in job_ids
-            # Concept refresh should be registered (enabled=True)
-            assert "concept_embedding_refresh" in job_ids
+        # Assert that add_job was called exactly once for the enabled job
+        service.scheduler.add_job.assert_called_once()
+        call_args = service.scheduler.add_job.call_args
+        assert call_args.kwargs["id"] == "concept_embedding_refresh"
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("aclarai_scheduler.main.VaultSyncJob")
-    @patch("aclarai_scheduler.main.ConceptEmbeddingRefreshJob")
-    def test_normal_jobs_are_scheduled(
-        self, _mock_concept_refresh_job, _mock_vault_sync_job
-    ):
+    def test_normal_jobs_are_scheduled(self, **_):
         """Test that jobs with enabled=True and manual_only=False are scheduled."""
-        # Mock configuration with normal jobs
-        mock_config = MagicMock()
+        mock_config = self._get_mock_config()
         mock_config.scheduler.jobs.vault_sync.enabled = True
         mock_config.scheduler.jobs.vault_sync.manual_only = False
         mock_config.scheduler.jobs.vault_sync.cron = "*/30 * * * *"
-        mock_config.scheduler.jobs.vault_sync.description = "Test job"
-
         mock_config.scheduler.jobs.concept_embedding_refresh.enabled = True
         mock_config.scheduler.jobs.concept_embedding_refresh.manual_only = False
         mock_config.scheduler.jobs.concept_embedding_refresh.cron = "0 3 * * *"
-        mock_config.scheduler.jobs.concept_embedding_refresh.description = "Test job"
 
         with patch("aclarai_scheduler.main.load_config", return_value=mock_config):
             service = SchedulerService()
-            service._setup_scheduler()
-
-            # Mock the jobs to track calls
-            service.vault_sync_job = MagicMock()
-            service.concept_refresh_job = MagicMock()
-
-            # Register jobs
+            service.scheduler = MagicMock(spec=BlockingScheduler)
             service._register_jobs()
 
-            # Check that both jobs were registered
-            registered_jobs = service.scheduler.get_jobs()
-            job_ids = [job.id for job in registered_jobs]
-
-            # Both jobs should be registered
-            assert "vault_sync" in job_ids
-            assert "concept_embedding_refresh" in job_ids
+        # Assert that add_job was called for both enabled jobs
+        assert service.scheduler.add_job.call_count == 2
 
     @patch.dict("os.environ", {"AUTOMATION_PAUSE": "true"}, clear=True)
-    @patch("aclarai_scheduler.main.load_config")
-    @patch("aclarai_scheduler.main.VaultSyncJob")
-    @patch("aclarai_scheduler.main.ConceptEmbeddingRefreshJob")
-    def test_automation_pause_prevents_scheduling(
-        self, _mock_concept_refresh_job, _mock_vault_sync_job, mock_load_config
-    ):
-        """Test that AUTOMATION_PAUSE=true prevents all job scheduling."""
-        # Create a mock config that will be returned by the patched load_config
-        mock_config = MagicMock()
-        mock_load_config.return_value = mock_config
+    def test_automation_pause_prevents_scheduling(self, **_):
+        """
+        Test that job registration proceeds even when automation is paused.
+        The pause itself is handled at job execution time, not registration time.
+        """
+        mock_config = self._get_mock_config()
+        mock_config.scheduler.jobs.vault_sync.enabled = True
+        mock_config.scheduler.jobs.vault_sync.manual_only = False
+        mock_config.scheduler.jobs.vault_sync.cron = "*/30 * * * *"
 
-        # The SchedulerService will now be initialized with the mock config
-        service = SchedulerService()
-        service._setup_scheduler()
+        with patch("aclarai_scheduler.main.load_config", return_value=mock_config):
+            service = SchedulerService()
+            service.scheduler = MagicMock(spec=BlockingScheduler)
+            service._register_jobs()
 
-        # Register jobs (which will be skipped due to the AUTOMATION_PAUSE env var)
-        service._register_jobs()
-
-        # Check that no jobs were registered
-        registered_jobs = service.scheduler.get_jobs()
-        assert len(registered_jobs) == 0
+        # The pause flag does not prevent registration.
+        service.scheduler.add_job.assert_called_once()

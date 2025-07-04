@@ -108,6 +108,18 @@ class ConceptSummariesConfig:
 
 
 @dataclass
+class SubjectSummariesConfig:
+    """Configuration for the Subject Summary Agent and concept clustering."""
+
+    model: str = "gpt-3.5-turbo"
+    similarity_threshold: float = 0.92
+    min_concepts: int = 3
+    max_concepts: int = 15
+    allow_web_search: bool = True
+    skip_if_incoherent: bool = False
+
+
+@dataclass
 class ThresholdConfig:
     """Configuration for various similarity and processing thresholds."""
 
@@ -199,6 +211,18 @@ class TrendingTopicsJobConfig(JobConfig):
 
 
 @dataclass
+class ConceptClusteringJobConfig(JobConfig):
+    """Configuration for the Concept Clustering job."""
+
+    similarity_threshold: float = 0.92  # Similarity threshold for clustering
+    min_concepts: int = 3  # Minimum concepts per cluster
+    max_concepts: int = 15  # Maximum concepts per cluster
+    algorithm: str = "dbscan"  # Clustering algorithm: "dbscan", "hierarchical"
+    cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
+    use_persistent_cache: bool = True  # Whether to use persistent cache
+
+
+@dataclass
 class SchedulerJobsConfig:
     """Configuration for all scheduled jobs."""
 
@@ -259,6 +283,20 @@ class SchedulerJobsConfig:
             description="Generate concept summary pages for all canonical concepts",
         )
     )
+    concept_clustering: ConceptClusteringJobConfig = field(
+        default_factory=lambda: ConceptClusteringJobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 2 * * *",  # 2 AM daily
+            description="Group related concepts into thematic clusters",
+            similarity_threshold=0.92,
+            min_concepts=3,
+            max_concepts=15,
+            algorithm="dbscan",
+            cache_ttl=3600,
+            use_persistent_cache=True,
+        )
+    )
 
 
 @dataclass
@@ -299,6 +337,9 @@ class aclaraiConfig:
     )
     concept_summaries: ConceptSummariesConfig = field(
         default_factory=ConceptSummariesConfig
+    )
+    subject_summaries: SubjectSummariesConfig = field(
+        default_factory=SubjectSummariesConfig
     )
     threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
     vault_watcher: VaultWatcherConfig = field(default_factory=VaultWatcherConfig)
