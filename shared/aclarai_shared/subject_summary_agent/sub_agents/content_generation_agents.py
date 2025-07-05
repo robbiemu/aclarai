@@ -25,10 +25,7 @@ class DefinitionWriterAgent:
         self.config = config
 
     def generate_definition(
-        self,
-        subject_name: str,
-        concepts: List[str],
-        context: Dict[str, Any]
+        self, subject_name: str, concepts: List[str], context: Dict[str, Any]
     ) -> str:
         """
         Generate a summary paragraph defining the subject.
@@ -61,14 +58,18 @@ class DefinitionWriterAgent:
                 context_parts.append("Web context:")
                 context_parts.append(str(context["web_context"])[:500])  # Limit length
 
-            context_info = "\n".join(context_parts) if context_parts else "No additional context available."
+            context_info = (
+                "\n".join(context_parts)
+                if context_parts
+                else "No additional context available."
+            )
 
             # Load and format the prompt
             prompt = load_prompt_template(
                 "subject_summary_definition",
                 subject_name=subject_name,
                 concept_list=concept_list,
-                context_info=context_info
+                context_info=context_info,
             )
 
             # Generate the definition
@@ -84,7 +85,7 @@ class DefinitionWriterAgent:
                     "filename.function_name": "subject_summary_agent.DefinitionWriterAgent.generate_definition",
                     "subject_name": subject_name,
                     "concepts_count": len(concepts),
-                }
+                },
             )
 
             return definition
@@ -97,7 +98,7 @@ class DefinitionWriterAgent:
                     "filename.function_name": "subject_summary_agent.DefinitionWriterAgent.generate_definition",
                     "subject_name": subject_name,
                     "error": str(e),
-                }
+                },
             )
             # Return fallback definition
             return f"This subject encompasses {len(concepts)} related concepts including {', '.join(concepts[:3])}{'...' if len(concepts) > 3 else ''}."
@@ -113,10 +114,7 @@ class ConceptBlurbAgent:
         self.config = config
 
     def generate_blurb(
-        self,
-        concept_name: str,
-        subject_name: str,
-        context: Dict[str, Any]
+        self, concept_name: str, subject_name: str, context: Dict[str, Any]
     ) -> str:
         """
         Generate a one-sentence blurb explaining the concept's role within the subject.
@@ -142,14 +140,18 @@ class ConceptBlurbAgent:
                     if concept_name in summary.get("related_concepts", []):
                         context_parts.append(f"- {summary.get('text', '')}")
 
-            context_info = "\n".join(context_parts) if context_parts else "No specific context available."
+            context_info = (
+                "\n".join(context_parts)
+                if context_parts
+                else "No specific context available."
+            )
 
             # Load and format the prompt
             prompt = load_prompt_template(
                 "subject_summary_concept_blurb",
                 subject_name=subject_name,
                 concept_name=concept_name,
-                context_info=context_info
+                context_info=context_info,
             )
 
             # Generate the blurb
@@ -165,7 +167,7 @@ class ConceptBlurbAgent:
                     "filename.function_name": "subject_summary_agent.ConceptBlurbAgent.generate_blurb",
                     "concept_name": concept_name,
                     "subject_name": subject_name,
-                }
+                },
             )
 
             return blurb
@@ -178,7 +180,7 @@ class ConceptBlurbAgent:
                     "filename.function_name": "subject_summary_agent.ConceptBlurbAgent.generate_blurb",
                     "concept_name": concept_name,
                     "error": str(e),
-                }
+                },
             )
             # Return fallback blurb
             return f"A key component of {subject_name}"
@@ -197,7 +199,7 @@ class CommonThreadsAgent:
         self,
         shared_claims: List[Dict[str, Any]],
         common_summaries: List[Dict[str, Any]],
-        web_context: Optional[str] = None
+        web_context: Optional[str] = None,
     ) -> str:
         """
         Generate the common threads section by analyzing shared claims and summaries.
@@ -214,21 +216,31 @@ class CommonThreadsAgent:
             # Format claims information
             claims_info = []
             for claim in shared_claims:
-                claims_info.append(f"- {claim.get('text', '')} (relates to: {', '.join(claim.get('related_concepts', []))})")
-            claims_text = "\n".join(claims_info) if claims_info else "No shared claims available."
+                claims_info.append(
+                    f"- {claim.get('text', '')} (relates to: {', '.join(claim.get('related_concepts', []))})"
+                )
+            claims_text = (
+                "\n".join(claims_info) if claims_info else "No shared claims available."
+            )
 
             # Format summaries information
             summaries_info = []
             for summary in common_summaries:
-                summaries_info.append(f"- {summary.get('text', '')} (relates to: {', '.join(summary.get('related_concepts', []))})")
-            summaries_text = "\n".join(summaries_info) if summaries_info else "No common summaries available."
+                summaries_info.append(
+                    f"- {summary.get('text', '')} (relates to: {', '.join(summary.get('related_concepts', []))})"
+                )
+            summaries_text = (
+                "\n".join(summaries_info)
+                if summaries_info
+                else "No common summaries available."
+            )
 
             # Load and format the prompt
             prompt = load_prompt_template(
                 "subject_summary_common_threads",
                 claims_info=claims_text,
                 summaries_info=summaries_text,
-                web_context=web_context or "No web context available."
+                web_context=web_context or "No web context available.",
             )
 
             # Generate the common threads
@@ -244,7 +256,7 @@ class CommonThreadsAgent:
                     "filename.function_name": "subject_summary_agent.CommonThreadsAgent.generate_common_threads",
                     "claims_count": len(shared_claims),
                     "summaries_count": len(common_summaries),
-                }
+                },
             )
 
             return threads
@@ -256,7 +268,7 @@ class CommonThreadsAgent:
                     "service": "aclarai",
                     "filename.function_name": "subject_summary_agent.CommonThreadsAgent.generate_common_threads",
                     "error": str(e),
-                }
+                },
             )
             # Return fallback threads
             return "- This subject brings together multiple related concepts\n- The concepts share common themes and applications"

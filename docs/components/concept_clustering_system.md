@@ -10,7 +10,7 @@ The concept clustering job is a scheduled task that:
 2. Gets their embeddings from the concepts vector store  
 3. Uses clustering algorithms to form semantically coherent groups
 4. Applies configurable filters to ensure cluster quality
-5. Caches the cluster assignments for use by the Subject Summary Agent
+5. Caches the cluster assignments for use by the Subject Summary Agent, which uses the clusters as a primary input.
 
 ## Architecture
 

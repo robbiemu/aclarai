@@ -68,9 +68,12 @@ class SubjectSummaryRefreshJob:
             config
         )
         self.clustering_job = clustering_job or ConceptClusteringJob(
-            config, self.neo4j_manager,
+            config,
+            self.neo4j_manager,
             # Pass the vector store from manager
-            getattr(self.vector_store_manager, '_vector_store', None) if self.vector_store_manager else None
+            getattr(self.vector_store_manager, "_vector_store", None)
+            if self.vector_store_manager
+            else None,
         )
 
         # Initialize the subject summary agent
@@ -140,7 +143,9 @@ class SubjectSummaryRefreshJob:
                         extra={
                             "service": "aclarai-scheduler",
                             "filename.function_name": "subject_summary_refresh.SubjectSummaryRefreshJob.run_job",
-                            "clustering_errors": clustering_stats.get("error_details", []),
+                            "clustering_errors": clustering_stats.get(
+                                "error_details", []
+                            ),
                         },
                     )
                     return stats
@@ -159,14 +164,16 @@ class SubjectSummaryRefreshJob:
             agent_result = self.subject_agent.run_agent()
 
             # Update stats with agent results
-            stats.update({
-                "success": agent_result["success"],
-                "clusters_processed": agent_result["clusters_processed"],
-                "subjects_generated": agent_result["subjects_generated"],
-                "subjects_skipped": agent_result["subjects_skipped"],
-                "errors": agent_result["errors"],
-                "error_details": agent_result["error_details"],
-            })
+            stats.update(
+                {
+                    "success": agent_result["success"],
+                    "clusters_processed": agent_result["clusters_processed"],
+                    "subjects_generated": agent_result["subjects_generated"],
+                    "subjects_skipped": agent_result["subjects_skipped"],
+                    "errors": agent_result["errors"],
+                    "error_details": agent_result["error_details"],
+                }
+            )
 
             if agent_result["success"]:
                 logger.info(

@@ -142,6 +142,18 @@ concept_clustering:
   cache_ttl: 3600
   use_persistent_cache: true
 ```
+
+### `subject_summary_refresh`
+Generates thematic `[[Subject:XYZ]]` pages for concept clusters identified by the concept clustering job.
+
+**Default Configuration:**
+```yaml
+subject_summary_refresh:
+  enabled: true
+  manual_only: false
+  cron: "0 6 * * *"  # Daily at 6:00 AM
+  description: "Generate thematic [[Subject:XYZ]] pages for concept clusters"
+```
 The `metric` parameter specifies the algorithm to use for identifying top concepts (e.g., `pagerank`). `count` determines the top N concepts to include, while `percent` specifies the top N% of concepts. `target_file` defines the output filename for the generated Markdown file.
 
 ## Job Execution Logic

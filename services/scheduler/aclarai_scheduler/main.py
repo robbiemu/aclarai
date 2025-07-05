@@ -408,7 +408,9 @@ class SchedulerService:
             )
 
         # Register subject summary refresh job
-        subject_summary_refresh_config = self.config.scheduler.jobs.subject_summary_refresh
+        subject_summary_refresh_config = (
+            self.config.scheduler.jobs.subject_summary_refresh
+        )
         if (
             subject_summary_refresh_config.enabled
             and not subject_summary_refresh_config.manual_only
@@ -440,7 +442,8 @@ class SchedulerService:
                     },
                 )
         elif (
-            subject_summary_refresh_config.enabled and subject_summary_refresh_config.manual_only
+            subject_summary_refresh_config.enabled
+            and subject_summary_refresh_config.manual_only
         ):
             self.logger.info(
                 "scheduler.main._register_jobs: Subject summary refresh job is enabled but set to manual_only, skipping automatic scheduling",

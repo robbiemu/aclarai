@@ -105,7 +105,11 @@ class SubjectSummaryAgent:
 
         # Initialize web search tool if enabled
         self.web_search_tool: Optional[BaseTool] = None
-        if config.subject_summaries.allow_web_search and self.llm and vector_store_manager:
+        if (
+            config.subject_summaries.allow_web_search
+            and self.llm
+            and vector_store_manager
+        ):
             try:
                 tool_factory = ToolFactory(
                     config.model_dump() if hasattr(config, "model_dump") else {},
@@ -128,7 +132,9 @@ class SubjectSummaryAgent:
         # Get the concepts directory from configuration
         vault_path = Path(config.paths.vault)
         concepts_path = config.paths.tier3 or "concepts"
-        self.subjects_dir = vault_path / concepts_path  # Store subjects with concepts for now
+        self.subjects_dir = (
+            vault_path / concepts_path
+        )  # Store subjects with concepts for now
 
         # Initialize sub-agents for content generation
         self.definition_writer_agent: Optional[DefinitionWriterAgent] = None
@@ -172,7 +178,9 @@ class SubjectSummaryAgent:
             return None
 
         try:
-            assignments: Optional[Dict[str, int]] = self.clustering_job.get_cluster_assignments()
+            assignments: Optional[Dict[str, int]] = (
+                self.clustering_job.get_cluster_assignments()
+            )
             if assignments:
                 logger.debug(
                     f"Retrieved {len(assignments)} concept cluster assignments",
@@ -284,7 +292,9 @@ class SubjectSummaryAgent:
             )
             return []
 
-    def retrieve_common_summaries(self, concept_names: List[str]) -> List[Dict[str, Any]]:
+    def retrieve_common_summaries(
+        self, concept_names: List[str]
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve summaries that mention multiple concepts in the cluster.
 
@@ -539,10 +549,17 @@ class SubjectSummaryAgent:
         Returns:
             The Markdown content as a string
         """
-        if self.llm and self.definition_writer_agent and self.concept_blurb_agent and self.common_threads_agent:
+        if (
+            self.llm
+            and self.definition_writer_agent
+            and self.concept_blurb_agent
+            and self.common_threads_agent
+        ):
             # Use agentic approach with sub-agents
             try:
-                content = self._generate_agentic_content(subject_name, concepts, context)
+                content = self._generate_agentic_content(
+                    subject_name, concepts, context
+                )
                 if content:
                     return content
             except Exception as e:
@@ -587,7 +604,7 @@ class SubjectSummaryAgent:
                     "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
                     "subject_name": subject_name,
                     "concepts_count": len(concepts),
-                }
+                },
             )
 
             # Delegate to DefinitionWriterAgent for summary paragraph
@@ -613,7 +630,7 @@ class SubjectSummaryAgent:
             common_threads_section = self.common_threads_agent.generate_common_threads(
                 context.get("shared_claims", []),
                 context.get("common_summaries", []),
-                context.get("web_context")
+                context.get("web_context"),
             )
 
             # 3. Final Assembly Phase - Procedural
@@ -632,7 +649,7 @@ class SubjectSummaryAgent:
                     "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
                     "subject_name": subject_name,
                     "content_length": len(content),
-                }
+                },
             )
 
             return content
@@ -645,7 +662,7 @@ class SubjectSummaryAgent:
                     "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
                     "subject_name": subject_name,
                     "error": str(e),
-                }
+                },
             )
             return None
 
@@ -685,14 +702,16 @@ class SubjectSummaryAgent:
             blurb = concept_blurbs.get(concept, "A key component of this subject")
             lines.append(f"- [[{concept}]] — {blurb}")
 
-        lines.extend([
-            "",
-            "### Common Threads",
-            common_threads_section,
-            "",
-            f"<!-- aclarai:id=subject_{subject_slug} ver=1 -->",
-            f"^subject_{subject_slug}",
-        ])
+        lines.extend(
+            [
+                "",
+                "### Common Threads",
+                common_threads_section,
+                "",
+                f"<!-- aclarai:id=subject_{subject_slug} ver=1 -->",
+                f"^subject_{subject_slug}",
+            ]
+        )
 
         return "\n".join(lines)
 
@@ -733,9 +752,13 @@ class SubjectSummaryAgent:
 
         if shared_claims or common_summaries:
             if shared_claims:
-                lines.append(f"- Shared evidence from {len(shared_claims)} claims that span multiple concepts")
+                lines.append(
+                    f"- Shared evidence from {len(shared_claims)} claims that span multiple concepts"
+                )
             if common_summaries:
-                lines.append(f"- Common themes identified in {len(common_summaries)} summaries")
+                lines.append(
+                    f"- Common themes identified in {len(common_summaries)} summaries"
+                )
         else:
             lines.append("- These concepts are grouped based on semantic similarity")
 
@@ -747,9 +770,7 @@ class SubjectSummaryAgent:
 
         return "\n".join(lines)
 
-    def generate_subject_page(
-        self, cluster_id: int, concepts: List[str]
-    ) -> bool:
+    def generate_subject_page(self, cluster_id: int, concepts: List[str]) -> bool:
         """
         Generate a complete subject page for a single concept cluster.
 

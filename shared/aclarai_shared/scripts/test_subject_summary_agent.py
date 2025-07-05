@@ -4,10 +4,10 @@ Script to test the Subject Summary Agent.
 This script demonstrates the usage of the SubjectSummaryAgent.
 """
 
-import tempfile
-from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
+from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.subject_summary_agent import SubjectSummaryAgent
 
 
@@ -63,7 +63,7 @@ def main():
     # Initialize the agent
     agent = SubjectSummaryAgent(
         config=mock_config,
-        neo4j_manager=MockNeo4jManager(),
+        neo4j_manager=cast(Neo4jGraphManager, MockNeo4jManager()),
         clustering_job=MockClusteringJob(),
         vector_store_manager=None,
     )
@@ -85,9 +85,7 @@ def main():
 
     # Test content generation (template mode since no real LLM)
     context = {
-        "shared_claims": [
-            {"text": "ML is a subset of AI", "aclarai_id": "claim_123"}
-        ],
+        "shared_claims": [{"text": "ML is a subset of AI", "aclarai_id": "claim_123"}],
         "common_summaries": [],
     }
     content = agent._generate_template_content(subject_name, concepts, context)

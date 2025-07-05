@@ -6,6 +6,7 @@ This module tests the functionality of the SubjectSummaryAgent that generates
 
 from unittest.mock import MagicMock, Mock
 
+import pytest
 from aclarai_shared.subject_summary_agent import SubjectSummaryAgent
 
 
@@ -203,7 +204,11 @@ def test_get_cluster_concepts():
     }
 
     cluster_0_concepts = agent.get_cluster_concepts(cluster_assignments, 0)
-    assert set(cluster_0_concepts) == {"Machine Learning", "Deep Learning", "Neural Networks"}
+    assert set(cluster_0_concepts) == {
+        "Machine Learning",
+        "Deep Learning",
+        "Neural Networks",
+    }
 
     cluster_1_concepts = agent.get_cluster_concepts(cluster_assignments, 1)
     assert set(cluster_1_concepts) == {"Data Science", "Statistics"}
@@ -427,9 +432,6 @@ def test_generate_template_content():
     assert "^subject_machine_learning_ai" in content
 
 
-import pytest
-
-
 @pytest.mark.integration
 def test_cypher_query_parameterization_integration():
     """
@@ -463,12 +465,12 @@ def test_cypher_query_parameterization_integration():
     # Verify that execute_query was called with parameters
     mock_neo4j.execute_query.assert_called()
     call_args = mock_neo4j.execute_query.call_args
-    
+
     # Check that the query uses parameterized format
     query = call_args[0][0]  # First positional argument (query)
     assert "$concept_names" in query
     assert "'" not in query or query.count("'") <= 2  # No inline string interpolation
-    
+
     # Check that parameters were passed
     kwargs = call_args[1]  # Keyword arguments
     assert "parameters" in kwargs
@@ -477,32 +479,35 @@ def test_cypher_query_parameterization_integration():
     assert kwargs.get("read_only") is True
 
 
-@pytest.mark.integration  
+@pytest.mark.integration
 def test_prompt_template_loading_integration():
     """
     Integration test to validate prompt templates are loaded from YAML files.
     This test ensures the agent properly uses external prompt templates.
     """
     from pathlib import Path
-    
+
     # Check that the required prompt files exist
     prompts_dir = Path(__file__).parent.parent / "shared" / "aclarai_shared" / "prompts"
-    
+
     required_prompts = [
         "subject_summary_definition.yaml",
-        "subject_summary_concept_blurb.yaml", 
-        "subject_summary_common_threads.yaml"
+        "subject_summary_concept_blurb.yaml",
+        "subject_summary_common_threads.yaml",
     ]
-    
+
     for prompt_file in required_prompts:
         prompt_path = prompts_dir / prompt_file
-        assert prompt_path.exists(), f"Prompt file {prompt_file} not found at {prompt_path}"
-        
+        assert prompt_path.exists(), (
+            f"Prompt file {prompt_file} not found at {prompt_path}"
+        )
+
         # Verify the file contains required YAML structure
         import yaml
-        with open(prompt_path, 'r') as f:
+
+        with open(prompt_path, "r") as f:
             prompt_data = yaml.safe_load(f)
-            
+
         assert "role" in prompt_data
         assert "description" in prompt_data
         assert "template" in prompt_data
