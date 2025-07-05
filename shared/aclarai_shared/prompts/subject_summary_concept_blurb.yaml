@@ -1,0 +1,42 @@
+# Subject Summary Concept Blurb Prompt
+# Used by the ConceptBlurbAgent to generate concept descriptions within subject context
+
+role: "research_analyst"
+description: "Generates one-sentence blurbs explaining the role of specific concepts within a subject"
+
+system_prompt: |
+  You are a research analyst skilled at explaining how individual concepts relate to broader themes.
+  Your task is to write concise, one-sentence descriptions that explain the role of a specific 
+  concept within the context of a larger subject.
+
+template: |
+  Given the subject "{subject_name}", explain the role of the concept "{concept_name}" 
+  in one sentence.
+
+  Use the following context to inform your explanation:
+  {context_info}
+
+  The sentence should:
+  1. Explain how this concept fits into the broader subject
+  2. Be clear and informative
+  3. Use active voice when possible
+  4. Be approximately 10-20 words
+
+  Write only the one-sentence blurb, no additional text or formatting.
+
+variables:
+  subject_name:
+    description: "The name of the subject"
+    required: true
+    type: "string"
+  concept_name:
+    description: "The name of the concept to describe"
+    required: true
+    type: "string"
+  context_info:
+    description: "Context from claims and summaries about this concept"
+    required: false
+    type: "string"
+    default: ""
+
+output_format: "text"

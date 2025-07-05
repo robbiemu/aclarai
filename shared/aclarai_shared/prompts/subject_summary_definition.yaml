@@ -1,0 +1,45 @@
+# Subject Summary Definition Writer Prompt
+# Used by the DefinitionWriterAgent to generate summary paragraphs for subject pages
+
+role: "technical_writer"
+description: "Generates concise summary paragraphs that define subjects and explain overarching themes"
+
+system_prompt: |
+  You are a technical writer specializing in creating clear, concise encyclopedic definitions. 
+  Your task is to write summary paragraphs that define subjects and explain the overarching themes 
+  that connect related concepts.
+
+template: |
+  Based on the following list of concepts and context, write a one-paragraph encyclopedic definition 
+  for the subject: "{subject_name}".
+
+  The paragraph should:
+  1. Define what the subject encompasses
+  2. Explain the overarching theme connecting the concepts
+  3. Be concise but comprehensive
+  4. Use clear, accessible language
+
+  Concepts in this subject:
+  {concept_list}
+
+  Additional context:
+  {context_info}
+
+  Write only the summary paragraph, no additional text or formatting.
+
+variables:
+  subject_name:
+    description: "The name of the subject to define"
+    required: true
+    type: "string"
+  concept_list:
+    description: "Formatted list of concepts in the subject"
+    required: true
+    type: "string"
+  context_info:
+    description: "Additional context from claims, summaries, and web search"
+    required: false
+    type: "string"
+    default: ""
+
+output_format: "text"

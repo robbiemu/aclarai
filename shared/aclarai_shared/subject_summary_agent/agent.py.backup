@@ -591,15 +591,11 @@ class SubjectSummaryAgent:
             )
 
             # Delegate to DefinitionWriterAgent for summary paragraph
-            if not self.definition_writer_agent:
-                raise RuntimeError("DefinitionWriterAgent not initialized")
             summary_paragraph = self.definition_writer_agent.generate_definition(
                 subject_name, concepts, context
             )
 
             # Delegate to ConceptBlurbAgent for each concept
-            if not self.concept_blurb_agent:
-                raise RuntimeError("ConceptBlurbAgent not initialized")
             concept_blurbs = {}
             for concept in concepts:
                 blurb = self.concept_blurb_agent.generate_blurb(
@@ -608,8 +604,6 @@ class SubjectSummaryAgent:
                 concept_blurbs[concept] = blurb
 
             # Delegate to CommonThreadsAgent for shared themes
-            if not self.common_threads_agent:
-                raise RuntimeError("CommonThreadsAgent not initialized")
             common_threads_section = self.common_threads_agent.generate_common_threads(
                 context.get("shared_claims", []),
                 context.get("common_summaries", []),
@@ -695,6 +689,77 @@ class SubjectSummaryAgent:
         ])
 
         return "\n".join(lines)
+        prompt_parts.append(f"\nIncluded concepts ({len(concepts)} total):")
+        for concept in concepts:
+            prompt_parts.append(f"- {concept}")
+
+        # Add shared claims context
+        shared_claims = context.get("shared_claims", [])
+        if shared_claims:
+            prompt_parts.append(f"\nShared claims ({len(shared_claims)} total):")
+            for claim in shared_claims[:5]:  # Show up to 5 claims
+                prompt_parts.append(f"- {claim['text']}")
+
+        # Add common summaries context
+        common_summaries = context.get("common_summaries", [])
+        if common_summaries:
+            prompt_parts.append(f"\nCommon summaries ({len(common_summaries)} total):")
+            for summary in common_summaries[:3]:  # Show up to 3 summaries
+                prompt_parts.append(f"- {summary['text']}")
+
+        # Add web search context if available
+        web_context = context.get("web_context")
+        if web_context:
+            prompt_parts.append(f"\nAdditional web context:\n{web_context[:500]}...")  # Truncate for prompt
+
+        prompt_parts.extend([
+            "",
+            "Requirements:",
+            "1. Write a clear summary paragraph that explains the theme connecting these concepts",
+            "2. List each concept with a [[wiki-style link]] and short descriptive blurb",
+            "3. Identify and explain the common threads that unite these concepts",
+            "4. Use professional, encyclopedia-style language",
+            "5. Be comprehensive but concise",
+            f"6. End with the metadata: <!-- aclarai:id=subject_{subject_slug} ver=1 --> and ^subject_{subject_slug}",
+            "",
+            "Generate the complete subject page now:",
+        ])
+
+        prompt = "\n".join(prompt_parts)
+
+        try:
+            if self.llm is None:
+                return None
+            response = self.llm.complete(prompt)
+            content = str(response.response).strip()
+
+            # Ensure proper metadata is included
+            if f"<!-- aclarai:id=subject_{subject_slug}" not in content:
+                content += f"\n\n<!-- aclarai:id=subject_{subject_slug} ver=1 -->\n^subject_{subject_slug}"
+
+            logger.debug(
+                f"Generated LLM content for subject '{subject_name}'",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_llm_content",
+                    "subject_name": subject_name,
+                    "content_length": len(content),
+                },
+            )
+
+            return content
+
+        except Exception as e:
+            logger.error(
+                f"LLM content generation failed for subject '{subject_name}': {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_llm_content",
+                    "subject_name": subject_name,
+                    "error": str(e),
+                },
+            )
+            return None
 
     def _generate_template_content(
         self, subject_name: str, concepts: List[str], context: Dict[str, Any]
