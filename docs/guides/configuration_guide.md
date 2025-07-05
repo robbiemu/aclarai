@@ -111,6 +111,14 @@ The Highlight & Summary section configures concept highlight jobs that generate 
 - **Skip If No Claims** (true/false): Skip generating pages for concepts without supporting claims (default: true)
 - **Include See Also** (true/false): Include related concepts section in generated pages (default: true)
 
+**Subject Summary Configuration**:
+- **Model**: LLM model for generating subject definitions (default: "gpt-3.5-turbo")
+- **Similarity Threshold** (0.0-1.0): Threshold for concept clustering (default: 0.92)
+- **Min Concepts** (Integer): Minimum number of concepts required to form a subject (default: 3)
+- **Max Concepts** (Integer): Maximum number of concepts allowed in a subject (default: 15)
+- **Allow Web Search** (true/false): Enable web search for additional context (default: true)
+- **Skip If Incoherent** (true/false): Skip clusters with no shared elements (default: false)
+
 ### Making Changes
 
 1. **Load Current Settings**: The panel automatically loads your current configuration
@@ -244,6 +252,21 @@ The `concept_summary_refresh` job generates detailed `[[Concept]]` pages for all
 -   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered.
 -   **`cron`**: (String) The schedule for automatic execution (e.g., `"0 7 * * *"` for daily at 7 AM).
 -   **`description`**: (String) A human-readable description of the job.
+
+### Subject Summary Refresh Job
+
+The `subject_summary_refresh` job generates thematic `[[Subject:XYZ]]` pages from concept clusters.
+
+-   **`enabled`**: (Boolean) Set to `true` to enable the job.
+-   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered.
+-   **`cron`**: (String) The schedule for automatic execution (e.g., `"0 6 * * *"` for daily at 6 AM).
+-   **`description`**: (String) A human-readable description of the job.
+-   **`model`**: (String) LLM model for content generation (default: "gpt-3.5-turbo").
+-   **`similarity_threshold`**: (Float) Threshold for concept clustering (default: 0.92).
+-   **`min_concepts`**: (Integer) Minimum concepts required per subject (default: 3).
+-   **`max_concepts`**: (Integer) Maximum concepts allowed per subject (default: 15).
+-   **`allow_web_search`**: (Boolean) Enable web search for additional context (default: true).
+-   **`skip_if_incoherent`**: (Boolean) Skip clusters with no shared elements (default: false).
 
 
 ## Configuration Loading

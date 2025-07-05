@@ -134,7 +134,7 @@ class SubjectSummaryAgent:
         self.definition_writer_agent: Optional[DefinitionWriterAgent] = None
         self.concept_blurb_agent: Optional[ConceptBlurbAgent] = None
         self.common_threads_agent: Optional[CommonThreadsAgent] = None
-        
+
         if self.llm:
             self.definition_writer_agent = DefinitionWriterAgent(self.llm, config)
             self.concept_blurb_agent = ConceptBlurbAgent(self.llm, config)
@@ -671,7 +671,7 @@ class SubjectSummaryAgent:
             Complete Markdown content
         """
         subject_slug = self.generate_subject_slug(subject_name)
-        
+
         lines = [
             f"## Subject: {subject_name}",
             "",
@@ -684,7 +684,7 @@ class SubjectSummaryAgent:
         for concept in concepts:
             blurb = concept_blurbs.get(concept, "A key component of this subject")
             lines.append(f"- [[{concept}]] — {blurb}")
-        
+
         lines.extend([
             "",
             "### Common Threads",

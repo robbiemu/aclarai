@@ -15,6 +15,7 @@ Key responsibilities:
 -   **Concept Highlighting**: Identifies and highlights the most central or trending concepts in the knowledge graph, generating summary pages like 'Top Concepts' and 'Trending Topics'.
 -   **Concept Clustering**: Groups related concepts into thematic clusters based on their embeddings, providing input for other agents like the Subject Summary Agent.
 -   **Concept Summary Generation**: Creates detailed Markdown pages for canonical concepts using RAG workflows to include relevant claims, summaries, and related concepts.
+-   **Subject Summary Generation**: Creates thematic `[[Subject:XYZ]]` pages from concept clusters, providing higher-level overviews of knowledge themes.
 
 ## Architecture
 
@@ -70,6 +71,16 @@ A job (`aclarai_scheduler.concept_summary_refresh`) that generates detailed Mark
 -   **RAG Processing**: Uses the ConceptSummaryAgent to generate structured content including relevant claims, summaries, and related concepts.
 -   **Conditional Processing**: Can skip concepts with insufficient claims based on configuration.
 -   **Atomic Writes**: Ensures all generated `[[Concept]]` pages are written atomically with proper vault sync markers.
+
+### SubjectSummaryRefreshJob
+
+A job (`aclarai_scheduler.subject_summary_refresh`) that generates thematic `[[Subject:XYZ]]` pages for concept clusters identified by the concept clustering job.
+
+-   **Cluster Processing**: Retrieves cluster assignments from the concept clustering job cache.
+-   **Agentic Content Generation**: Uses specialized sub-agents (DefinitionWriterAgent, ConceptBlurbAgent, CommonThreadsAgent) for different sections.
+-   **Context Retrieval**: Gathers shared claims, common summaries, and optional web search context for each cluster.
+-   **Quality Filtering**: Applies configurable thresholds for cluster size and coherence.
+-   **Atomic Writes**: Ensures all generated subject pages are written atomically with proper vault sync markers.
 
 ## Configuration
 

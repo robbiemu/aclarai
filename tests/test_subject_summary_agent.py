@@ -425,3 +425,85 @@ def test_generate_template_content():
     assert "### Common Threads" in content
     assert "<!-- aclarai:id=subject_machine_learning_ai ver=1 -->" in content
     assert "^subject_machine_learning_ai" in content
+
+
+import pytest
+
+
+@pytest.mark.integration
+def test_cypher_query_parameterization_integration():
+    """
+    Integration test to validate Cypher queries use parameterized queries.
+    This test validates the agent's interaction with Neo4j to ensure security.
+    """
+    mock_config = MagicMock()
+    mock_config.paths.vault = "/tmp/test_vault"
+    mock_config.paths.tier3 = "concepts"
+    mock_config.llm.provider = "openai"
+    mock_config.subject_summaries.model = "gpt-4"
+    mock_config.subject_summaries.allow_web_search = False
+    mock_config.subject_summaries.min_concepts = 3
+    mock_config.subject_summaries.max_concepts = 15
+    mock_config.subject_summaries.skip_if_incoherent = False
+
+    mock_neo4j = MockNeo4jManager()
+    mock_clustering_job = MockClusteringJob()
+
+    agent = SubjectSummaryAgent(
+        config=mock_config,
+        neo4j_manager=mock_neo4j,
+        clustering_job=mock_clustering_job,
+        vector_store_manager=None,
+    )
+
+    # Test that shared claims query uses parameterized queries
+    concepts = ["Machine Learning", "AI"]
+    agent.retrieve_shared_claims(concepts)
+
+    # Verify that execute_query was called with parameters
+    mock_neo4j.execute_query.assert_called()
+    call_args = mock_neo4j.execute_query.call_args
+    
+    # Check that the query uses parameterized format
+    query = call_args[0][0]  # First positional argument (query)
+    assert "$concept_names" in query
+    assert "'" not in query or query.count("'") <= 2  # No inline string interpolation
+    
+    # Check that parameters were passed
+    kwargs = call_args[1]  # Keyword arguments
+    assert "parameters" in kwargs
+    assert "concept_names" in kwargs["parameters"]
+    assert kwargs["parameters"]["concept_names"] == concepts
+    assert kwargs.get("read_only") is True
+
+
+@pytest.mark.integration  
+def test_prompt_template_loading_integration():
+    """
+    Integration test to validate prompt templates are loaded from YAML files.
+    This test ensures the agent properly uses external prompt templates.
+    """
+    from pathlib import Path
+    
+    # Check that the required prompt files exist
+    prompts_dir = Path(__file__).parent.parent / "shared" / "aclarai_shared" / "prompts"
+    
+    required_prompts = [
+        "subject_summary_definition.yaml",
+        "subject_summary_concept_blurb.yaml", 
+        "subject_summary_common_threads.yaml"
+    ]
+    
+    for prompt_file in required_prompts:
+        prompt_path = prompts_dir / prompt_file
+        assert prompt_path.exists(), f"Prompt file {prompt_file} not found at {prompt_path}"
+        
+        # Verify the file contains required YAML structure
+        import yaml
+        with open(prompt_path, 'r') as f:
+            prompt_data = yaml.safe_load(f)
+            
+        assert "role" in prompt_data
+        assert "description" in prompt_data
+        assert "template" in prompt_data
+        assert "variables" in prompt_data

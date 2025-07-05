@@ -10,6 +10,6 @@ from .content_generation_agents import (
 
 __all__ = [
     "CommonThreadsAgent",
-    "ConceptBlurbAgent", 
+    "ConceptBlurbAgent",
     "DefinitionWriterAgent",
 ]
