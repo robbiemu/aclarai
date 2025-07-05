@@ -187,8 +187,16 @@ All components use structured logging with:
 -   Relevant IDs (claim_id, concept_id, aclarai_id)
 -   Performance metrics and error details
 
+## Automated Processing
+
+Claim-concept linking is now handled by the automated scheduler system:
+
+1. **Scheduling**: The `claim_concept_linking` job runs on a configurable schedule (via `scheduler.jobs.claim_concept_linking` configuration)
+2. **Dependencies**: Runs after the vault sync job to ensure it processes the latest content
+3. **Control**: Respects both global automation pause (via `.aclarai_pause`) and individual job settings (`enabled`, `manual_only`)
+
 ## Next Steps
 
-1.  **Integration**: Deploy to `aclarai-core` service for automated processing
-2.  **Monitoring**: Set up alerts for relationship creation rates
-3.  **Quality**: Review created relationships and adjust thresholds as needed
+1. **Monitoring**: Set up alerts for relationship creation rates
+2. **Quality**: Review created relationships and adjust thresholds as needed
+3. **Optimization**: Fine-tune job schedule and batch sizes based on vault size

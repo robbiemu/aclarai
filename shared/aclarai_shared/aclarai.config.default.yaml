@@ -313,6 +313,12 @@ scheduler:
       manual_only: false
       cron: "0 6 * * *"  # 6 AM daily (after clustering at 2 AM)
       description: "Generate [[Subject:XYZ]] pages from concept clusters"
+    
+    concept_subject_linking:
+      enabled: true
+      manual_only: false
+      cron: "0 7 * * *"  # 7 AM daily (after subject generation at 6 AM)
+      description: "Link concepts to their parent subjects by adding footer links"
 
 # Feature flags
 features:
