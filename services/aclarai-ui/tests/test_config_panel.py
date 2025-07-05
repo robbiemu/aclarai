@@ -250,6 +250,88 @@ class TestConceptHighlightsValidation:
         )
 
 
+class TestSummaryAgentsValidation:
+    """Test validation functions for Subject Summary and Concept Summary configurations."""
+
+    def test_validate_summary_agents_config_valid_values(self):
+        """Test validation with valid parameter values."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=0.92,
+            subject_summary_min_concepts=3,
+            subject_summary_max_concepts=15,
+            concept_summary_max_examples=5,
+        )
+        assert is_valid
+        assert len(errors) == 0
+
+    def test_validate_summary_agents_config_invalid_threshold(self):
+        """Test validation with invalid similarity threshold."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=1.5,  # Invalid: > 1.0
+            subject_summary_min_concepts=3,
+            subject_summary_max_concepts=15,
+            concept_summary_max_examples=5,
+        )
+        assert not is_valid
+        assert "Similarity threshold must be between 0.0 and 1.0" in errors
+
+    def test_validate_summary_agents_config_invalid_min_concepts(self):
+        """Test validation with invalid minimum concepts."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=0.92,
+            subject_summary_min_concepts=0,  # Invalid: < 1
+            subject_summary_max_concepts=15,
+            concept_summary_max_examples=5,
+        )
+        assert not is_valid
+        assert "Minimum concepts must be between 1 and 100" in errors
+
+    def test_validate_summary_agents_config_invalid_max_concepts(self):
+        """Test validation with invalid maximum concepts."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=0.92,
+            subject_summary_min_concepts=3,
+            subject_summary_max_concepts=101,  # Invalid: > 100
+            concept_summary_max_examples=5,
+        )
+        assert not is_valid
+        assert "Maximum concepts must be between 1 and 100" in errors
+
+    def test_validate_summary_agents_config_min_greater_than_max(self):
+        """Test validation when min concepts is greater than max concepts."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=0.92,
+            subject_summary_min_concepts=10,
+            subject_summary_max_concepts=5,  # Invalid: < min_concepts
+            concept_summary_max_examples=5,
+        )
+        assert not is_valid
+        assert "Minimum concepts cannot be greater than maximum concepts" in errors
+
+    def test_validate_summary_agents_config_invalid_max_examples(self):
+        """Test validation with invalid maximum examples."""
+        from aclarai_ui.config_panel import validate_summary_agents_config
+
+        is_valid, errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold=0.92,
+            subject_summary_min_concepts=3,
+            subject_summary_max_concepts=15,
+            concept_summary_max_examples=21,  # Invalid: > 20
+        )
+        assert not is_valid
+        assert "Maximum examples must be between 0 and 20" in errors
+
+
 class TestValidationFunctions:
     """Test validation functions."""
 

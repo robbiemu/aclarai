@@ -1,5 +1,22 @@
 # Configuration Panel
 
+## Highlight & Summary Section
+The "Highlight & Summary" section provides configuration controls for the Subject Summary and Concept Summary agents:
+
+### Subject Summary Agent Controls
+- **Similarity Threshold** (0.0-1.0): Cosine similarity threshold for concept clustering. Higher values require more similarity between concepts.
+- **Min Concepts** (1-100): Minimum number of concepts required to form a subject cluster.
+- **Max Concepts** (1-100): Maximum number of concepts to include in a subject cluster.
+- **Allow Web Search**: Enable web search for additional context during subject summary generation.
+- **Skip If Incoherent**: Skip generating subjects for clusters with no shared elements.
+
+### Concept Summary Agent Controls
+- **Max Examples** (0-20): Maximum number of examples to include in concept summaries.
+- **Skip If No Claims**: Skip generating summaries for concepts with no associated claims.
+- **Include See Also**: Include 'See Also' sections with related concepts.
+
+All controls provide immediate validation and feedback, with tooltips explaining their purpose and impact.
+
 This document describes the Aclarai Configuration Panel, a UI component for managing system settings and agent parameters.
 
 ## Overview

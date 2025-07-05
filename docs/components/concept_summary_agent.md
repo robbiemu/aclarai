@@ -1,5 +1,14 @@
 # Concept Summary Agent
 
+## Configuration
+The Concept Summary Agent can be configured through the Aclarai UI panel under the "Highlight & Summary" section with the following parameters:
+
+- **Max Examples** (0-20): Maximum number of examples to include in generated concept summaries.
+- **Skip If No Claims**: When enabled, skips generating summaries for concepts that have no associated claims.
+- **Include See Also**: When enabled, adds a "See Also" section with related concepts to the summary.
+
+These settings can be adjusted through the UI without manual configuration file edits.
+
 ## Overview
 
 The Concept Summary Agent generates detailed Markdown pages for each canonical concept in the Neo4j knowledge graph. It follows the specifications from `docs/arch/on-writing_vault_documents.md` and uses the RAG (Retrieval-Augmented Generation) workflow described in `docs/arch/on-RAG_workflow.md`.

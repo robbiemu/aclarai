@@ -95,7 +95,22 @@ A job (`aclarai_scheduler.concept_subject_linking`) that maintains bidirectional
 
 ## Configuration
 
-Jobs are configured via `settings/aclarai.config.yaml` under the `scheduler.jobs` section. This allows for granular control over each job's behavior.
+Jobs can be configured both through the Aclarai UI panel and via `settings/aclarai.config.yaml`. The UI provides controls under the "Highlight & Summary" section for the following job parameters:
+
+### UI-Configurable Parameters
+
+#### Subject Summary & Concept Summary Jobs
+- **Subject Summary Parameters**
+  - Similarity threshold for clustering (0.0-1.0)
+  - Minimum/maximum concepts per cluster
+  - Web search option for additional context
+  - Skip option for incoherent clusters
+- **Concept Summary Parameters**
+  - Maximum examples per summary
+  - Option to skip concepts without claims
+  - Option to include related concepts section
+
+These parameters take effect during the next scheduled run of their respective jobs. Other job settings are configured via `settings/aclarai.config.yaml` under the `scheduler.jobs` section:
 
 ```yaml
 scheduler:

@@ -1,4 +1,55 @@
-# Configuration System Usage Guide
+# Configuration Guide
+
+## Highlight & Summary Configuration
+The "Highlight & Summary" section in the Aclarai UI panel provides controls for configuring the Subject Summary and Concept Summary agents:
+
+### Subject Summary Agent
+These settings control how concepts are clustered and how subject pages are generated:
+
+#### Clustering Controls
+- **Similarity Threshold** (0.0-1.0)
+  - Controls how similar concepts must be to be grouped together
+  - Higher values (e.g., 0.92) create more focused but fewer clusters
+  - Lower values (e.g., 0.7) create more clusters but may include less related concepts
+
+- **Min Concepts** (1-100)
+  - Minimum number of concepts required to form a subject cluster
+  - Helps prevent creation of subjects with too few concepts
+  - Default: 3 concepts
+
+- **Max Concepts** (1-100)
+  - Maximum number of concepts allowed in a subject cluster
+  - Prevents overly broad subjects
+  - Default: 15 concepts
+
+#### Generation Controls
+- **Allow Web Search**
+  - Enables web search for additional context during subject generation
+  - Can improve subject summaries but requires internet access
+  - May increase generation time
+
+- **Skip If Incoherent**
+  - Skips generating subjects for clusters with no clear shared themes
+  - Helps maintain quality by filtering out weak clusters
+  - Recommended for larger knowledge bases
+
+### Concept Summary Agent
+These settings control how individual concept pages are generated:
+
+- **Max Examples** (0-20)
+  - Maximum number of examples to include in concept summaries
+  - Higher values provide more context but longer pages
+  - Default: 5 examples
+
+- **Skip If No Claims**
+  - Skips generating summaries for concepts with no associated claims
+  - Helps maintain quality by ensuring sufficient source material
+  - Recommended for cleaner output
+
+- **Include See Also**
+  - Adds a section listing related concepts
+  - Improves navigation between related concepts
+  - Recommended for better knowledge discovery
 
 This guide describes how to use aclarai's configuration system, which provides both a user-friendly UI panel and persistent YAML configuration files.
 
