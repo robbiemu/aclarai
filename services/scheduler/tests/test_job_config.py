@@ -73,7 +73,7 @@ class TestJobConfiguration:
 
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.load_config",
-            lambda **kwargs: mock_config,
+            lambda **_: mock_config,
         )
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.is_paused", lambda: False
@@ -97,12 +97,12 @@ class TestJobConfiguration:
 
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.load_config",
-            lambda **kwargs: mock_config,
+            lambda **_: mock_config,
         )
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.is_paused", lambda: False
         )
-        monkeypatch.setattr("os.getenv", lambda k, d: d)
+        monkeypatch.setattr("os.getenv", lambda _k, d: d)
 
         service = SchedulerService()
         service.scheduler = MagicMock(spec=BlockingScheduler)
@@ -126,12 +126,12 @@ class TestJobConfiguration:
 
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.load_config",
-            lambda **kwargs: mock_config,
+            lambda **_: mock_config,
         )
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.is_paused", lambda: False
         )
-        monkeypatch.setattr("os.getenv", lambda k, d: d)
+        monkeypatch.setattr("os.getenv", lambda _k, d: d)
 
         service = SchedulerService()
         service.scheduler = MagicMock(spec=BlockingScheduler)
@@ -150,7 +150,7 @@ class TestJobConfiguration:
 
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.load_config",
-            lambda **kwargs: mock_config,
+            lambda **_: mock_config,
         )
         monkeypatch.setattr(
             "services.scheduler.aclarai_scheduler.main.is_paused", lambda: True
