@@ -8,8 +8,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import pytest
-
 from services.scheduler.aclarai_scheduler.concept_subject_linking_job import (
     ConceptSubjectLinkingJob,
 )
@@ -66,7 +64,7 @@ This is a test concept.
             mock_config = Mock()
             mock_config.vault_path = temp_dir
             mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
-            
+
             job = ConceptSubjectLinkingJob(
                 config=mock_config,
                 neo4j_manager=Mock(),
@@ -91,7 +89,7 @@ This is a test concept.
         mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
             footer_section_title="Part of Subjects"
         )
-        
+
         job = ConceptSubjectLinkingJob(
             config=mock_config,
             neo4j_manager=Mock(),
@@ -123,7 +121,7 @@ This is a test concept.
         mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
             footer_section_title="Part of Subjects"
         )
-        
+
         job = ConceptSubjectLinkingJob(
             config=mock_config,
             neo4j_manager=Mock(),
@@ -152,7 +150,7 @@ This is a test concept.
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
         mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
-        
+
         job = ConceptSubjectLinkingJob(
             config=mock_config,
             neo4j_manager=Mock(),
@@ -179,7 +177,7 @@ This is a test concept.
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
         mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
-        
+
         job = ConceptSubjectLinkingJob(
             config=mock_config,
             neo4j_manager=mock_neo4j,
@@ -216,7 +214,7 @@ This is a test concept.
             mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
                 footer_section_title="Part of Subjects"
             )
-            
+
             job = ConceptSubjectLinkingJob(
                 config=mock_config,
                 neo4j_manager=Mock(),
@@ -263,7 +261,7 @@ This is a test concept.
             mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
                 footer_section_title="Part of Subjects"
             )
-            
+
             job = ConceptSubjectLinkingJob(
                 config=mock_config,
                 neo4j_manager=Mock(),
@@ -284,7 +282,7 @@ This is a test concept.
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
         mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
-        
+
         job = ConceptSubjectLinkingJob(
             config=mock_config,
             neo4j_manager=mock_neo4j,
