@@ -5,7 +5,7 @@ This script demonstrates the usage of the SubjectSummaryAgent.
 """
 
 import tempfile
-from typing import cast
+from typing import Dict, List, cast
 from unittest.mock import MagicMock
 
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
@@ -32,7 +32,7 @@ def main():
 
         # Create mock clustering job with sample data
         class MockClusteringJob:
-            def get_cluster_assignments(self):
+            def get_cluster_assignments(self) -> Dict[str, int]:
                 return {
                     "Machine Learning": 0,
                     "Deep Learning": 0,
@@ -44,7 +44,7 @@ def main():
 
         # Create mock Neo4j manager
         class MockNeo4jManager:
-            def execute_query(self, query):
+            def execute_query(self, query) -> List[Dict[str, str | List[str]]]:
                 # Return sample shared claims
                 if "claim" in query.lower():
                     return [
