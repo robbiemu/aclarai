@@ -101,6 +101,10 @@ class UtteranceChunker:
             List of ChunkMetadata objects
         """
         logger.debug(f"Chunking utterance block: {aclarai_block_id}")
+        # Validate input text
+        if not text or not text.strip():
+            logger.warning(f"Empty text provided for block {aclarai_block_id}")
+            return []
         # Step 1: Use LlamaIndex SentenceSplitter as base layer
         document = Document(text=text, metadata={"source_block_id": aclarai_block_id})
         base_chunks = self.splitter.get_nodes_from_documents([document])

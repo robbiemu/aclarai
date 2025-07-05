@@ -6,6 +6,8 @@ import os
 from unittest.mock import Mock
 
 import pytest
+from aclarai_shared.config import load_config
+from aclarai_shared.embedding import EmbeddingPipeline
 
 
 class TestEmbeddingResult:
@@ -67,8 +69,27 @@ class TestEmbeddingPipeline:
     @pytest.mark.integration
     def test_embedding_pipeline_init_with_config_integration(self):
         """Test EmbeddingPipeline initialization with config (integration test)."""
-        # Integration test - requires real PostgreSQL service
-        pytest.skip("Integration tests require real database setup")
+        # Load config from environment
+        config = load_config(validate=True)
+        
+        # Initialize pipeline with config
+        try:
+            pipeline = EmbeddingPipeline(config)
+            assert pipeline is not None
+            assert pipeline.config == config
+            
+            # Verify components are initialized
+            assert pipeline.chunker is not None
+            assert pipeline.embedding_generator is not None
+            assert pipeline.vector_store is not None
+            assert pipeline.vector_store.config.embedding.collection_name == "utterances"
+            
+            # Verify database connection via metrics
+            metrics = pipeline.vector_store.get_store_metrics()
+            assert metrics is not None
+            assert isinstance(metrics.total_vectors, int)
+        except Exception as e:
+            pytest.fail(f"Failed to initialize pipeline with config: {e}")
 
     def test_embedding_pipeline_init_default_config(self):
         """Test EmbeddingPipeline initialization with default config (unit test)."""
@@ -78,8 +99,24 @@ class TestEmbeddingPipeline:
     @pytest.mark.integration
     def test_embedding_pipeline_init_default_config_integration(self):
         """Test EmbeddingPipeline initialization with default config (integration test)."""
-        # Integration test - requires real PostgreSQL service
-        pytest.skip("Integration tests require real database setup")
+        # Initialize pipeline without config (uses default)
+        try:
+            pipeline = EmbeddingPipeline()
+            assert pipeline is not None
+            assert pipeline.config is not None
+            
+            # Verify components are initialized
+            assert pipeline.chunker is not None
+            assert pipeline.embedding_generator is not None
+            assert pipeline.vector_store is not None
+            assert pipeline.vector_store.config.embedding.collection_name == "utterances"
+            
+            # Verify database connection via metrics
+            metrics = pipeline.vector_store.get_store_metrics()
+            assert metrics is not None
+            assert isinstance(metrics.total_vectors, int)
+        except Exception as e:
+            pytest.fail(f"Failed to initialize pipeline with default config: {e}")
 
     def test_process_tier1_content_empty(self):
         """Test processing empty Tier 1 content (unit test)."""
@@ -89,8 +126,24 @@ class TestEmbeddingPipeline:
     @pytest.mark.integration
     def test_process_tier1_content_empty_integration(self):
         """Test processing empty Tier 1 content (integration test)."""
-        # Integration test - requires real PostgreSQL service
-        pytest.skip("Integration tests require real database setup")
+        # Load config and initialize pipeline
+        config = load_config(validate=True)
+        pipeline = EmbeddingPipeline(config)
+        
+        # Test processing empty content
+        empty_content = ""
+        
+        # Process should handle empty content gracefully
+        try:
+            result = pipeline.process_tier1_content(empty_content)
+            assert result is not None
+            assert result.success is False  # Empty content should fail gracefully
+            assert result.total_chunks == 0
+            assert result.embedded_chunks == 0
+            assert len(result.errors) > 0  # Should have an error message
+            assert "No chunks generated from input content" in result.errors[0]
+        except Exception as e:
+            pytest.fail(f"Failed to process empty content: {e}")
 
 
 class TestEmbeddingModuleImports:
