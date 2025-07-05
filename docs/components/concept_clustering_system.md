@@ -1,4 +1,13 @@
-# Concept Clustering Job
+# Concept Clustering System
+
+## Configuration
+Key parameters of the concept clustering system can be configured through the Aclarai UI panel under the "Highlight & Summary" section:
+
+- **Similarity Threshold** (0.0-1.0): Controls how similar concepts must be to be grouped together. Higher values require more similarity.
+- **Min Concepts** (1-100): Minimum number of concepts required to form a valid cluster.
+- **Max Concepts** (1-100): Maximum number of concepts that can be included in a cluster.
+
+These parameters can be adjusted in real-time through the UI without needing to modify configuration files directly.
 
 This document describes the concept clustering job implementation for aclarai, which groups related concepts into thematic clusters using their embeddings.
 

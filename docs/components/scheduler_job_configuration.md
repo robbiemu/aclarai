@@ -1,5 +1,26 @@
 # Scheduler Job Configuration
 
+## UI-Configurable Parameters
+The following job parameters can be configured through the Aclarai UI panel under the "Highlight & Summary" section:
+
+### subject_summaries Configuration
+```yaml
+subject_summaries:
+  similarity_threshold: 0.92  # Threshold for concept clustering (0.0-1.0)
+  min_concepts: 3            # Minimum concepts per cluster (1-100)
+  max_concepts: 15           # Maximum concepts per cluster (1-100)
+  allow_web_search: true     # Enable web search for additional context
+  skip_if_incoherent: false  # Skip clusters with no shared elements
+```
+
+### concept_summaries Configuration
+```yaml
+concept_summaries:
+  max_examples: 5            # Maximum examples in summaries (0-20)
+  skip_if_no_claims: true    # Skip concepts with no associated claims
+  include_see_also: true     # Include related concepts section
+```
+
 This document describes the configuration options available for scheduled jobs in the aclarai system.
 
 ## Overview

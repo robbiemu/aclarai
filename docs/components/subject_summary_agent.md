@@ -1,5 +1,19 @@
 # Subject Summary Agent
 
+## Configuration
+The Subject Summary Agent's behavior can be customized through the Aclarai UI panel under the "Highlight & Summary" section:
+
+### Clustering Parameters
+- **Similarity Threshold** (0.0-1.0): Controls how similar concepts must be to be grouped into a subject. Higher values create more focused but fewer subjects.
+- **Min Concepts** (1-100): Minimum concepts needed to form a subject cluster.
+- **Max Concepts** (1-100): Maximum concepts allowed in a subject cluster.
+
+### Generation Options
+- **Allow Web Search**: When enabled, allows the agent to search the web for additional context when generating subject summaries.
+- **Skip If Incoherent**: When enabled, skips generating summaries for concept clusters that lack clear thematic connections.
+
+All parameters can be adjusted in real-time through the UI.
+
 The Subject Summary Agent generates `[[Subject:XYZ]]` Markdown pages for concept clusters, following the architecture specified in `docs/arch/on-writing_vault_documents.md`.
 
 ## Overview

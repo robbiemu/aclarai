@@ -345,6 +345,155 @@ class TestConfigurationPanelIntegration:
         expect(page.locator(f"text=My Topics - {expected_date}.md")).to_be_visible()
 
     @pytest.mark.integration
+    def test_subject_summary_ui_elements(self, page: Page, gradio_app):
+        """Test that Subject Summary UI elements are present and interactive."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+        # Check Subject Summary section header
+        expect(page.locator("text=🎯 Subject Summary Agent")).to_be_visible()
+        # Test Similarity Threshold slider
+        slider = page.locator("text=Similarity Threshold").locator("..//input")
+        expect(slider).to_be_visible()
+        expect(slider).to_have_attribute("min", "0.0")
+        expect(slider).to_have_attribute("max", "1.0")
+        expect(slider).to_have_value("0.92")  # Default value
+        # Test Min/Max Concepts inputs
+        min_concepts = page.locator("text=Min Concepts").locator("..//input")
+        max_concepts = page.locator("text=Max Concepts").locator("..//input")
+        expect(min_concepts).to_be_visible()
+        expect(max_concepts).to_be_visible()
+        expect(min_concepts).to_have_value("3")  # Default value
+        expect(max_concepts).to_have_value("15")  # Default value
+        # Test checkboxes
+        web_search = page.locator("text=Allow Web Search").locator("..//input")
+        skip_incoherent = page.locator("text=Skip If Incoherent").locator("..//input")
+        expect(web_search).to_be_visible()
+        expect(skip_incoherent).to_be_visible()
+
+    @pytest.mark.integration
+    def test_concept_summary_ui_elements(self, page: Page, gradio_app):
+        """Test that Concept Summary UI elements are present and interactive."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+        # Check Concept Summary section header
+        expect(page.locator("text=📄 Concept Summary Agent")).to_be_visible()
+        # Test Max Examples input
+        max_examples = page.locator("text=Max Examples").locator("..//input")
+        expect(max_examples).to_be_visible()
+        expect(max_examples).to_have_attribute("min", "0")
+        expect(max_examples).to_have_attribute("max", "20")
+        expect(max_examples).to_have_value("5")  # Default value
+        # Test checkboxes
+        skip_no_claims = page.locator("text=Skip If No Claims").locator("..//input")
+        include_see_also = page.locator("text=Include See Also").locator("..//input")
+        expect(skip_no_claims).to_be_visible()
+        expect(include_see_also).to_be_visible()
+
+    @pytest.mark.integration
+    def test_subject_summary_configuration_save_reload(self, page: Page, gradio_app):
+        """Test saving and reloading Subject Summary configuration changes."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+        # Make changes to Subject Summary settings
+        page.locator("text=Similarity Threshold").locator("..//input").fill("0.85")
+        page.locator("text=Min Concepts").locator("..//input").fill("5")
+        page.locator("text=Max Concepts").locator("..//input").fill("12")
+        page.locator("text=Allow Web Search").locator("..//input").check()
+        page.locator("text=Skip If Incoherent").locator("..//input").check()
+
+        # Save changes
+        page.locator('button:has-text("Save Changes")').click()
+        page.wait_for_timeout(2000)
+
+        # Verify success message
+        expect(page.locator("text=Configuration saved successfully")).to_be_visible()
+
+        # Change some values
+        page.locator("text=Min Concepts").locator("..//input").fill("8")
+        page.locator("text=Max Concepts").locator("..//input").fill("20")
+
+        # Reload configuration
+        page.locator('button:has-text("Reload from File")').click()
+        page.wait_for_timeout(2000)
+
+        # Verify original values are restored
+        expect(page.locator("text=Min Concepts").locator("..//input")).to_have_value(
+            "5"
+        )
+        expect(page.locator("text=Max Concepts").locator("..//input")).to_have_value(
+            "12"
+        )
+
+    @pytest.mark.integration
+    def test_concept_summary_configuration_save_reload(self, page: Page, gradio_app):
+        """Test saving and reloading Concept Summary configuration changes."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Make changes to Concept Summary settings
+        page.locator("text=Max Examples").locator("..//input").fill("10")
+        page.locator("text=Skip If No Claims").locator("..//input").check()
+        page.locator("text=Include See Also").locator("..//input").uncheck()
+
+        # Save changes
+        page.locator('button:has-text("Save Changes")').click()
+        page.wait_for_timeout(2000)
+
+        # Verify success message
+        expect(page.locator("text=Configuration saved successfully")).to_be_visible()
+
+        # Change some values
+        page.locator("text=Max Examples").locator("..//input").fill("15")
+        page.locator("text=Include See Also").locator("..//input").check()
+
+        # Reload configuration
+        page.locator('button:has-text("Reload from File")').click()
+        page.wait_for_timeout(2000)
+
+        # Verify original values are restored
+        expect(page.locator("text=Max Examples").locator("..//input")).to_have_value(
+            "10"
+        )
+        expect(
+            page.locator("text=Include See Also").locator("..//input")
+        ).not_to_be_checked()
+
+    @pytest.mark.integration
+    def test_summary_agents_validation_messages(self, page: Page, gradio_app):
+        """Test that validation errors are displayed correctly for Summary agents."""
+        page.goto(gradio_app)
+        page.wait_for_selector("h1", timeout=10000)
+
+        # Set invalid values
+        page.locator("text=Similarity Threshold").locator("..//input").fill(
+            "1.5"
+        )  # Invalid: > 1.0
+        page.locator("text=Min Concepts").locator("..//input").fill("10")
+        page.locator("text=Max Concepts").locator("..//input").fill(
+            "5"
+        )  # Invalid: < min_concepts
+        page.locator("text=Max Examples").locator("..//input").fill(
+            "25"
+        )  # Invalid: > 20
+
+        # Try to save
+        page.locator('button:has-text("Save Changes")').click()
+        page.wait_for_timeout(2000)
+
+        # Verify error messages
+        expect(
+            page.locator("text=Similarity threshold must be between 0.0 and 1.0")
+        ).to_be_visible()
+        expect(
+            page.locator(
+                "text=Minimum concepts cannot be greater than maximum concepts"
+            )
+        ).to_be_visible()
+        expect(
+            page.locator("text=Maximum examples must be between 0 and 20")
+        ).to_be_visible()
+
+    @pytest.mark.integration
     def test_concept_highlights_save_and_reload(self, page: Page, gradio_app):
         """Test that concept highlights configuration can be saved and reloaded."""
         page.goto(gradio_app)

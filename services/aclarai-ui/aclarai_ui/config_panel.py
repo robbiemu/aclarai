@@ -12,7 +12,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 import gradio as gr
 import yaml
@@ -46,10 +46,10 @@ class ConfigData:
     # --- Section: Automation & Scheduler Control ---
     concept_refresh_enabled: bool
     concept_refresh_manual_only: bool
-    concept_refresh_cron: str
+    concept_refresh_cron: Union[str, float]
     vault_sync_enabled: bool
     vault_sync_manual_only: bool
-    vault_sync_cron: str
+    vault_sync_cron: Union[str, float]
 
     # --- Section: Highlight & Summary ---
     top_concepts_metric: str
@@ -61,6 +61,16 @@ class ConfigData:
     trending_topics_percent: float
     trending_topics_min_mentions: int
     trending_topics_target_file: str
+
+    # --- Section: Subject Summary & Concept Summary Agents ---
+    subject_summary_similarity_threshold: float
+    subject_summary_min_concepts: int
+    subject_summary_max_concepts: int
+    subject_summary_allow_web_search: bool
+    subject_summary_skip_if_incoherent: bool
+    concept_summary_max_examples: int
+    concept_summary_skip_if_no_claims: bool
+    concept_summary_include_see_also: bool
 
 
 logger = logging.getLogger("aclarai-ui.config_panel")
@@ -258,6 +268,45 @@ def validate_window_param(
         return False, "Invalid window parameter value"
 
 
+def validate_summary_agents_config(
+    subject_summary_similarity_threshold: float,
+    subject_summary_min_concepts: int,
+    subject_summary_max_concepts: int,
+    concept_summary_max_examples: int,
+) -> Tuple[bool, List[str]]:
+    """Validate Subject Summary and Concept Summary agent configuration parameters.
+
+    Args:
+        subject_summary_similarity_threshold: Threshold for concept clustering (0.0-1.0)
+        subject_summary_min_concepts: Minimum concepts per cluster (1-100)
+        subject_summary_max_concepts: Maximum concepts per cluster (1-100)
+        concept_summary_max_examples: Maximum examples in summaries (0-20)
+
+    Returns:
+        Tuple of (is_valid, list_of_errors)
+    """
+    errors = []
+
+    # Validate subject summary parameters
+    if not (0.0 <= subject_summary_similarity_threshold <= 1.0):
+        errors.append("Similarity threshold must be between 0.0 and 1.0")
+
+    if not (1 <= subject_summary_min_concepts <= 100):
+        errors.append("Minimum concepts must be between 1 and 100")
+
+    if not (1 <= subject_summary_max_concepts <= 100):
+        errors.append("Maximum concepts must be between 1 and 100")
+
+    if subject_summary_min_concepts > subject_summary_max_concepts:
+        errors.append("Minimum concepts cannot be greater than maximum concepts")
+
+    # Validate concept summary parameters
+    if not (0 <= concept_summary_max_examples <= 20):
+        errors.append("Maximum examples must be between 0 and 20")
+
+    return len(errors) == 0, errors
+
+
 def validate_concept_highlights_config(
     top_concepts_metric: str,
     top_concepts_count: int,
@@ -326,13 +375,28 @@ def validate_concept_highlights_config(
 
 
 def validate_cron_expression(cron: str) -> Tuple[bool, str]:
-    """Validate cron expression format."""
-    if not cron or not cron.strip():
+    """Validate a cron expression.
+
+    Args:
+        cron: A string or numeric value representing a cron expression.
+
+    Returns:
+        A tuple of (is_valid, error_message).
+    """
+    if cron is None:
         return False, "Cron expression cannot be empty"
 
-    cron = cron.strip()
+    # Convert input to string, handling both str and float inputs
+    if isinstance(cron, (float, int)):
+        cron_str = str(int(cron)) if float(cron).is_integer() else str(cron)
+    else:
+        cron_str = str(cron).strip()
+
+    if not cron_str:
+        return False, "Cron expression cannot be empty"
+
     # Basic cron validation: 5 fields separated by spaces
-    fields = cron.split()
+    fields = cron_str.split()
     if len(fields) != 5:
         return (
             False,
@@ -410,13 +474,13 @@ def create_configuration_panel() -> gr.Blocks:
             concept_refresh_manual_only = concept_refresh_config.get(
                 "manual_only", False
             )
-            concept_refresh_cron = concept_refresh_config.get("cron", "0 3 * * *")
+            concept_refresh_cron = str(concept_refresh_config.get("cron", "0 3 * * *"))
 
             # vault_sync job
             vault_sync_config = jobs_config.get("vault_sync", {})
             vault_sync_enabled = vault_sync_config.get("enabled", True)
             vault_sync_manual_only = vault_sync_config.get("manual_only", False)
-            vault_sync_cron = vault_sync_config.get("cron", "*/30 * * * *")
+            vault_sync_cron = str(vault_sync_config.get("cron", "*/30 * * * *"))
 
             # Extract concept highlights configurations
             concept_highlights_config = config.get("concept_highlights", {})
@@ -440,6 +504,36 @@ def create_configuration_panel() -> gr.Blocks:
             trending_topics_min_mentions = trending_topics_config.get("min_mentions", 2)
             trending_topics_target_file = trending_topics_config.get(
                 "target_file", "Trending Topics - {date}.md"
+            )
+
+            # Extract subject summaries configuration
+            subject_summaries_config = config.get("subject_summaries", {})
+            subject_summary_similarity_threshold = subject_summaries_config.get(
+                "similarity_threshold", 0.92
+            )
+            subject_summary_min_concepts = subject_summaries_config.get(
+                "min_concepts", 3
+            )
+            subject_summary_max_concepts = subject_summaries_config.get(
+                "max_concepts", 15
+            )
+            subject_summary_allow_web_search = subject_summaries_config.get(
+                "allow_web_search", True
+            )
+            subject_summary_skip_if_incoherent = subject_summaries_config.get(
+                "skip_if_incoherent", False
+            )
+
+            # Extract concept summaries configuration
+            concept_summaries_config = config.get("concept_summaries", {})
+            concept_summary_max_examples = concept_summaries_config.get(
+                "max_examples", 5
+            )
+            concept_summary_skip_if_no_claims = concept_summaries_config.get(
+                "skip_if_no_claims", True
+            )
+            concept_summary_include_see_also = concept_summaries_config.get(
+                "include_see_also", True
             )
 
             return ConfigData(
@@ -475,6 +569,14 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent=trending_topics_percent,
                 trending_topics_min_mentions=trending_topics_min_mentions,
                 trending_topics_target_file=trending_topics_target_file,
+                subject_summary_similarity_threshold=subject_summary_similarity_threshold,
+                subject_summary_min_concepts=subject_summary_min_concepts,
+                subject_summary_max_concepts=subject_summary_max_concepts,
+                subject_summary_allow_web_search=subject_summary_allow_web_search,
+                subject_summary_skip_if_incoherent=subject_summary_skip_if_incoherent,
+                concept_summary_max_examples=concept_summary_max_examples,
+                concept_summary_skip_if_no_claims=concept_summary_skip_if_no_claims,
+                concept_summary_include_see_also=concept_summary_include_see_also,
             )
         except Exception as e:
             logger.error(
@@ -508,10 +610,10 @@ def create_configuration_panel() -> gr.Blocks:
                 window_f=1,
                 concept_refresh_enabled=True,
                 concept_refresh_manual_only=False,
-                concept_refresh_cron="0 3 * * *",
+                concept_refresh_cron=str("0 3 * * *"),
                 vault_sync_enabled=True,
                 vault_sync_manual_only=False,
-                vault_sync_cron="*/30 * * * *",
+                vault_sync_cron=str("*/30 * * * *"),
                 top_concepts_metric="pagerank",
                 top_concepts_count=25,
                 top_concepts_percent=0.0,
@@ -521,6 +623,14 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent=5.0,
                 trending_topics_min_mentions=2,
                 trending_topics_target_file="Trending Topics - {date}.md",
+                subject_summary_similarity_threshold=0.92,
+                subject_summary_min_concepts=3,
+                subject_summary_max_concepts=15,
+                subject_summary_allow_web_search=True,
+                subject_summary_skip_if_incoherent=False,
+                concept_summary_max_examples=5,
+                concept_summary_skip_if_no_claims=True,
+                concept_summary_include_see_also=True,
             )
 
     def save_configuration(
@@ -543,10 +653,10 @@ def create_configuration_panel() -> gr.Blocks:
         window_f: int,
         concept_refresh_enabled: bool,
         concept_refresh_manual_only: bool,
-        concept_refresh_cron: str,
+        concept_refresh_cron: Union[str, float],
         vault_sync_enabled: bool,
         vault_sync_manual_only: bool,
-        vault_sync_cron: str,
+        vault_sync_cron: Union[str, float],
         # Concept highlights parameters
         top_concepts_metric: str,
         top_concepts_count: int,
@@ -557,6 +667,15 @@ def create_configuration_panel() -> gr.Blocks:
         trending_topics_percent: float,
         trending_topics_min_mentions: int,
         trending_topics_target_file: str,
+        # Subject Summary & Concept Summary Agent parameters
+        subject_summary_similarity_threshold: float,
+        subject_summary_min_concepts: int,
+        subject_summary_max_concepts: int,
+        subject_summary_allow_web_search: bool,
+        subject_summary_skip_if_incoherent: bool,
+        concept_summary_max_examples: int,
+        concept_summary_skip_if_no_claims: bool,
+        concept_summary_include_see_also: bool,
     ) -> str:
         """Save configuration changes to YAML file."""
 
@@ -594,87 +713,114 @@ def create_configuration_panel() -> gr.Blocks:
             trending_topics_percent=trending_topics_percent,
             trending_topics_min_mentions=trending_topics_min_mentions,
             trending_topics_target_file=trending_topics_target_file,
+            subject_summary_similarity_threshold=subject_summary_similarity_threshold,
+            subject_summary_min_concepts=subject_summary_min_concepts,
+            subject_summary_max_concepts=subject_summary_max_concepts,
+            subject_summary_allow_web_search=subject_summary_allow_web_search,
+            subject_summary_skip_if_incoherent=subject_summary_skip_if_incoherent,
+            concept_summary_max_examples=concept_summary_max_examples,
+            concept_summary_skip_if_no_claims=concept_summary_skip_if_no_claims,
+            concept_summary_include_see_also=concept_summary_include_see_also,
         )
 
-        try:
-            # Validate all inputs
-            validation_errors = []
-            # Validate model names
-            models_to_validate = [
-                ("Claimify Default", claimify_default),
-                ("Claimify Selection", claimify_selection),
-                ("Claimify Disambiguation", claimify_disambiguation),
-                ("Claimify Decomposition", claimify_decomposition),
-                ("Concept Linker", concept_linker),
-                ("Concept Summary", concept_summary),
-                ("Subject Summary", subject_summary),
-                ("Trending Concepts Agent", trending_concepts_agent),
-                ("Fallback Plugin", fallback_plugin),
-                ("Utterance Embedding", utterance_embedding),
-                ("Concept Embedding", concept_embedding),
-                ("Summary Embedding", summary_embedding),
-                ("Fallback Embedding", fallback_embedding),
-            ]
-            for name, model in models_to_validate:
-                is_valid, error = validate_model_name(model)
-                if not is_valid:
-                    validation_errors.append(f"{name}: {error}")
-            # Validate thresholds
-            is_valid, error = validate_threshold(concept_merge)
-            if not is_valid:
-                validation_errors.append(f"Concept Merge Threshold: {error}")
-            is_valid, error = validate_threshold(claim_link_strength)
-            if not is_valid:
-                validation_errors.append(f"Claim Link Strength: {error}")
-            # Validate window parameters
-            is_valid, error = validate_window_param(window_p)
-            if not is_valid:
-                validation_errors.append(f"Window Previous (p): {error}")
-            is_valid, error = validate_window_param(window_f)
-            if not is_valid:
-                validation_errors.append(f"Window Following (f): {error}")
-            # Validate cron expressions
-            is_valid, error = validate_cron_expression(concept_refresh_cron)
-            if not is_valid:
-                validation_errors.append(f"Concept Refresh Cron: {error}")
-            is_valid, error = validate_cron_expression(vault_sync_cron)
-            if not is_valid:
-                validation_errors.append(f"Vault Sync Cron: {error}")
+        # Perform all input validation
+        validation_errors = []
 
-            # Validate concept highlights parameters
-            is_valid, concept_errors = validate_concept_highlights_config(
-                top_concepts_metric,
-                top_concepts_count,
-                top_concepts_percent,
-                top_concepts_target_file,
-                trending_topics_window_days,
-                trending_topics_count,
-                trending_topics_percent,
-                trending_topics_min_mentions,
-                trending_topics_target_file,
+        # Model name validation
+        for name, model in [
+            ("Claimify Default", claimify_default),
+            ("Claimify Selection", claimify_selection),
+            ("Claimify Disambiguation", claimify_disambiguation),
+            ("Claimify Decomposition", claimify_decomposition),
+            ("Concept Linker", concept_linker),
+            ("Concept Summary", concept_summary),
+            ("Subject Summary", subject_summary),
+            ("Trending Concepts Agent", trending_concepts_agent),
+            ("Fallback Plugin", fallback_plugin),
+            ("Utterance Embedding", utterance_embedding),
+            ("Concept Embedding", concept_embedding),
+            ("Summary Embedding", summary_embedding),
+            ("Fallback Embedding", fallback_embedding),
+        ]:
+            is_valid, error = validate_model_name(model)
+            if not is_valid:
+                validation_errors.append(f"{name}: {error}")
+
+        # Threshold validation
+        for desc, value in [
+            ("Concept Merge Threshold", concept_merge),
+            ("Claim Link Strength", claim_link_strength),
+        ]:
+            is_valid, error = validate_threshold(value)
+            if not is_valid:
+                validation_errors.append(f"{desc}: {error}")
+
+        # Window parameter validation
+        for desc, value in [
+            ("Window Previous (p)", window_p),
+            ("Window Following (f)", window_f),
+        ]:
+            is_valid, error = validate_window_param(value)
+            if not is_valid:
+                validation_errors.append(f"{desc}: {error}")
+
+        # Cron expression validation
+        cron_pairs: List[Tuple[str, str]] = [
+            ("Concept Refresh Cron", str(concept_refresh_cron).strip()),
+            ("Vault Sync Cron", str(vault_sync_cron).strip()),
+        ]
+        for desc, value_str in cron_pairs:
+            is_valid, error = validate_cron_expression(value_str)
+            if not is_valid:
+                validation_errors.append(f"{desc}: {error}")
+
+        # Validate concept highlights configuration
+        is_valid, highlights_errors = validate_concept_highlights_config(
+            top_concepts_metric,
+            top_concepts_count,
+            top_concepts_percent,
+            top_concepts_target_file,
+            trending_topics_window_days,
+            trending_topics_count,
+            trending_topics_percent,
+            trending_topics_min_mentions,
+            trending_topics_target_file,
+        )
+        if not is_valid:
+            validation_errors.extend(highlights_errors)
+
+        # Validate Subject and Concept Summary configurations
+        is_valid, summary_errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold,
+            subject_summary_min_concepts,
+            subject_summary_max_concepts,
+            concept_summary_max_examples,
+        )
+        if not is_valid:
+            validation_errors.extend(summary_errors)
+
+        # If any validation failed, return with error message
+        if validation_errors:
+            error_msg = "❌ **Validation Errors:**\n" + "\n".join(
+                f"- {error}" for error in validation_errors
             )
-            if not is_valid:
-                validation_errors.extend(concept_errors)
+            logger.warning(
+                "Configuration validation failed",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "config_panel",
+                    "action": "save_configuration",
+                    "validation_errors": validation_errors,
+                },
+            )
+            return error_msg
+        current_config = config_manager.load_config()
 
-            if validation_errors:
-                error_msg = "❌ **Validation Errors:**\n" + "\n".join(
-                    f"- {error}" for error in validation_errors
-                )
-                logger.warning(
-                    "Configuration validation failed",
-                    extra={
-                        "service": "aclarai-ui",
-                        "component": "config_panel",
-                        "action": "save_configuration",
-                        "validation_errors": validation_errors,
-                    },
-                )
-                return error_msg
-            # Load current configuration to preserve other settings
-            current_config = config_manager.load_config()
-            # Update with new values
-            if "model" not in current_config:
-                current_config["model"] = {}
+        # Update with new values
+        if "model" not in current_config:
+            current_config["model"] = {}
+
+            # Update claimify models
             current_config["model"]["claimify"] = {
                 "default": claimify_default.strip(),
                 "selection": claimify_selection.strip()
@@ -687,6 +833,165 @@ def create_configuration_panel() -> gr.Blocks:
                 if claimify_decomposition.strip() != claimify_default.strip()
                 else None,
             }
+
+            # Update concept linker,
+            current_config["model"]["concept_linker"] = concept_linker.strip()
+            current_config["model"]["concept_summary"] = concept_summary.strip()
+            current_config["model"]["subject_summary"] = subject_summary.strip()
+            current_config["model"]["trending_concepts_agent"] = (
+                trending_concepts_agent.strip()
+            )
+            current_config["model"]["fallback_plugin"] = fallback_plugin.strip()
+            if "embedding" not in current_config:
+                current_config["embedding"] = {}
+            current_config["embedding"]["utterance"] = utterance_embedding.strip()
+            current_config["embedding"]["concept"] = concept_embedding.strip()
+            current_config["embedding"]["summary"] = summary_embedding.strip()
+            current_config["embedding"]["fallback"] = fallback_embedding.strip()
+            if "threshold" not in current_config:
+                current_config["threshold"] = {}
+            current_config["threshold"]["concept_merge"] = concept_merge
+            current_config["threshold"]["claim_link_strength"] = claim_link_strength
+            if "window" not in current_config:
+                current_config["window"] = {}
+            if "claimify" not in current_config["window"]:
+                current_config["window"]["claimify"] = {}
+            current_config["window"]["claimify"]["p"] = window_p
+            current_config["window"]["claimify"]["f"] = window_f
+
+            # Update scheduler configuration
+            if "scheduler" not in current_config:
+                current_config["scheduler"] = {}
+            if "jobs" not in current_config["scheduler"]:
+                current_config["scheduler"]["jobs"] = {}
+
+            # concept_embedding_refresh job
+            if "concept_embedding_refresh" not in current_config["scheduler"]["jobs"]:
+                current_config["scheduler"]["jobs"]["concept_embedding_refresh"] = {}
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"][
+                "enabled"
+            ] = concept_refresh_enabled
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"][
+                "manual_only"
+            ] = concept_refresh_manual_only
+            current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["cron"] = (
+                str(concept_refresh_cron).strip()
+                if isinstance(concept_refresh_cron, (int, float))
+                else concept_refresh_cron.strip()
+            )
+
+            # vault_sync job
+            if "vault_sync" not in current_config["scheduler"]["jobs"]:
+                current_config["scheduler"]["jobs"]["vault_sync"] = {}
+            current_config["scheduler"]["jobs"]["vault_sync"]["enabled"] = (
+                vault_sync_enabled
+            )
+            current_config["scheduler"]["jobs"]["vault_sync"]["manual_only"] = (
+                vault_sync_manual_only
+            )
+            current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = (
+                str(vault_sync_cron).strip()
+                if isinstance(vault_sync_cron, (int, float))
+                else vault_sync_cron.strip()
+            )
+
+            # Update concept highlights configuration
+            if "concept_highlights" not in current_config:
+                current_config["concept_highlights"] = {}
+
+            # Top concepts configuration
+            if "top_concepts" not in current_config["concept_highlights"]:
+                current_config["concept_highlights"]["top_concepts"] = {}
+            current_config["concept_highlights"]["top_concepts"]["metric"] = (
+                top_concepts_metric.strip()
+            )
+            current_config["concept_highlights"]["top_concepts"]["count"] = (
+                top_concepts_count if top_concepts_count > 0 else None
+            )
+            current_config["concept_highlights"]["top_concepts"]["percent"] = (
+                top_concepts_percent if top_concepts_percent > 0 else None
+            )
+            current_config["concept_highlights"]["top_concepts"]["target_file"] = (
+                top_concepts_target_file.strip()
+            )
+
+            # Trending topics configuration
+            if "trending_topics" not in current_config["concept_highlights"]:
+                current_config["concept_highlights"]["trending_topics"] = {}
+            current_config["concept_highlights"]["trending_topics"]["window_days"] = (
+                trending_topics_window_days
+            )
+            current_config["concept_highlights"]["trending_topics"]["count"] = (
+                trending_topics_count if trending_topics_count > 0 else None
+            )
+            current_config["concept_highlights"]["trending_topics"]["percent"] = (
+                trending_topics_percent if trending_topics_percent > 0 else None
+            )
+            current_config["concept_highlights"]["trending_topics"]["min_mentions"] = (
+                trending_topics_min_mentions
+            )
+            current_config["concept_highlights"]["trending_topics"]["target_file"] = (
+                trending_topics_target_file.strip()
+            )
+
+            # Update subject summaries configuration
+            if "subject_summaries" not in current_config:
+                current_config["subject_summaries"] = {}
+            current_config["subject_summaries"]["similarity_threshold"] = (
+                subject_summary_similarity_threshold
+            )
+            current_config["subject_summaries"]["min_concepts"] = (
+                subject_summary_min_concepts
+            )
+            current_config["subject_summaries"]["max_concepts"] = (
+                subject_summary_max_concepts
+            )
+            current_config["subject_summaries"]["allow_web_search"] = (
+                subject_summary_allow_web_search
+            )
+            current_config["subject_summaries"]["skip_if_incoherent"] = (
+                subject_summary_skip_if_incoherent
+            )
+
+            # Update concept summaries configuration
+            if "concept_summaries" not in current_config:
+                current_config["concept_summaries"] = {}
+            current_config["concept_summaries"]["max_examples"] = (
+                concept_summary_max_examples
+            )
+            current_config["concept_summaries"]["skip_if_no_claims"] = (
+                concept_summary_skip_if_no_claims
+            )
+            current_config["concept_summaries"]["include_see_also"] = (
+                concept_summary_include_see_also
+            )
+
+        # Try to save the configuration
+        try:
+            success = config_manager.save_config(current_config)
+            if success:
+                logger.info(
+                    "Configuration saved successfully",
+                    extra={
+                        "service": "aclarai-ui",
+                        "component": "config_panel",
+                        "action": "save_configuration",
+                    },
+                )
+                return "✅ **Configuration saved successfully!**\n\nChanges have been written to `settings/aclarai.config.yaml`."
+            return "❌ **Failed to save configuration.** Please check the logs for details."
+        except Exception as e:
+            logger.error(
+                "Failed to save configuration",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "config_panel",
+                    "action": "save_configuration",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            return f"❌ **Error saving configuration:** {str(e)}"
             current_config["model"]["concept_linker"] = concept_linker.strip()
             current_config["model"]["concept_summary"] = concept_summary.strip()
             current_config["model"]["subject_summary"] = subject_summary.strip()
@@ -782,6 +1087,79 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_target_file.strip()
             )
 
+            # Update subject summaries configuration
+            if "subject_summaries" not in current_config:
+                current_config["subject_summaries"] = {}
+            current_config["subject_summaries"]["similarity_threshold"] = (
+                subject_summary_similarity_threshold
+            )
+            current_config["subject_summaries"]["min_concepts"] = (
+                subject_summary_min_concepts
+            )
+            current_config["subject_summaries"]["max_concepts"] = (
+                subject_summary_max_concepts
+            )
+            current_config["subject_summaries"]["allow_web_search"] = (
+                subject_summary_allow_web_search
+            )
+            current_config["subject_summaries"]["skip_if_incoherent"] = (
+                subject_summary_skip_if_incoherent
+            )
+
+            # Update concept summaries configuration
+            if "concept_summaries" not in current_config:
+                current_config["concept_summaries"] = {}
+            current_config["concept_summaries"]["max_examples"] = (
+                concept_summary_max_examples
+            )
+            current_config["concept_summaries"]["skip_if_no_claims"] = (
+                concept_summary_skip_if_no_claims
+            )
+            current_config["concept_summaries"]["include_see_also"] = (
+                concept_summary_include_see_also
+            )
+
+            # Save the configuration
+            success = config_manager.save_config(current_config)
+            if success:
+                logger.info(
+                    "Configuration saved successfully",
+                    extra={
+                        "service": "aclarai-ui",
+                        "component": "config_panel",
+                        "action": "save_configuration",
+                    },
+                )
+                return "✅ **Configuration saved successfully!**\n\nChanges have been written to `settings/aclarai.config.yaml`."
+            return "❌ **Failed to save configuration.** Please check the logs for details."
+
+        # Validate Subject and Concept Summary Agent configurations
+        is_valid, summary_errors = validate_summary_agents_config(
+            subject_summary_similarity_threshold,
+            subject_summary_min_concepts,
+            subject_summary_max_concepts,
+            concept_summary_max_examples,
+        )
+        if not is_valid:
+            validation_errors.extend(summary_errors)
+
+        # Return early if any validation failed
+        if validation_errors:
+            error_msg = "❌ **Validation Errors:**\n" + "\n".join(
+                f"- {error}" for error in validation_errors
+            )
+            logger.warning(
+                "Configuration validation failed",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "config_panel",
+                    "action": "save_configuration",
+                    "validation_errors": validation_errors,
+                },
+            )
+            return error_msg
+
+        try:
             # Save to file
             success = config_manager.save_config(current_config)
             if success:
@@ -794,8 +1172,7 @@ def create_configuration_panel() -> gr.Blocks:
                     },
                 )
                 return "✅ **Configuration saved successfully!**\n\nChanges have been written to `settings/aclarai.config.yaml`."
-            else:
-                return "❌ **Failed to save configuration.** Please check the logs for details."
+            return "❌ **Failed to save configuration.** Please check the logs for details."
         except Exception as e:
             logger.error(
                 "Failed to save configuration",
@@ -977,7 +1354,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                 concept_refresh_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_config.concept_refresh_cron,
+                    value=str(initial_config.concept_refresh_cron),
                     placeholder="0 3 * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -998,7 +1375,7 @@ def create_configuration_panel() -> gr.Blocks:
                     )
                 vault_sync_cron_input = gr.Textbox(
                     label="Cron Schedule",
-                    value=initial_config.vault_sync_cron,
+                    value=str(initial_config.vault_sync_cron),
                     placeholder="*/30 * * * *",
                     info="Cron expression for automatic scheduling (only applies when enabled and not manual-only)",
                 )
@@ -1156,6 +1533,82 @@ def create_configuration_panel() -> gr.Blocks:
                     outputs=[trending_concepts_agent_input],
                 )
 
+            # Subject Summary Agent section
+            with gr.Group():
+                gr.Markdown("### 🎯 Subject Summary Agent")
+                gr.Markdown(
+                    "Configure the agent that generates [[Subject:XYZ]] pages from concept clusters"
+                )
+
+                with gr.Row():
+                    subject_summary_similarity_threshold_input = gr.Slider(
+                        label="Similarity Threshold",
+                        value=initial_config.subject_summary_similarity_threshold,
+                        minimum=0.0,
+                        maximum=1.0,
+                        step=0.01,
+                        info="Cosine similarity threshold for concept clustering (higher = more similar concepts required)",
+                    )
+                    subject_summary_min_concepts_input = gr.Number(
+                        label="Min Concepts",
+                        value=initial_config.subject_summary_min_concepts,
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        info="Minimum number of concepts required to form a subject cluster",
+                    )
+
+                with gr.Row():
+                    subject_summary_max_concepts_input = gr.Number(
+                        label="Max Concepts",
+                        value=initial_config.subject_summary_max_concepts,
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        info="Maximum number of concepts to include in a subject cluster",
+                    )
+                    subject_summary_allow_web_search_input = gr.Checkbox(
+                        label="Allow Web Search",
+                        value=initial_config.subject_summary_allow_web_search,
+                        info="Allow the agent to use web search for additional context",
+                    )
+
+                with gr.Row():
+                    subject_summary_skip_if_incoherent_input = gr.Checkbox(
+                        label="Skip If Incoherent",
+                        value=initial_config.subject_summary_skip_if_incoherent,
+                        info="Skip generating subjects for clusters with no shared elements",
+                    )
+
+            # Concept Summary Agent section
+            with gr.Group():
+                gr.Markdown("### 📄 Concept Summary Agent")
+                gr.Markdown(
+                    "Configure the agent that generates [[Concept]] pages for individual concepts"
+                )
+
+                with gr.Row():
+                    concept_summary_max_examples_input = gr.Number(
+                        label="Max Examples",
+                        value=initial_config.concept_summary_max_examples,
+                        minimum=0,
+                        maximum=20,
+                        step=1,
+                        info="Maximum number of examples to include in concept summaries",
+                    )
+                    concept_summary_skip_if_no_claims_input = gr.Checkbox(
+                        label="Skip If No Claims",
+                        value=initial_config.concept_summary_skip_if_no_claims,
+                        info="Skip generating summaries for concepts with no associated claims",
+                    )
+
+                with gr.Row():
+                    concept_summary_include_see_also_input = gr.Checkbox(
+                        label="Include See Also",
+                        value=initial_config.concept_summary_include_see_also,
+                        info="Include 'See Also' sections with related concepts",
+                    )
+
         # Save Section
         with gr.Group():
             gr.Markdown("## 💾 Save Configuration")
@@ -1171,53 +1624,7 @@ def create_configuration_panel() -> gr.Blocks:
         def reload_configuration() -> Tuple[Any, ...]:
             """Reload configuration from file and return values for all UI components."""
             try:
-                # This now returns the complete ConfigData object
                 config = load_current_config()
-
-                # The return tuple MUST be constructed in the exact order expected by the
-                # Gradio `outputs` list. This is now much safer as we pull from named
-                # attributes, reducing the risk of misordering.
-                return (
-                    # --- Section: Model & Embedding Settings ---
-                    config.claimify_default,
-                    config.claimify_selection,
-                    config.claimify_disambiguation,
-                    config.claimify_decomposition,
-                    config.concept_linker,
-                    config.concept_summary,
-                    config.subject_summary,
-                    config.trending_concepts_agent,  # For the main model section
-                    config.trending_concepts_agent,  # For the "Highlight & Summary" section
-                    config.fallback_plugin,
-                    config.utterance_embedding,
-                    config.concept_embedding,
-                    config.summary_embedding,
-                    config.fallback_embedding,
-                    # --- Section: Thresholds & Parameters ---
-                    config.concept_merge,
-                    config.claim_link_strength,
-                    config.window_p,
-                    config.window_f,
-                    # --- Section: Automation & Scheduler Control ---
-                    config.concept_refresh_enabled,
-                    config.concept_refresh_manual_only,
-                    config.concept_refresh_cron,
-                    config.vault_sync_enabled,
-                    config.vault_sync_manual_only,
-                    config.vault_sync_cron,
-                    # --- Section: Highlight & Summary ---
-                    config.top_concepts_metric,
-                    config.top_concepts_count,
-                    config.top_concepts_percent,
-                    config.top_concepts_target_file,
-                    config.trending_topics_window_days,
-                    config.trending_topics_count,
-                    config.trending_topics_percent,
-                    config.trending_topics_min_mentions,
-                    config.trending_topics_target_file,
-                    # Finally, the status message
-                    "🔄 **Configuration reloaded from file.**",
-                )
             except Exception as e:
                 logger.error(
                     "Failed to reload configuration",
@@ -1229,44 +1636,60 @@ def create_configuration_panel() -> gr.Blocks:
                         "error_type": type(e).__name__,
                     },
                 )
-                # For initial_values, also insert the duplicate value
-                initial_config = load_current_config()
-                return (
-                    initial_config.claimify_default,
-                    initial_config.claimify_selection,
-                    initial_config.claimify_disambiguation,
-                    initial_config.claimify_decomposition,
-                    initial_config.concept_linker,
-                    initial_config.concept_summary,
-                    initial_config.subject_summary,
-                    initial_config.trending_concepts_agent,
-                    initial_config.trending_concepts_agent,
-                    initial_config.fallback_plugin,
-                    initial_config.utterance_embedding,
-                    initial_config.concept_embedding,
-                    initial_config.summary_embedding,
-                    initial_config.fallback_embedding,
-                    initial_config.concept_merge,
-                    initial_config.claim_link_strength,
-                    initial_config.window_p,
-                    initial_config.window_f,
-                    initial_config.concept_refresh_enabled,
-                    initial_config.concept_refresh_manual_only,
-                    initial_config.concept_refresh_cron,
-                    initial_config.vault_sync_enabled,
-                    initial_config.vault_sync_manual_only,
-                    initial_config.vault_sync_cron,
-                    initial_config.top_concepts_metric,
-                    initial_config.top_concepts_count,
-                    initial_config.top_concepts_percent,
-                    initial_config.top_concepts_target_file,
-                    initial_config.trending_topics_window_days,
-                    initial_config.trending_topics_count,
-                    initial_config.trending_topics_percent,
-                    initial_config.trending_topics_min_mentions,
-                    initial_config.trending_topics_target_file,
-                    f"❌ **Error reloading configuration:** {str(e)}",
-                )
+                config = initial_config
+                f"❌ **Error reloading configuration:** {str(e)}"
+
+            # Return tuple with config values and status message
+            return (
+                # --- Section: Model & Embedding Settings ---
+                config.claimify_default,
+                config.claimify_selection,
+                config.claimify_disambiguation,
+                config.claimify_decomposition,
+                config.concept_linker,
+                config.concept_summary,
+                config.subject_summary,
+                config.trending_concepts_agent,  # For the main model section
+                config.trending_concepts_agent,  # For the "Highlight & Summary" section
+                config.fallback_plugin,
+                config.utterance_embedding,
+                config.concept_embedding,
+                config.summary_embedding,
+                config.fallback_embedding,
+                # --- Section: Thresholds & Parameters ---
+                config.concept_merge,
+                config.claim_link_strength,
+                config.window_p,
+                config.window_f,
+                # --- Section: Automation & Scheduler Control ---
+                config.concept_refresh_enabled,
+                config.concept_refresh_manual_only,
+                config.concept_refresh_cron,
+                config.vault_sync_enabled,
+                config.vault_sync_manual_only,
+                config.vault_sync_cron,
+                # --- Section: Highlight & Summary ---
+                config.top_concepts_metric,
+                config.top_concepts_count,
+                config.top_concepts_percent,
+                config.top_concepts_target_file,
+                config.trending_topics_window_days,
+                config.trending_topics_count,
+                config.trending_topics_percent,
+                config.trending_topics_min_mentions,
+                config.trending_topics_target_file,
+                # --- Section: Subject Summary & Concept Summary Agents ---
+                config.subject_summary_similarity_threshold,
+                config.subject_summary_min_concepts,
+                config.subject_summary_max_concepts,
+                config.subject_summary_allow_web_search,
+                config.subject_summary_skip_if_incoherent,
+                config.concept_summary_max_examples,
+                config.concept_summary_skip_if_no_claims,
+                config.concept_summary_include_see_also,
+                # Finally, the status message
+                "🔄 **Configuration reloaded from file.**",
+            )
 
         # Save button click handler
         save_btn.click(
@@ -1305,6 +1728,15 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent_input,
                 trending_topics_min_mentions_input,
                 trending_topics_target_file_input,
+                # Subject Summary & Concept Summary Agent inputs
+                subject_summary_similarity_threshold_input,
+                subject_summary_min_concepts_input,
+                subject_summary_max_concepts_input,
+                subject_summary_allow_web_search_input,
+                subject_summary_skip_if_incoherent_input,
+                concept_summary_max_examples_input,
+                concept_summary_skip_if_no_claims_input,
+                concept_summary_include_see_also_input,
             ],
             outputs=[save_status],
         )
@@ -1346,10 +1778,21 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent_input,
                 trending_topics_min_mentions_input,
                 trending_topics_target_file_input,
+                # Subject Summary & Concept Summary Agent inputs
+                subject_summary_similarity_threshold_input,
+                subject_summary_min_concepts_input,
+                subject_summary_max_concepts_input,
+                subject_summary_allow_web_search_input,
+                subject_summary_skip_if_incoherent_input,
+                concept_summary_max_examples_input,
+                concept_summary_skip_if_no_claims_input,
+                concept_summary_include_see_also_input,
                 save_status,
             ],
         )
-    return gr.Blocks.from_config(interface.config, interface.fns)  # type: ignore
+    if not isinstance(interface, gr.Blocks):
+        interface = gr.Blocks()
+    return interface
 
 
 if __name__ == "__main__":
