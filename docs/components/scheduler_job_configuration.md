@@ -154,6 +154,21 @@ subject_summary_refresh:
   cron: "0 6 * * *"  # Daily at 6:00 AM
   description: "Generate thematic [[Subject:XYZ]] pages for concept clusters"
 ```
+
+### `concept_subject_linking`
+Adds footer links in concept files pointing to their parent subjects and optionally creates explicit Neo4j relationships.
+
+**Default Configuration:**
+```yaml
+concept_subject_linking:
+  enabled: true
+  manual_only: false
+  cron: "0 8 * * *"  # 8 AM daily (after subject summary at 6 AM)
+  description: "Link concepts to their subjects with footer links"
+  create_neo4j_edges: false  # Whether to create (:Concept)-[:PART_OF]->(:Subject) edges
+  batch_size: 50  # Number of concepts to process in one batch
+  footer_section_title: "Part of Subjects"  # Title for footer section
+```
 The `metric` parameter specifies the algorithm to use for identifying top concepts (e.g., `pagerank`). `count` determines the top N concepts to include, while `percent` specifies the top N% of concepts. `target_file` defines the output filename for the generated Markdown file.
 
 ## Job Execution Logic

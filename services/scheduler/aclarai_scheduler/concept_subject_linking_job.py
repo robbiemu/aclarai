@@ -57,7 +57,9 @@ class ConceptSubjectLinkingJob:
         """Initialize concept subject linking job."""
         self.config = config or load_config(validate=True)
         self.neo4j_manager = neo4j_manager or Neo4jGraphManager(self.config)
-        self.concept_clustering_job = concept_clustering_job or ConceptClusteringJob(self.config)
+        self.concept_clustering_job = concept_clustering_job or ConceptClusteringJob(
+            self.config
+        )
 
         # Get job-specific configuration
         self.job_config: ConceptSubjectLinkingJobConfig = (
@@ -129,7 +131,7 @@ class ConceptSubjectLinkingJob:
             result = self.neo4j_manager.execute_query(query, {"cluster_id": cluster_id})
 
             if result and len(result) > 0:
-                subject_name = result[0]["name"]
+                subject_name: str = result[0]["name"]
                 logger.debug(
                     f"concept_subject_linking_job._get_subject_name_by_cluster_id: Found subject {subject_name} for cluster {cluster_id}",
                     extra={
@@ -208,33 +210,35 @@ class ConceptSubjectLinkingJob:
 
     def _extract_concept_name_from_file(self, file_path: Path) -> Optional[str]:
         """
-        Extract concept name from a concept file.
+        Extract concept name from a concept file by parsing the aclarai:id.
 
         Args:
             file_path: Path to the concept file
 
         Returns:
-            Concept name without .md extension, or None if invalid
+            Concept name from aclarai:id, or None if invalid
         """
         try:
-            # Simple approach: use filename without extension
-            concept_name = file_path.stem
-
-            # Validate it's a real concept file by checking for aclarai:id
+            # Read file content
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                if "aclarai:id=concept_" in content:
-                    return concept_name
-                else:
-                    logger.debug(
-                        f"concept_subject_linking_job._extract_concept_name_from_file: File {file_path} does not contain concept metadata",
-                        extra={
-                            "service": "aclarai-scheduler",
-                            "filename.function_name": "concept_subject_linking_job._extract_concept_name_from_file",
-                            "file_path": str(file_path),
-                        },
-                    )
-                    return None
+
+            # Parse aclarai:id using regex
+            pattern = r"aclarai:id=concept_([^\s]+)"
+            match = re.search(pattern, content)
+            if match:
+                concept_name = match.group(1)
+                return concept_name
+            else:
+                logger.debug(
+                    f"concept_subject_linking_job._extract_concept_name_from_file: File {file_path} does not contain concept metadata",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "concept_subject_linking_job._extract_concept_name_from_file",
+                        "file_path": str(file_path),
+                    },
+                )
+                return None
 
         except Exception as e:
             logger.error(
@@ -288,7 +292,9 @@ class ConceptSubjectLinkingJob:
         if match:
             # Insert footer before the metadata
             insert_pos = match.start()
-            updated_content = content[:insert_pos] + footer_section + content[insert_pos:]
+            updated_content = (
+                content[:insert_pos] + footer_section + content[insert_pos:]
+            )
         else:
             # If no metadata found, append to the end
             updated_content = content + footer_section
@@ -540,12 +546,17 @@ class ConceptSubjectLinkingJob:
                         continue
 
                     # Update concept file with subject link
-                    if self._update_concept_file(file_path, concept_name, [subject_name]):
+                    if self._update_concept_file(
+                        file_path, concept_name, [subject_name]
+                    ):
                         stats["files_updated"] += 1
                         stats["concepts_linked"] += 1
 
                         # Create Neo4j edge if enabled
-                        if self.job_config.create_neo4j_edges and self._create_neo4j_edge(concept_name, subject_name):
+                        if (
+                            self.job_config.create_neo4j_edges
+                            and self._create_neo4j_edge(concept_name, subject_name)
+                        ):
                             stats["neo4j_edges_created"] += 1
                     else:
                         stats["concepts_skipped"] += 1

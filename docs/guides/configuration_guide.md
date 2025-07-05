@@ -268,6 +268,17 @@ The `subject_summary_refresh` job generates thematic `[[Subject:XYZ]]` pages fro
 -   **`allow_web_search`**: (Boolean) Enable web search for additional context (default: true).
 -   **`skip_if_incoherent`**: (Boolean) Skip clusters with no shared elements (default: false).
 
+### Concept Subject Linking Job
+
+The `concept_subject_linking` job maintains bidirectional navigation between concepts and their parent subjects by adding footer links in concept files.
+
+-   **`enabled`**: (Boolean) Set to `true` to enable the job.
+-   **`manual_only`**: (Boolean) If `true`, the job will only run when manually triggered.
+-   **`cron`**: (String) The schedule for automatic execution (e.g., `"0 8 * * *"` for daily at 8 AM).
+-   **`description`**: (String) A human-readable description of the job.
+-   **`create_neo4j_edges`**: (Boolean) Whether to create explicit `(:Concept)-[:PART_OF]->(:Subject)` edges in Neo4j (default: false).
+-   **`batch_size`**: (Integer) Number of concepts to process in one batch (default: 50).
+-   **`footer_section_title`**: (String) Title for the footer section containing subject links (default: "Part of Subjects").
 
 ## Configuration Loading
 

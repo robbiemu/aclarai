@@ -226,7 +226,9 @@ class ConceptClusteringJobConfig(JobConfig):
 class ConceptSubjectLinkingJobConfig(JobConfig):
     """Configuration for the Concept Subject Linking job."""
 
-    create_neo4j_edges: bool = False  # Whether to create (:Concept)-[:PART_OF]->(:Subject) edges
+    create_neo4j_edges: bool = (
+        False  # Whether to create (:Concept)-[:PART_OF]->(:Subject) edges
+    )
     batch_size: int = 50  # Number of concepts to process in one batch
     footer_section_title: str = "Part of Subjects"  # Title for footer section
 

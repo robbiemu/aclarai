@@ -21,14 +21,16 @@ class TestConceptSubjectLinkingJob:
         """Test job initialization."""
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 8 * * *",
-            description="Test job",
-            create_neo4j_edges=False,
-            batch_size=50,
-            footer_section_title="Part of Subjects",
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig(
+                enabled=True,
+                manual_only=False,
+                cron="0 8 * * *",
+                description="Test job",
+                create_neo4j_edges=False,
+                batch_size=50,
+                footer_section_title="Part of Subjects",
+            )
         )
 
         job = ConceptSubjectLinkingJob(
@@ -44,13 +46,13 @@ class TestConceptSubjectLinkingJob:
         assert job.job_config.batch_size == 50
 
     def test_extract_concept_name_from_file(self):
-        """Test extracting concept name from file."""
+        """Test extracting concept name from file's aclarai:id."""
         with tempfile.TemporaryDirectory() as temp_dir:
             concepts_dir = Path(temp_dir) / "concepts"
             concepts_dir.mkdir()
 
-            # Create a valid concept file
-            concept_file = concepts_dir / "test_concept.md"
+            # Create a valid concept file with a name different from its ID
+            concept_file = concepts_dir / "different_name.md"
             content = """# Test Concept
 
 This is a test concept.
@@ -63,7 +65,9 @@ This is a test concept.
             # Create a mock job
             mock_config = Mock()
             mock_config.vault_path = temp_dir
-            mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+            mock_config.scheduler.jobs.concept_subject_linking = (
+                ConceptSubjectLinkingJobConfig()
+            )
 
             job = ConceptSubjectLinkingJob(
                 config=mock_config,
@@ -71,8 +75,17 @@ This is a test concept.
                 concept_clustering_job=Mock(),
             )
 
+            # Should return the ID from content, not the filename
             concept_name = job._extract_concept_name_from_file(concept_file)
             assert concept_name == "test_concept"
+
+            # Test file with malformed aclarai:id
+            malformed_file = concepts_dir / "malformed.md"
+            with open(malformed_file, "w", encoding="utf-8") as f:
+                f.write("<!-- aclarai:id=not_a_concept ver=1 -->")
+
+            concept_name = job._extract_concept_name_from_file(malformed_file)
+            assert concept_name is None
 
             # Test non-concept file
             non_concept_file = concepts_dir / "not_concept.md"
@@ -86,8 +99,8 @@ This is a test concept.
         """Test adding subject footer links to content."""
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-            footer_section_title="Part of Subjects"
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig(footer_section_title="Part of Subjects")
         )
 
         job = ConceptSubjectLinkingJob(
@@ -112,14 +125,16 @@ This is a test concept.
         assert "- [[Subject:Data Science]]" in updated_content
 
         # Check that it was added before metadata
-        assert updated_content.index("## Part of Subjects") < updated_content.index("<!-- aclarai:id=")
+        assert updated_content.index("## Part of Subjects") < updated_content.index(
+            "<!-- aclarai:id="
+        )
 
     def test_add_subject_footer_links_already_exists(self):
         """Test that footer links are not added if they already exist."""
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-            footer_section_title="Part of Subjects"
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig(footer_section_title="Part of Subjects")
         )
 
         job = ConceptSubjectLinkingJob(
@@ -149,7 +164,9 @@ This is a test concept.
         """Test incrementing version in content."""
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig()
+        )
 
         job = ConceptSubjectLinkingJob(
             config=mock_config,
@@ -176,7 +193,9 @@ This is a test concept.
 
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig()
+        )
 
         job = ConceptSubjectLinkingJob(
             config=mock_config,
@@ -211,8 +230,8 @@ This is a test concept.
 
             mock_config = Mock()
             mock_config.vault_path = temp_dir
-            mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-                footer_section_title="Part of Subjects"
+            mock_config.scheduler.jobs.concept_subject_linking = (
+                ConceptSubjectLinkingJobConfig(footer_section_title="Part of Subjects")
             )
 
             job = ConceptSubjectLinkingJob(
@@ -223,7 +242,9 @@ This is a test concept.
 
             # Update file
             subject_names = ["Machine Learning"]
-            result = job._update_concept_file(concept_file, "test_concept", subject_names)
+            result = job._update_concept_file(
+                concept_file, "test_concept", subject_names
+            )
 
             assert result is True
 
@@ -258,8 +279,8 @@ This is a test concept.
 
             mock_config = Mock()
             mock_config.vault_path = temp_dir
-            mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-                footer_section_title="Part of Subjects"
+            mock_config.scheduler.jobs.concept_subject_linking = (
+                ConceptSubjectLinkingJobConfig(footer_section_title="Part of Subjects")
             )
 
             job = ConceptSubjectLinkingJob(
@@ -270,18 +291,24 @@ This is a test concept.
 
             # Try to update file
             subject_names = ["Machine Learning"]
-            result = job._update_concept_file(concept_file, "test_concept", subject_names)
+            result = job._update_concept_file(
+                concept_file, "test_concept", subject_names
+            )
 
             assert result is False  # No changes made
 
     def test_create_neo4j_edge(self):
         """Test creating Neo4j edge between concept and subject."""
         mock_neo4j = Mock()
-        mock_neo4j.execute_query.return_value = [{"c": {"name": "test_concept"}, "s": {"name": "Machine Learning"}}]
+        mock_neo4j.execute_query.return_value = [
+            {"c": {"name": "test_concept"}, "s": {"name": "Machine Learning"}}
+        ]
 
         mock_config = Mock()
         mock_config.vault_path = "/test/vault"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig()
+        )
 
         job = ConceptSubjectLinkingJob(
             config=mock_config,
@@ -299,7 +326,9 @@ This is a test concept.
         assert args[1]["concept_name"] == "test_concept"
         assert args[1]["subject_name"] == "Machine Learning"
 
-    @patch('services.scheduler.aclarai_scheduler.concept_subject_linking_job.write_file_atomically')
+    @patch(
+        "services.scheduler.aclarai_scheduler.concept_subject_linking_job.write_file_atomically"
+    )
     def test_run_job_success(self, mock_write_atomic):
         """Test successful job execution."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -319,15 +348,17 @@ This is a test concept.
 
             # Mock dependencies
             mock_clustering_job = Mock()
-            mock_clustering_job.get_cluster_assignments.return_value = {"test_concept": 1}
+            mock_clustering_job.get_cluster_assignments.return_value = {
+                "test_concept": 1
+            }
 
             mock_neo4j = Mock()
             mock_neo4j.execute_query.return_value = [{"name": "Machine Learning"}]
 
             mock_config = Mock()
             mock_config.vault_path = temp_dir
-            mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig(
-                footer_section_title="Part of Subjects"
+            mock_config.scheduler.jobs.concept_subject_linking = (
+                ConceptSubjectLinkingJobConfig(footer_section_title="Part of Subjects")
             )
 
             job = ConceptSubjectLinkingJob(
@@ -353,7 +384,9 @@ This is a test concept.
 
         mock_config = Mock()
         mock_config.vault_path = "/tmp"
-        mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+        mock_config.scheduler.jobs.concept_subject_linking = (
+            ConceptSubjectLinkingJobConfig()
+        )
 
         job = ConceptSubjectLinkingJob(
             config=mock_config,
@@ -378,7 +411,9 @@ This is a test concept.
 
             mock_config = Mock()
             mock_config.vault_path = temp_dir
-            mock_config.scheduler.jobs.concept_subject_linking = ConceptSubjectLinkingJobConfig()
+            mock_config.scheduler.jobs.concept_subject_linking = (
+                ConceptSubjectLinkingJobConfig()
+            )
 
             job = ConceptSubjectLinkingJob(
                 config=mock_config,

@@ -16,6 +16,7 @@ Key responsibilities:
 -   **Concept Clustering**: Groups related concepts into thematic clusters based on their embeddings, providing input for other agents like the Subject Summary Agent.
 -   **Concept Summary Generation**: Creates detailed Markdown pages for canonical concepts using RAG workflows to include relevant claims, summaries, and related concepts.
 -   **Subject Summary Generation**: Creates thematic `[[Subject:XYZ]]` pages from concept clusters, providing higher-level overviews of knowledge themes.
+-   **Concept Subject Linking**: Maintains bidirectional navigation between concepts and subjects by adding footer links in concept files pointing to their parent subjects.
 
 ## Architecture
 
@@ -81,6 +82,16 @@ A job (`aclarai_scheduler.subject_summary_refresh`) that generates thematic `[[S
 -   **Context Retrieval**: Gathers shared claims, common summaries, and optional web search context for each cluster.
 -   **Quality Filtering**: Applies configurable thresholds for cluster size and coherence.
 -   **Atomic Writes**: Ensures all generated subject pages are written atomically with proper vault sync markers.
+
+### ConceptSubjectLinkingJob
+
+A job (`aclarai_scheduler.concept_subject_linking`) that maintains bidirectional navigation between concepts and their parent subjects.
+
+-   **Cluster Based**: Uses concept cluster assignments to determine subject membership.
+-   **Footer Links**: Adds "Part of Subjects" section with links to parent `[[Subject:XYZ]]` pages.
+-   **Neo4j Integration**: Optionally creates explicit `(:Concept)-[:PART_OF]->(:Subject)` edges.
+-   **Version Management**: Increments `ver=N` in concept metadata to trigger vault synchronization.
+-   **Atomic Writes**: Uses safe file operations to prevent corruption during updates.
 
 ## Configuration
 
