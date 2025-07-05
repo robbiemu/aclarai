@@ -25,6 +25,10 @@ from .concept_highlight_refresh import (
     ConceptHighlightRefreshJobStats,
 )
 from .concept_refresh import ConceptEmbeddingRefreshJob, JobStatsTypedDict
+from .concept_subject_linking_job import (
+    ConceptSubjectLinkingJob,
+    ConceptSubjectLinkingJobStats,
+)
 from .concept_summary_refresh import (
     ConceptSummaryRefreshJob,
     ConceptSummaryRefreshJobStats,
@@ -58,6 +62,7 @@ class SchedulerService:
         self.concept_summary_refresh_job = ConceptSummaryRefreshJob(self.config)
         self.subject_summary_refresh_job = SubjectSummaryRefreshJob(self.config)
         self.concept_clustering_job = ConceptClusteringJob(self.config)
+        self.concept_subject_linking_job = ConceptSubjectLinkingJob(self.config)
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -453,6 +458,55 @@ class SchedulerService:
                     "job_id": "subject_summary_refresh",
                     "manual_only": True,
                     "description": subject_summary_refresh_config.description,
+                },
+            )
+
+        # Register concept subject linking job
+        concept_subject_linking_config = (
+            self.config.scheduler.jobs.concept_subject_linking
+        )
+        if (
+            concept_subject_linking_config.enabled
+            and not concept_subject_linking_config.manual_only
+        ):
+            # Environment variable override
+            concept_subject_linking_enabled = (
+                os.getenv("CONCEPT_SUBJECT_LINKING_ENABLED", "true").lower() == "true"
+            )
+            concept_subject_linking_cron = os.getenv(
+                "CONCEPT_SUBJECT_LINKING_CRON", concept_subject_linking_config.cron
+            )
+            if concept_subject_linking_enabled:
+                assert self.scheduler is not None
+                self.scheduler.add_job(
+                    func=self._run_concept_subject_linking_job,
+                    trigger=CronTrigger.from_crontab(concept_subject_linking_cron),
+                    id="concept_subject_linking",
+                    name="Concept Subject Linking Job",
+                    replace_existing=True,
+                )
+                self.logger.info(
+                    f"scheduler.main._register_jobs: Registered concept subject linking job with cron '{concept_subject_linking_cron}'",
+                    extra={
+                        "service": "aclarai-scheduler",
+                        "filename.function_name": "scheduler.main._register_jobs",
+                        "job_id": "concept_subject_linking",
+                        "cron": concept_subject_linking_cron,
+                        "description": concept_subject_linking_config.description,
+                    },
+                )
+        elif (
+            concept_subject_linking_config.enabled
+            and concept_subject_linking_config.manual_only
+        ):
+            self.logger.info(
+                "scheduler.main._register_jobs: Concept subject linking job is enabled but set to manual_only, skipping automatic scheduling",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._register_jobs",
+                    "job_id": "concept_subject_linking",
+                    "manual_only": True,
+                    "description": concept_subject_linking_config.description,
                 },
             )
 
@@ -1032,6 +1086,79 @@ class SchedulerService:
                 "subjects_generated": 0,
                 "subjects_skipped": 0,
                 "errors": 1,
+                "duration": time.time() - job_start_time,
+                "error_details": [str(e)],
+            }
+
+    def _run_concept_subject_linking_job(self) -> ConceptSubjectLinkingJobStats:
+        """Execute the concept subject linking job."""
+        # Check if automation is paused
+        if is_paused():
+            self.logger.info(
+                "scheduler.main._run_concept_subject_linking_job: Automation is paused. Skipping job.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_subject_linking_job",
+                },
+            )
+            return {
+                "success": True,
+                "concepts_processed": 0,
+                "concepts_linked": 0,
+                "concepts_skipped": 0,
+                "files_updated": 0,
+                "neo4j_edges_created": 0,
+                "duration": 0.0,
+                "error_details": ["Automation is paused"],
+            }
+
+        job_start_time = time.time()
+        job_id = f"concept_subject_linking_{int(job_start_time)}"
+        self.logger.info(
+            "scheduler.main._run_concept_subject_linking_job: Starting concept subject linking job",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "scheduler.main._run_concept_subject_linking_job",
+                "job_id": job_id,
+            },
+        )
+        try:
+            # Run the concept subject linking job
+            stats = self.concept_subject_linking_job.run_job()
+            # Log completion with statistics
+            self.logger.info(
+                "scheduler.main._run_concept_subject_linking_job: Concept subject linking job completed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_subject_linking_job",
+                    "job_id": job_id,
+                    "success": stats["success"],
+                    "concepts_processed": stats["concepts_processed"],
+                    "concepts_linked": stats["concepts_linked"],
+                    "concepts_skipped": stats["concepts_skipped"],
+                    "files_updated": stats["files_updated"],
+                    "neo4j_edges_created": stats["neo4j_edges_created"],
+                    "duration": stats["duration"],
+                },
+            )
+            return stats
+        except Exception as e:
+            self.logger.error(
+                "scheduler.main._run_concept_subject_linking_job: Concept subject linking job failed",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "scheduler.main._run_concept_subject_linking_job",
+                    "job_id": job_id,
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "concepts_processed": 0,
+                "concepts_linked": 0,
+                "concepts_skipped": 0,
+                "files_updated": 0,
+                "neo4j_edges_created": 0,
                 "duration": time.time() - job_start_time,
                 "error_details": [str(e)],
             }

@@ -223,6 +223,17 @@ class ConceptClusteringJobConfig(JobConfig):
 
 
 @dataclass
+class ConceptSubjectLinkingJobConfig(JobConfig):
+    """Configuration for the Concept Subject Linking job."""
+
+    create_neo4j_edges: bool = (
+        False  # Whether to create (:Concept)-[:PART_OF]->(:Subject) edges
+    )
+    batch_size: int = 50  # Number of concepts to process in one batch
+    footer_section_title: str = "Part of Subjects"  # Title for footer section
+
+
+@dataclass
 class SchedulerJobsConfig:
     """Configuration for all scheduled jobs."""
 
@@ -303,6 +314,17 @@ class SchedulerJobsConfig:
             manual_only=False,
             cron="0 6 * * *",  # 6 AM daily (after clustering at 2 AM)
             description="Generate [[Subject:XYZ]] pages from concept clusters",
+        )
+    )
+    concept_subject_linking: ConceptSubjectLinkingJobConfig = field(
+        default_factory=lambda: ConceptSubjectLinkingJobConfig(
+            enabled=True,
+            manual_only=False,
+            cron="0 8 * * *",  # 8 AM daily (after subject summary at 6 AM)
+            description="Link concepts to their subjects with footer links",
+            create_neo4j_edges=False,
+            batch_size=50,
+            footer_section_title="Part of Subjects",
         )
     )
 

@@ -113,6 +113,12 @@ The following jobs are included with aclarai by default.
 -   **Description:** Generates thematic `[[Subject:XYZ]]` pages for concept clusters identified by the concept clustering job. Uses specialized sub-agents to create comprehensive subject summaries with contextual information from claims, summaries, and optional web search.
 -   **Default `cron`:** `"0 6 * * *"` (Daily at 6:00 AM)
 
+### Concept Subject Linking Job
+
+-   **ID:** `concept_subject_linking`
+-   **Description:** Maintains bidirectional navigation between concepts and their parent subjects by adding footer links in concept files pointing to their parent `[[Subject:XYZ]]` pages and optionally creating explicit `(:Concept)-[:PART_OF]->(:Subject)` edges in Neo4j.
+-   **Default `cron`:** `"0 8 * * *"` (Daily at 8:00 AM, after subject summary at 6:00 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.

@@ -28,6 +28,7 @@ The concept clustering system consists of several key components:
 - **Vector Store**: Source of concept embeddings from the concepts collection
 - **Scheduler**: APScheduler integration for periodic execution
 - **Subject Summary Agent**: Consumer of cluster assignments
+- **Concept Subject Linking Job**: Consumer of cluster assignments for linking concepts to subjects
 
 ## Configuration
 
@@ -273,6 +274,7 @@ clustering_job = ConceptClusteringJob(config)
 assignments = clustering_job.get_cluster_assignments()
 
 if assignments:
+    # Used by both Subject Summary Agent and Concept Subject Linking Job
     for concept_id, cluster_id in assignments.items():
         # Process concept in its cluster context
         pass
