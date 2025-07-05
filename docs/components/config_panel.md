@@ -66,6 +66,9 @@ The panel is organized into several collapsible sections using `gr.Group()`:
     Controls for enabling, disabling, and scheduling periodic jobs. For a detailed list of all available jobs and their specific parameters, see the [Scheduler Job Configuration](./scheduler_job_configuration.md) documentation.
     *   🔄 Concept Embedding Refresh (Enabled, Manual Only, Cron Schedule)
     *   📁 Vault Sync (Enabled, Manual Only, Cron Schedule)
+    *   🔬 Concept Clustering (Enabled, Manual Only, Cron Schedule, Algorithm, Thresholds)
+    *   📚 Subject Summary (Enabled, Manual Only, Cron Schedule, Min/Max Concepts)
+    *   🔗 Concept Subject Linking (Enabled, Manual Only, Cron Schedule, Footer Settings)
 *   **🧠 Highlight & Summary**:
     Configures the automated generation of vault-wide summary pages like "Top Concepts" and "Trending Topics". This section corresponds to features planned for implementation in Sprints 9 and 10.
     *   🤖 Writing Agent (Model for Trending Concepts Agent - synchronized with the one in Model Settings)
