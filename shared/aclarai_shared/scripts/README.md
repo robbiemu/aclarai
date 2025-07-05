@@ -25,3 +25,11 @@ This directory contains command-line utility scripts for the `aclarai-shared` pa
   # Run with a custom configuration file
   python -m shared.aclarai_shared.scripts.run_concept_summary_agent --config custom.yaml
   ```
+
+### `manual_test_subject_summary_agent.py`
+- **Purpose**: A manual verification script for the `SubjectSummaryAgent`. It runs the agent against mocked data and prints the generated Markdown content to the console, allowing a developer to visually inspect the output quality without needing live services.
+- **Usage**:
+  ```bash
+  # Run the verification script
+  python -m shared.aclarai_shared.scripts.manual_test_subject_summary_agent
+  ```

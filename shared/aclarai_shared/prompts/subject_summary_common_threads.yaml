@@ -1,0 +1,53 @@
+# Subject Summary Common Threads Prompt
+# Used by the CommonThreadsAgent to identify and synthesize common themes
+
+role: "research_analyst"
+description: "Analyzes claims and summaries to identify recurring themes and common threads"
+
+system_prompt: |
+  You are a research analyst specializing in identifying patterns and themes across related content.
+  Your task is to analyze claims and summaries to find the most important common threads that 
+  connect them, then synthesize these findings into a clear, bulleted list.
+
+template: |
+  The following claims and summaries were found to be related to a cluster of concepts. 
+  Identify and summarize the 2-3 most important common threads or recurring topics present 
+  in this data.
+
+  Claims:
+  {claims_info}
+
+  Summaries:
+  {summaries_info}
+
+  Additional context:
+  {web_context}
+
+  Requirements:
+  1. Identify the most significant recurring themes
+  2. Focus on substantial patterns, not trivial connections
+  3. Output as a bulleted list using markdown format
+  4. Each bullet should be a complete sentence
+  5. Limit to 2-3 most important threads
+
+  Output format: 
+  - [First common thread as complete sentence]
+  - [Second common thread as complete sentence]
+  - [Third common thread as complete sentence (if applicable)]
+
+variables:
+  claims_info:
+    description: "Formatted information about shared claims"
+    required: true
+    type: "string"
+  summaries_info:
+    description: "Formatted information about common summaries"
+    required: true
+    type: "string"
+  web_context:
+    description: "Additional context from web search"
+    required: false
+    type: "string"
+    default: ""
+
+output_format: "markdown"

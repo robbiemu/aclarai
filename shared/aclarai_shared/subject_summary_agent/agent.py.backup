@@ -1,0 +1,1009 @@
+"""
+Subject Summary Agent implementation.
+This module implements the Subject Summary Agent that generates [[Subject:XYZ]] Markdown
+pages for each cluster of concepts, following the format specified in
+docs/arch/on-writing_vault_documents.md.
+"""
+
+import logging
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional, cast
+
+from llama_index.core.tools import BaseTool
+from llama_index.llms.openai import OpenAI
+
+from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
+from aclarai_shared.import_system import write_file_atomically
+from aclarai_shared.subject_summary_agent.sub_agents import (
+    CommonThreadsAgent,
+    ConceptBlurbAgent,
+    DefinitionWriterAgent,
+)
+from aclarai_shared.tools.factory import ToolFactory
+from aclarai_shared.tools.vector_store_manager import aclaraiVectorStoreManager
+
+logger = logging.getLogger(__name__)
+
+
+class SubjectSummaryAgent:
+    """
+    Generates [[Subject:XYZ]] Markdown pages for concept clusters.
+
+    This agent follows the specifications from docs/arch/on-writing_vault_documents.md
+    for the Subject Summary Agent format. It works with the concept clustering job
+    to generate thematic subject pages from groups of related concepts.
+    """
+
+    def __init__(
+        self,
+        config: Optional[aclaraiConfig] = None,
+        neo4j_manager: Optional[Neo4jGraphManager] = None,
+        vector_store_manager: Optional[aclaraiVectorStoreManager] = None,
+        clustering_job=None,
+    ):
+        """
+        Initialize the Subject Summary Agent.
+
+        Args:
+            config: aclarai configuration (loads default if None)
+            neo4j_manager: Neo4j graph manager (creates new if None)
+            vector_store_manager: Vector store manager for similarity search (creates new if None)
+            clustering_job: Concept clustering job instance for getting cluster assignments
+        """
+        if config is None:
+            from aclarai_shared.config import load_config
+
+            config = load_config(validate=False)
+        self.config = config
+
+        self.neo4j_manager = neo4j_manager or Neo4jGraphManager(config)
+        self.clustering_job = clustering_job
+
+        # Initialize vector store manager
+        if vector_store_manager is None:
+            try:
+                vector_store_manager = aclaraiVectorStoreManager(config)
+            except Exception as e:
+                logger.warning(
+                    f"Could not initialize vector store manager: {e}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.__init__",
+                        "error": str(e),
+                    },
+                )
+                vector_store_manager = None
+
+        self.vector_store_manager = vector_store_manager
+
+        # Initialize LLM
+        llm_config = config.llm
+        self.llm: Optional[OpenAI] = None
+        try:
+            if llm_config.provider == "openai":
+                self.llm = OpenAI(
+                    model=config.subject_summaries.model,
+                    api_key=llm_config.api_key,
+                    temperature=0.3,  # Moderate temperature for creative but consistent content
+                )
+                self.model_name = config.subject_summaries.model
+            else:
+                raise ValueError(f"Unsupported LLM provider: {llm_config.provider}")
+        except Exception as e:
+            logger.warning(
+                f"Could not initialize LLM: {e}. Falling back to template-based generation.",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.__init__",
+                    "error": str(e),
+                },
+            )
+            self.llm = None
+            self.model_name = "template-fallback"
+
+        # Initialize web search tool if enabled
+        self.web_search_tool: Optional[BaseTool] = None
+        if config.subject_summaries.allow_web_search and self.llm and vector_store_manager:
+            try:
+                tool_factory = ToolFactory(
+                    config.model_dump() if hasattr(config, "model_dump") else {},
+                    vector_store_manager,
+                    self.neo4j_manager,
+                )
+                web_tools = tool_factory.get_tools_for_agent("web_search")
+                if web_tools:
+                    self.web_search_tool = cast(BaseTool, web_tools[0])
+            except Exception as e:
+                logger.warning(
+                    f"Could not initialize web search tool: {e}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.__init__",
+                        "error": str(e),
+                    },
+                )
+
+        # Get the concepts directory from configuration
+        vault_path = Path(config.paths.vault)
+        concepts_path = config.paths.tier3 or "concepts"
+        self.subjects_dir = vault_path / concepts_path  # Store subjects with concepts for now
+
+        # Initialize sub-agents for content generation
+        self.definition_writer_agent: Optional[DefinitionWriterAgent] = None
+        self.concept_blurb_agent: Optional[ConceptBlurbAgent] = None
+        self.common_threads_agent: Optional[CommonThreadsAgent] = None
+        
+        if self.llm:
+            self.definition_writer_agent = DefinitionWriterAgent(self.llm, config)
+            self.concept_blurb_agent = ConceptBlurbAgent(self.llm, config)
+            self.common_threads_agent = CommonThreadsAgent(self.llm, config)
+
+        logger.debug(
+            "Initialized SubjectSummaryAgent",
+            extra={
+                "service": "aclarai",
+                "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.__init__",
+                "subjects_dir": str(self.subjects_dir),
+                "model": self.model_name,
+                "allow_web_search": config.subject_summaries.allow_web_search,
+                "web_search_available": self.web_search_tool is not None,
+                "llm_available": self.llm is not None,
+                "sub_agents_initialized": self.llm is not None,
+            },
+        )
+
+    def get_cluster_assignments(self) -> Optional[Dict[str, int]]:
+        """
+        Get concept cluster assignments from the clustering job.
+
+        Returns:
+            Dictionary mapping concept_id to cluster_id, or None if no assignments available
+        """
+        if self.clustering_job is None:
+            logger.warning(
+                "No clustering job instance provided, cannot get cluster assignments",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.get_cluster_assignments",
+                },
+            )
+            return None
+
+        try:
+            assignments: Optional[Dict[str, int]] = self.clustering_job.get_cluster_assignments()
+            if assignments:
+                logger.debug(
+                    f"Retrieved {len(assignments)} concept cluster assignments",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.get_cluster_assignments",
+                        "assignments_count": len(assignments),
+                    },
+                )
+            return assignments
+        except Exception as e:
+            logger.error(
+                f"Failed to get cluster assignments: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.get_cluster_assignments",
+                    "error": str(e),
+                },
+            )
+            return None
+
+    def get_cluster_concepts(
+        self, cluster_assignments: Dict[str, int], cluster_id: int
+    ) -> List[str]:
+        """
+        Get all concept names for a specific cluster.
+
+        Args:
+            cluster_assignments: Dictionary mapping concept_id to cluster_id
+            cluster_id: The cluster ID to get concepts for
+
+        Returns:
+            List of concept names in the cluster
+        """
+        concepts = [
+            concept for concept, cid in cluster_assignments.items() if cid == cluster_id
+        ]
+        logger.debug(
+            f"Found {len(concepts)} concepts in cluster {cluster_id}",
+            extra={
+                "service": "aclarai",
+                "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.get_cluster_concepts",
+                "cluster_id": cluster_id,
+                "concepts_count": len(concepts),
+            },
+        )
+        return concepts
+
+    def retrieve_shared_claims(self, concept_names: List[str]) -> List[Dict[str, Any]]:
+        """
+        Retrieve claims that are shared across multiple concepts in the cluster.
+
+        Args:
+            concept_names: List of concept names in the cluster
+
+        Returns:
+            List of shared claim dictionaries
+        """
+        if not concept_names:
+            return []
+
+        try:
+            # Query for claims that support/mention multiple concepts in the cluster
+            query = """
+            MATCH (c:Concept)-[r:SUPPORTS_CONCEPT|MENTIONS_CONCEPT]-(claim:Claim)
+            WHERE c.name IN $concept_names
+            WITH claim, collect(DISTINCT c.name) AS related_concepts
+            WHERE size(related_concepts) > 1
+            RETURN claim.text as text, claim.aclarai_id as aclarai_id,
+                   related_concepts
+            ORDER BY size(related_concepts) DESC
+            LIMIT 10
+            """
+
+            result = self.neo4j_manager.execute_query(
+                query, parameters={"concept_names": concept_names}, read_only=True
+            )
+            claims = []
+
+            for record in result:
+                claims.append(
+                    {
+                        "text": record["text"],
+                        "aclarai_id": record["aclarai_id"],
+                        "related_concepts": record["related_concepts"],
+                    }
+                )
+
+            logger.debug(
+                f"Retrieved {len(claims)} shared claims for cluster concepts",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.retrieve_shared_claims",
+                    "concept_names": concept_names,
+                    "claims_count": len(claims),
+                },
+            )
+            return claims
+
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve shared claims: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.retrieve_shared_claims",
+                    "concept_names": concept_names,
+                    "error": str(e),
+                },
+            )
+            return []
+
+    def retrieve_common_summaries(self, concept_names: List[str]) -> List[Dict[str, Any]]:
+        """
+        Retrieve summaries that mention multiple concepts in the cluster.
+
+        Args:
+            concept_names: List of concept names in the cluster
+
+        Returns:
+            List of common summary dictionaries
+        """
+        if not concept_names:
+            return []
+
+        try:
+            # Query for summaries that mention multiple concepts in the cluster
+            query = """
+            MATCH (c:Concept)-[r:MENTIONED_IN]-(summary:Summary)
+            WHERE c.name IN $concept_names
+            WITH summary, collect(DISTINCT c.name) AS related_concepts
+            WHERE size(related_concepts) > 1
+            RETURN summary.text as text, summary.aclarai_id as aclarai_id,
+                   related_concepts
+            ORDER BY size(related_concepts) DESC
+            LIMIT 5
+            """
+
+            result = self.neo4j_manager.execute_query(
+                query, parameters={"concept_names": concept_names}, read_only=True
+            )
+            summaries = []
+
+            for record in result:
+                summaries.append(
+                    {
+                        "text": record["text"],
+                        "aclarai_id": record["aclarai_id"],
+                        "related_concepts": record["related_concepts"],
+                    }
+                )
+
+            logger.debug(
+                f"Retrieved {len(summaries)} common summaries for cluster concepts",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.retrieve_common_summaries",
+                    "concept_names": concept_names,
+                    "summaries_count": len(summaries),
+                },
+            )
+            return summaries
+
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve common summaries: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.retrieve_common_summaries",
+                    "concept_names": concept_names,
+                    "error": str(e),
+                },
+            )
+            return []
+
+    def search_web_context(self, concepts: List[str]) -> Optional[str]:
+        """
+        Use web search to get additional context about the concept cluster.
+
+        Args:
+            concepts: List of concept names in the cluster
+
+        Returns:
+            Web search results as a string, or None if unavailable
+        """
+        if not self.web_search_tool or not concepts:
+            return None
+
+        try:
+            # Create a search query from the concept names
+            search_query = " ".join(concepts[:3])  # Use first 3 concepts for search
+
+            # Use the web search tool
+            result = self.web_search_tool(search_query)
+
+            if result:
+                logger.debug(
+                    f"Retrieved web context for concepts: {search_query}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.search_web_context",
+                        "search_query": search_query,
+                        "result_length": len(str(result)) if result else 0,
+                    },
+                )
+                return str(result)
+
+        except Exception as e:
+            logger.warning(
+                f"Web search failed for concepts {concepts}: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.search_web_context",
+                    "concepts": concepts,
+                    "error": str(e),
+                },
+            )
+
+        return None
+
+    def generate_subject_name(self, concepts: List[str]) -> str:
+        """
+        Generate a synthesized subject name from concept names.
+
+        Args:
+            concepts: List of concept names in the cluster
+
+        Returns:
+            A suitable subject name
+        """
+        if not concepts:
+            return "Untitled Subject"
+
+        # Simple heuristic: try to find a common theme or use the most representative concept
+        if len(concepts) == 1:
+            return concepts[0]
+
+        # For multiple concepts, try to create a meaningful name
+        # This is a simple implementation - could be enhanced with LLM
+        if len(concepts) <= 3:
+            return " & ".join(concepts[:3])
+        else:
+            # For larger clusters, try to identify a theme
+            # Simple approach: take first concept and add "Related Topics"
+            return f"{concepts[0]} & Related Topics"
+
+    def generate_subject_slug(self, subject_name: str) -> str:
+        """
+        Generate a URL-safe slug for a subject.
+
+        Args:
+            subject_name: The subject name
+
+        Returns:
+            A safe slug for use in aclarai:id
+        """
+        # Replace problematic characters and normalize
+        slug = subject_name.lower().replace("/", "_")
+        slug = re.sub(r"[^\w\s-]", "", slug)
+        slug = re.sub(r"[-\s]+", "_", slug)
+        slug = slug.strip("_")
+
+        # Ensure we have a non-empty slug
+        if not slug:
+            slug = "untitled_subject"
+
+        return slug
+
+    def generate_subject_filename(self, subject_name: str) -> str:
+        """
+        Generate a canonical filename for a subject.
+
+        Args:
+            subject_name: The subject name
+
+        Returns:
+            A safe filename for the subject
+        """
+        # Use the [[Subject:XYZ]] format for the filename
+        safe_name = "".join(
+            c if c.isalnum() or c in "._- " else "_" for c in subject_name
+        )
+        safe_name = safe_name.replace(" ", "_").strip("_")
+        safe_name = re.sub(r"_+", "_", safe_name).strip("_")
+
+        # Limit the length to avoid filesystem issues
+        if len(safe_name) > 180:  # Leave room for "Subject_" prefix
+            safe_name = safe_name[:180].rstrip("_")
+
+        # Ensure we have a non-empty name
+        if not safe_name:
+            safe_name = "untitled_subject"
+
+        return f"Subject_{safe_name}.md"
+
+    def should_skip_cluster(self, concepts: List[str], context: Dict[str, Any]) -> bool:
+        """
+        Determine if a cluster should be skipped based on configuration.
+
+        Args:
+            concepts: List of concept names in the cluster
+            context: Retrieved context including claims and summaries
+
+        Returns:
+            True if the cluster should be skipped, False otherwise
+        """
+        # Check cluster size constraints
+        if len(concepts) < self.config.subject_summaries.min_concepts:
+            logger.debug(
+                f"Skipping cluster - too few concepts ({len(concepts)} < {self.config.subject_summaries.min_concepts})",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.should_skip_cluster",
+                    "concepts_count": len(concepts),
+                    "min_concepts": self.config.subject_summaries.min_concepts,
+                },
+            )
+            return True
+
+        if len(concepts) > self.config.subject_summaries.max_concepts:
+            logger.debug(
+                f"Skipping cluster - too many concepts ({len(concepts)} > {self.config.subject_summaries.max_concepts})",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.should_skip_cluster",
+                    "concepts_count": len(concepts),
+                    "max_concepts": self.config.subject_summaries.max_concepts,
+                },
+            )
+            return True
+
+        # Check for coherence if configured
+        if self.config.subject_summaries.skip_if_incoherent:
+            shared_claims = context.get("shared_claims", [])
+            common_summaries = context.get("common_summaries", [])
+
+            # Simple coherence check: cluster should have at least one shared element
+            if not shared_claims and not common_summaries:
+                logger.debug(
+                    "Skipping cluster - appears incoherent (no shared claims or summaries)",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.should_skip_cluster",
+                        "concepts": concepts,
+                    },
+                )
+                return True
+
+        return False
+
+    def generate_subject_content(
+        self, subject_name: str, concepts: List[str], context: Dict[str, Any]
+    ) -> str:
+        """
+        Generate the Markdown content for a subject file using agentic approach.
+
+        This follows the format specified in docs/arch/on-writing_vault_documents.md
+        for the Subject Summary Agent. Uses specialized sub-agents for content generation.
+
+        Args:
+            subject_name: The name of the subject
+            concepts: List of concept names in the cluster
+            context: Retrieved context including claims, summaries, web search
+
+        Returns:
+            The Markdown content as a string
+        """
+        if self.llm and self.definition_writer_agent and self.concept_blurb_agent and self.common_threads_agent:
+            # Use agentic approach with sub-agents
+            try:
+                content = self._generate_agentic_content(subject_name, concepts, context)
+                if content:
+                    return content
+            except Exception as e:
+                logger.warning(
+                    f"Agentic generation failed for subject '{subject_name}', falling back to template: {e}",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.generate_subject_content",
+                        "subject_name": subject_name,
+                        "error": str(e),
+                    },
+                )
+
+        # Fallback to template-based generation
+        return self._generate_template_content(subject_name, concepts, context)
+
+    def _generate_agentic_content(
+        self, subject_name: str, concepts: List[str], context: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Generate subject content using agentic approach with specialized sub-agents.
+
+        This implements the hybrid orchestration approach:
+        1. Context Retrieval (already done, passed in context)
+        2. Content Generation (agentic delegation to sub-agents)
+        3. Final Assembly (procedural)
+
+        Args:
+            subject_name: The name of the subject
+            concepts: List of concept names in the cluster
+            context: Retrieved context from various sources
+
+        Returns:
+            Generated content or None if generation fails
+        """
+        try:
+            # 2. Content Generation Phase - Agentic Delegation
+            logger.debug(
+                f"Starting agentic content generation for subject: {subject_name}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
+                    "subject_name": subject_name,
+                    "concepts_count": len(concepts),
+                }
+            )
+
+            # Delegate to DefinitionWriterAgent for summary paragraph
+            summary_paragraph = self.definition_writer_agent.generate_definition(
+                subject_name, concepts, context
+            )
+
+            # Delegate to ConceptBlurbAgent for each concept
+            concept_blurbs = {}
+            for concept in concepts:
+                blurb = self.concept_blurb_agent.generate_blurb(
+                    concept, subject_name, context
+                )
+                concept_blurbs[concept] = blurb
+
+            # Delegate to CommonThreadsAgent for shared themes
+            common_threads_section = self.common_threads_agent.generate_common_threads(
+                context.get("shared_claims", []),
+                context.get("common_summaries", []),
+                context.get("web_context")
+            )
+
+            # 3. Final Assembly Phase - Procedural
+            content = self._assemble_agentic_markdown(
+                subject_name=subject_name,
+                summary_paragraph=summary_paragraph,
+                concepts=concepts,
+                concept_blurbs=concept_blurbs,
+                common_threads_section=common_threads_section,
+            )
+
+            logger.debug(
+                f"Generated agentic content for subject: {subject_name}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
+                    "subject_name": subject_name,
+                    "content_length": len(content),
+                }
+            )
+
+            return content
+
+        except Exception as e:
+            logger.error(
+                f"Agentic content generation failed for subject '{subject_name}': {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_agentic_content",
+                    "subject_name": subject_name,
+                    "error": str(e),
+                }
+            )
+            return None
+
+    def _assemble_agentic_markdown(
+        self,
+        subject_name: str,
+        summary_paragraph: str,
+        concepts: List[str],
+        concept_blurbs: Dict[str, str],
+        common_threads_section: str,
+    ) -> str:
+        """
+        Assemble the final Markdown content from agent outputs.
+
+        Args:
+            subject_name: The name of the subject
+            summary_paragraph: Generated summary paragraph
+            concepts: List of concept names
+            concept_blurbs: Dictionary mapping concept names to blurbs
+            common_threads_section: Generated common threads section
+
+        Returns:
+            Complete Markdown content
+        """
+        subject_slug = self.generate_subject_slug(subject_name)
+        
+        lines = [
+            f"## Subject: {subject_name}",
+            "",
+            summary_paragraph,
+            "",
+            "### Included Concepts",
+        ]
+
+        # Add concepts with blurbs
+        for concept in concepts:
+            blurb = concept_blurbs.get(concept, "A key component of this subject")
+            lines.append(f"- [[{concept}]] — {blurb}")
+        
+        lines.extend([
+            "",
+            "### Common Threads",
+            common_threads_section,
+            "",
+            f"<!-- aclarai:id=subject_{subject_slug} ver=1 -->",
+            f"^subject_{subject_slug}",
+        ])
+
+        return "\n".join(lines)
+        prompt_parts.append(f"\nIncluded concepts ({len(concepts)} total):")
+        for concept in concepts:
+            prompt_parts.append(f"- {concept}")
+
+        # Add shared claims context
+        shared_claims = context.get("shared_claims", [])
+        if shared_claims:
+            prompt_parts.append(f"\nShared claims ({len(shared_claims)} total):")
+            for claim in shared_claims[:5]:  # Show up to 5 claims
+                prompt_parts.append(f"- {claim['text']}")
+
+        # Add common summaries context
+        common_summaries = context.get("common_summaries", [])
+        if common_summaries:
+            prompt_parts.append(f"\nCommon summaries ({len(common_summaries)} total):")
+            for summary in common_summaries[:3]:  # Show up to 3 summaries
+                prompt_parts.append(f"- {summary['text']}")
+
+        # Add web search context if available
+        web_context = context.get("web_context")
+        if web_context:
+            prompt_parts.append(f"\nAdditional web context:\n{web_context[:500]}...")  # Truncate for prompt
+
+        prompt_parts.extend([
+            "",
+            "Requirements:",
+            "1. Write a clear summary paragraph that explains the theme connecting these concepts",
+            "2. List each concept with a [[wiki-style link]] and short descriptive blurb",
+            "3. Identify and explain the common threads that unite these concepts",
+            "4. Use professional, encyclopedia-style language",
+            "5. Be comprehensive but concise",
+            f"6. End with the metadata: <!-- aclarai:id=subject_{subject_slug} ver=1 --> and ^subject_{subject_slug}",
+            "",
+            "Generate the complete subject page now:",
+        ])
+
+        prompt = "\n".join(prompt_parts)
+
+        try:
+            if self.llm is None:
+                return None
+            response = self.llm.complete(prompt)
+            content = str(response.response).strip()
+
+            # Ensure proper metadata is included
+            if f"<!-- aclarai:id=subject_{subject_slug}" not in content:
+                content += f"\n\n<!-- aclarai:id=subject_{subject_slug} ver=1 -->\n^subject_{subject_slug}"
+
+            logger.debug(
+                f"Generated LLM content for subject '{subject_name}'",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_llm_content",
+                    "subject_name": subject_name,
+                    "content_length": len(content),
+                },
+            )
+
+            return content
+
+        except Exception as e:
+            logger.error(
+                f"LLM content generation failed for subject '{subject_name}': {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent._generate_llm_content",
+                    "subject_name": subject_name,
+                    "error": str(e),
+                },
+            )
+            return None
+
+    def _generate_template_content(
+        self, subject_name: str, concepts: List[str], context: Dict[str, Any]
+    ) -> str:
+        """
+        Generate subject content using a template (fallback method).
+
+        Args:
+            subject_name: The name of the subject
+            concepts: List of concept names in the cluster
+            context: Retrieved context from various sources
+
+        Returns:
+            Template-generated content
+        """
+        subject_slug = self.generate_subject_slug(subject_name)
+
+        lines = [
+            f"## Subject: {subject_name}",
+            "",
+            f"This subject encompasses {len(concepts)} related concepts that share common themes and relationships.",
+            "",
+        ]
+
+        # Add included concepts section
+        lines.append("### Included Concepts")
+        for concept in concepts:
+            lines.append(f"- [[{concept}]] — related concept in this subject area")
+        lines.append("")
+
+        # Add common threads section
+        lines.append("### Common Threads")
+
+        shared_claims = context.get("shared_claims", [])
+        common_summaries = context.get("common_summaries", [])
+
+        if shared_claims or common_summaries:
+            if shared_claims:
+                lines.append(f"- Shared evidence from {len(shared_claims)} claims that span multiple concepts")
+            if common_summaries:
+                lines.append(f"- Common themes identified in {len(common_summaries)} summaries")
+        else:
+            lines.append("- These concepts are grouped based on semantic similarity")
+
+        lines.append("")
+
+        # Add aclarai metadata
+        lines.append(f"<!-- aclarai:id=subject_{subject_slug} ver=1 -->")
+        lines.append(f"^subject_{subject_slug}")
+
+        return "\n".join(lines)
+
+    def generate_subject_page(
+        self, cluster_id: int, concepts: List[str]
+    ) -> bool:
+        """
+        Generate a complete subject page for a single concept cluster.
+
+        Args:
+            cluster_id: The cluster ID
+            concepts: List of concept names in the cluster
+
+        Returns:
+            True if the page was generated successfully, False otherwise
+        """
+        try:
+            subject_name = self.generate_subject_name(concepts)
+
+            logger.info(
+                f"Generating subject page for cluster {cluster_id}: '{subject_name}'",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.generate_subject_page",
+                    "cluster_id": cluster_id,
+                    "subject_name": subject_name,
+                    "concepts_count": len(concepts),
+                },
+            )
+
+            # Retrieve context data
+            shared_claims = self.retrieve_shared_claims(concepts)
+            common_summaries = self.retrieve_common_summaries(concepts)
+
+            context: Dict[str, Any] = {
+                "shared_claims": shared_claims,
+                "common_summaries": common_summaries,
+            }
+
+            # Add web search context if enabled
+            if self.config.subject_summaries.allow_web_search:
+                web_context = self.search_web_context(concepts)
+                if web_context:
+                    context["web_context"] = web_context
+
+            # Check if we should skip this cluster
+            if self.should_skip_cluster(concepts, context):
+                return False
+
+            # Generate the content
+            content = self.generate_subject_content(subject_name, concepts, context)
+
+            # Generate filename and write file
+            filename = self.generate_subject_filename(subject_name)
+            file_path = self.subjects_dir / filename
+
+            # Ensure subjects directory exists
+            self.subjects_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write file atomically
+            write_file_atomically(file_path, content)
+
+            logger.info(
+                f"Successfully generated subject page: {filename}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.generate_subject_page",
+                    "cluster_id": cluster_id,
+                    "subject_name": subject_name,
+                    "file_path": str(file_path),
+                    "concepts_count": len(concepts),
+                    "shared_claims_count": len(shared_claims),
+                    "common_summaries_count": len(common_summaries),
+                    "web_search_used": "web_context" in context,
+                },
+            )
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"Failed to generate subject page for cluster {cluster_id}: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.generate_subject_page",
+                    "cluster_id": cluster_id,
+                    "concepts": concepts,
+                    "error": str(e),
+                },
+            )
+            return False
+
+    def run_agent(self) -> Dict[str, Any]:
+        """
+        Run the Subject Summary Agent to generate pages for all concept clusters.
+
+        Returns:
+            Dictionary with execution results and statistics
+        """
+        logger.info(
+            "Starting Subject Summary Agent execution",
+            extra={
+                "service": "aclarai",
+                "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.run_agent",
+            },
+        )
+
+        try:
+            # Get cluster assignments
+            cluster_assignments = self.get_cluster_assignments()
+
+            if not cluster_assignments:
+                logger.warning(
+                    "No cluster assignments found",
+                    extra={
+                        "service": "aclarai",
+                        "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.run_agent",
+                    },
+                )
+                return {
+                    "success": True,
+                    "clusters_processed": 0,
+                    "subjects_generated": 0,
+                    "subjects_skipped": 0,
+                    "errors": 0,
+                    "error_details": [],
+                }
+
+            # Group concepts by cluster
+            clusters: Dict[int, List[str]] = {}
+            for concept, cluster_id in cluster_assignments.items():
+                if cluster_id not in clusters:
+                    clusters[cluster_id] = []
+                clusters[cluster_id].append(concept)
+
+            # Process each cluster
+            subjects_generated = 0
+            subjects_skipped = 0
+            errors = 0
+            error_details = []
+
+            for cluster_id, concepts in clusters.items():
+                try:
+                    if self.generate_subject_page(cluster_id, concepts):
+                        subjects_generated += 1
+                    else:
+                        subjects_skipped += 1
+                except Exception as e:
+                    errors += 1
+                    error_msg = f"Error processing cluster {cluster_id}: {e}"
+                    error_details.append(error_msg)
+                    logger.error(
+                        error_msg,
+                        extra={
+                            "service": "aclarai",
+                            "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.run_agent",
+                            "cluster_id": cluster_id,
+                            "error": str(e),
+                        },
+                    )
+
+            result = {
+                "success": True,
+                "clusters_processed": len(clusters),
+                "subjects_generated": subjects_generated,
+                "subjects_skipped": subjects_skipped,
+                "errors": errors,
+                "error_details": error_details,
+            }
+
+            logger.info(
+                f"Subject Summary Agent completed. Generated {subjects_generated} pages, "
+                f"skipped {subjects_skipped}, errors {errors}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.run_agent",
+                    **result,
+                },
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                f"Subject Summary Agent failed: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "subject_summary_agent.SubjectSummaryAgent.run_agent",
+                    "error": str(e),
+                },
+            )
+            return {
+                "success": False,
+                "clusters_processed": 0,
+                "subjects_generated": 0,
+                "subjects_skipped": 0,
+                "errors": 1,
+                "error_details": [str(e)],
+            }

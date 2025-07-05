@@ -107,6 +107,12 @@ The following jobs are included with aclarai by default.
 -   **Description:** Groups related concepts into thematic clusters using their embeddings. Uses DBSCAN or hierarchical clustering algorithms to form semantically coherent groups based on configurable similarity thresholds and size constraints. Caches cluster assignments for use by the Subject Summary Agent.
 -   **Default `cron`:** `"0 2 * * *"` (Daily at 2:00 AM)
 
+### Subject Summary Refresh Job
+
+-   **ID:** `subject_summary_refresh`
+-   **Description:** Generates thematic `[[Subject:XYZ]]` pages for concept clusters identified by the concept clustering job. Uses specialized sub-agents to create comprehensive subject summaries with contextual information from claims, summaries, and optional web search.
+-   **Default `cron`:** `"0 6 * * *"` (Daily at 6:00 AM)
+
 ## Adding a Custom Job
 
 Follow these steps to add a new scheduled job to the system.
