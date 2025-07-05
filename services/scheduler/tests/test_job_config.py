@@ -42,6 +42,10 @@ def mock_all_jobs(monkeypatch):
         "services.scheduler.aclarai_scheduler.main.SubjectSummaryRefreshJob",
         MagicMock(),
     )
+    monkeypatch.setattr(
+        "services.scheduler.aclarai_scheduler.main.ConceptSubjectLinkingJob",
+        MagicMock(),
+    )
 
 
 class TestJobConfiguration:
