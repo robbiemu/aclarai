@@ -1,3 +1,52 @@
+tools:
+  neo4j:
+    enabled: true
+    retry_attempts: 3
+    timeout_seconds: 30
+  vector_search:
+    enabled: true
+    similarity_threshold: 0.7
+    max_results: 5
+  web_search:
+    enabled: false
+    provider: tavily
+    api_key_env_var: TAVILY_API_KEY
+    timeout_seconds: 30
+    max_results: 5
+  agent_tool_mappings:
+    decontextualization_agent:
+    - name: VectorSearchTool
+      params:
+        collection: utterances
+        metadata:
+          name: vector_search_utterances
+          description: 'Searches for similar utterances in the knowledge base. Use
+            this tool to find existing utterances that are semantically similar to
+            the input claim. This helps determine if the claim is ambiguous or relies
+            on unstated context by checking if very similar phrases appear in diverse
+            contexts.
+
+            '
+    entailment_agent:
+    - name: Neo4jQueryTool
+      params: {}
+      metadata:
+        name: neo4j_query_tool
+        description: 'Executes Cypher queries on the knowledge graph. Use this to
+          retrieve contextual information, such as surrounding conversation blocks
+          or related concepts, to better assess entailment.
+
+          '
+    - name: VectorSearchTool
+      params:
+        collection: utterances
+      metadata:
+        name: vector_search_utterances
+        description: 'Searches for similar utterances or text segments in the knowledge
+          base. Use this to find supporting or contradictory evidence or to understand
+          the typical usage of phrases found in the source or claim.
+
+          '
 version: 0.1.0
 config_version: 1
 databases:
@@ -28,6 +77,18 @@ model:
   subject_summary: gpt-3.5-turbo
   trending_concepts_agent: gpt-4
   fallback_plugin: gpt-3.5-turbo
+concept_summaries:
+  model: gpt-4
+  max_examples: 5
+  skip_if_no_claims: true
+  include_see_also: true
+subject_summaries:
+  model: gpt-3.5-turbo
+  similarity_threshold: 0.92
+  min_concepts: 3
+  max_concepts: 15
+  allow_web_search: true
+  skip_if_incoherent: false
 embedding:
   utterance: sentence-transformers/all-MiniLM-L6-v2
   concept: text-embedding-3-small
@@ -49,7 +110,6 @@ embedding:
     merge_colon_endings: true
     merge_short_prefixes: true
     min_chunk_tokens: 5
-
 noun_phrase_extraction:
   spacy_model: en_core_web_sm
   min_phrase_length: 2
@@ -62,6 +122,7 @@ threshold:
   concept_merge: 0.9
   claim_link_strength: 0.6
   summary_grouping_similarity: 0.8
+  claim_quality: 0.7
 window:
   claimify:
     p: 3
@@ -116,6 +177,46 @@ scheduler:
       manual_only: false
       cron: '*/30 * * * *'
       description: Sync vault files with knowledge graph
+    top_concepts:
+      enabled: true
+      manual_only: false
+      cron: 0 4 * * *
+      description: Generate Top Concepts.md from PageRank analysis
+      metric: pagerank
+      count: 25
+      percent: null
+      target_file: Top Concepts.md
+    trending_topics:
+      enabled: true
+      manual_only: false
+      cron: 0 5 * * *
+      description: Generate Trending Topics - <date>.md from concept mention deltas
+      window_days: 7
+      count: null
+      percent: 5
+      min_mentions: 2
+      target_file: Trending Topics - {date}.md
+    concept_clustering:
+      enabled: true
+      manual_only: false
+      cron: 0 2 * * *
+      description: Group related concepts into thematic clusters
+      similarity_threshold: 0.92
+      min_concepts: 3
+      max_concepts: 15
+      algorithm: dbscan
+      cache_ttl: 3600
+      use_persistent_cache: true
+    subject_summary_refresh:
+      enabled: true
+      manual_only: false
+      cron: 0 6 * * *
+      description: Generate [[Subject:XYZ]] pages from concept clusters
+    concept_subject_linking:
+      enabled: true
+      manual_only: false
+      cron: 0 7 * * *
+      description: Link concepts to their parent subjects by adding footer links
 features:
   embedding_enabled: true
   chunking_enabled: true
@@ -156,3 +257,15 @@ development:
   test_mode: false
   mock_llm: false
   mock_embedding: false
+concept_highlights:
+  top_concepts:
+    metric: pagerank
+    count: 25
+    percent: null
+    target_file: Top Concepts.md
+  trending_topics:
+    window_days: 7
+    count: null
+    percent: 5
+    min_mentions: 2
+    target_file: Trending Topics - {date}.md

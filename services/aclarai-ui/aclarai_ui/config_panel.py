@@ -62,6 +62,16 @@ class ConfigData:
     trending_topics_min_mentions: int
     trending_topics_target_file: str
 
+    # --- Section: Subject Summary & Concept Summary Agents ---
+    subject_summary_similarity_threshold: float
+    subject_summary_min_concepts: int
+    subject_summary_max_concepts: int
+    subject_summary_allow_web_search: bool
+    subject_summary_skip_if_incoherent: bool
+    concept_summary_max_examples: int
+    concept_summary_skip_if_no_claims: bool
+    concept_summary_include_see_also: bool
+
 
 logger = logging.getLogger("aclarai-ui.config_panel")
 
@@ -442,6 +452,20 @@ def create_configuration_panel() -> gr.Blocks:
                 "target_file", "Trending Topics - {date}.md"
             )
 
+            # Extract subject summaries configuration
+            subject_summaries_config = config.get("subject_summaries", {})
+            subject_summary_similarity_threshold = subject_summaries_config.get("similarity_threshold", 0.92)
+            subject_summary_min_concepts = subject_summaries_config.get("min_concepts", 3)
+            subject_summary_max_concepts = subject_summaries_config.get("max_concepts", 15)
+            subject_summary_allow_web_search = subject_summaries_config.get("allow_web_search", True)
+            subject_summary_skip_if_incoherent = subject_summaries_config.get("skip_if_incoherent", False)
+
+            # Extract concept summaries configuration
+            concept_summaries_config = config.get("concept_summaries", {})
+            concept_summary_max_examples = concept_summaries_config.get("max_examples", 5)
+            concept_summary_skip_if_no_claims = concept_summaries_config.get("skip_if_no_claims", True)
+            concept_summary_include_see_also = concept_summaries_config.get("include_see_also", True)
+
             return ConfigData(
                 claimify_default=claimify_default,
                 claimify_selection=claimify_selection,
@@ -475,6 +499,14 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent=trending_topics_percent,
                 trending_topics_min_mentions=trending_topics_min_mentions,
                 trending_topics_target_file=trending_topics_target_file,
+                subject_summary_similarity_threshold=subject_summary_similarity_threshold,
+                subject_summary_min_concepts=subject_summary_min_concepts,
+                subject_summary_max_concepts=subject_summary_max_concepts,
+                subject_summary_allow_web_search=subject_summary_allow_web_search,
+                subject_summary_skip_if_incoherent=subject_summary_skip_if_incoherent,
+                concept_summary_max_examples=concept_summary_max_examples,
+                concept_summary_skip_if_no_claims=concept_summary_skip_if_no_claims,
+                concept_summary_include_see_also=concept_summary_include_see_also,
             )
         except Exception as e:
             logger.error(
@@ -521,6 +553,14 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent=5.0,
                 trending_topics_min_mentions=2,
                 trending_topics_target_file="Trending Topics - {date}.md",
+                subject_summary_similarity_threshold=0.92,
+                subject_summary_min_concepts=3,
+                subject_summary_max_concepts=15,
+                subject_summary_allow_web_search=True,
+                subject_summary_skip_if_incoherent=False,
+                concept_summary_max_examples=5,
+                concept_summary_skip_if_no_claims=True,
+                concept_summary_include_see_also=True,
             )
 
     def save_configuration(
@@ -557,6 +597,15 @@ def create_configuration_panel() -> gr.Blocks:
         trending_topics_percent: float,
         trending_topics_min_mentions: int,
         trending_topics_target_file: str,
+        # Subject Summary & Concept Summary Agent parameters
+        subject_summary_similarity_threshold: float,
+        subject_summary_min_concepts: int,
+        subject_summary_max_concepts: int,
+        subject_summary_allow_web_search: bool,
+        subject_summary_skip_if_incoherent: bool,
+        concept_summary_max_examples: int,
+        concept_summary_skip_if_no_claims: bool,
+        concept_summary_include_see_also: bool,
     ) -> str:
         """Save configuration changes to YAML file."""
 
@@ -594,6 +643,14 @@ def create_configuration_panel() -> gr.Blocks:
             trending_topics_percent=trending_topics_percent,
             trending_topics_min_mentions=trending_topics_min_mentions,
             trending_topics_target_file=trending_topics_target_file,
+            subject_summary_similarity_threshold=subject_summary_similarity_threshold,
+            subject_summary_min_concepts=subject_summary_min_concepts,
+            subject_summary_max_concepts=subject_summary_max_concepts,
+            subject_summary_allow_web_search=subject_summary_allow_web_search,
+            subject_summary_skip_if_incoherent=subject_summary_skip_if_incoherent,
+            concept_summary_max_examples=concept_summary_max_examples,
+            concept_summary_skip_if_no_claims=concept_summary_skip_if_no_claims,
+            concept_summary_include_see_also=concept_summary_include_see_also,
         )
 
         try:
@@ -780,6 +837,38 @@ def create_configuration_panel() -> gr.Blocks:
             )
             current_config["concept_highlights"]["trending_topics"]["target_file"] = (
                 trending_topics_target_file.strip()
+            )
+
+            # Update subject summaries configuration
+            if "subject_summaries" not in current_config:
+                current_config["subject_summaries"] = {}
+            current_config["subject_summaries"]["similarity_threshold"] = (
+                subject_summary_similarity_threshold
+            )
+            current_config["subject_summaries"]["min_concepts"] = (
+                subject_summary_min_concepts
+            )
+            current_config["subject_summaries"]["max_concepts"] = (
+                subject_summary_max_concepts
+            )
+            current_config["subject_summaries"]["allow_web_search"] = (
+                subject_summary_allow_web_search
+            )
+            current_config["subject_summaries"]["skip_if_incoherent"] = (
+                subject_summary_skip_if_incoherent
+            )
+
+            # Update concept summaries configuration
+            if "concept_summaries" not in current_config:
+                current_config["concept_summaries"] = {}
+            current_config["concept_summaries"]["max_examples"] = (
+                concept_summary_max_examples
+            )
+            current_config["concept_summaries"]["skip_if_no_claims"] = (
+                concept_summary_skip_if_no_claims
+            )
+            current_config["concept_summaries"]["include_see_also"] = (
+                concept_summary_include_see_also
             )
 
             # Save to file
@@ -1156,6 +1245,78 @@ def create_configuration_panel() -> gr.Blocks:
                     outputs=[trending_concepts_agent_input],
                 )
 
+            # Subject Summary Agent section
+            with gr.Group():
+                gr.Markdown("### 🎯 Subject Summary Agent")
+                gr.Markdown("Configure the agent that generates [[Subject:XYZ]] pages from concept clusters")
+
+                with gr.Row():
+                    subject_summary_similarity_threshold_input = gr.Slider(
+                        label="Similarity Threshold",
+                        value=initial_config.subject_summary_similarity_threshold,
+                        minimum=0.0,
+                        maximum=1.0,
+                        step=0.01,
+                        info="Cosine similarity threshold for concept clustering (higher = more similar concepts required)",
+                    )
+                    subject_summary_min_concepts_input = gr.Number(
+                        label="Min Concepts",
+                        value=initial_config.subject_summary_min_concepts,
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        info="Minimum number of concepts required to form a subject cluster",
+                    )
+
+                with gr.Row():
+                    subject_summary_max_concepts_input = gr.Number(
+                        label="Max Concepts",
+                        value=initial_config.subject_summary_max_concepts,
+                        minimum=1,
+                        maximum=100,
+                        step=1,
+                        info="Maximum number of concepts to include in a subject cluster",
+                    )
+                    subject_summary_allow_web_search_input = gr.Checkbox(
+                        label="Allow Web Search",
+                        value=initial_config.subject_summary_allow_web_search,
+                        info="Allow the agent to use web search for additional context",
+                    )
+
+                with gr.Row():
+                    subject_summary_skip_if_incoherent_input = gr.Checkbox(
+                        label="Skip If Incoherent",
+                        value=initial_config.subject_summary_skip_if_incoherent,
+                        info="Skip generating subjects for clusters with no shared elements",
+                    )
+
+            # Concept Summary Agent section
+            with gr.Group():
+                gr.Markdown("### 📄 Concept Summary Agent")
+                gr.Markdown("Configure the agent that generates [[Concept]] pages for individual concepts")
+
+                with gr.Row():
+                    concept_summary_max_examples_input = gr.Number(
+                        label="Max Examples",
+                        value=initial_config.concept_summary_max_examples,
+                        minimum=0,
+                        maximum=20,
+                        step=1,
+                        info="Maximum number of examples to include in concept summaries",
+                    )
+                    concept_summary_skip_if_no_claims_input = gr.Checkbox(
+                        label="Skip If No Claims",
+                        value=initial_config.concept_summary_skip_if_no_claims,
+                        info="Skip generating summaries for concepts with no associated claims",
+                    )
+
+                with gr.Row():
+                    concept_summary_include_see_also_input = gr.Checkbox(
+                        label="Include See Also",
+                        value=initial_config.concept_summary_include_see_also,
+                        info="Include 'See Also' sections with related concepts",
+                    )
+
         # Save Section
         with gr.Group():
             gr.Markdown("## 💾 Save Configuration")
@@ -1215,6 +1376,15 @@ def create_configuration_panel() -> gr.Blocks:
                     config.trending_topics_percent,
                     config.trending_topics_min_mentions,
                     config.trending_topics_target_file,
+                    # --- Section: Subject Summary & Concept Summary Agents ---
+                    config.subject_summary_similarity_threshold,
+                    config.subject_summary_min_concepts,
+                    config.subject_summary_max_concepts,
+                    config.subject_summary_allow_web_search,
+                    config.subject_summary_skip_if_incoherent,
+                    config.concept_summary_max_examples,
+                    config.concept_summary_skip_if_no_claims,
+                    config.concept_summary_include_see_also,
                     # Finally, the status message
                     "🔄 **Configuration reloaded from file.**",
                 )
@@ -1265,6 +1435,14 @@ def create_configuration_panel() -> gr.Blocks:
                     initial_config.trending_topics_percent,
                     initial_config.trending_topics_min_mentions,
                     initial_config.trending_topics_target_file,
+                    initial_config.subject_summary_similarity_threshold,
+                    initial_config.subject_summary_min_concepts,
+                    initial_config.subject_summary_max_concepts,
+                    initial_config.subject_summary_allow_web_search,
+                    initial_config.subject_summary_skip_if_incoherent,
+                    initial_config.concept_summary_max_examples,
+                    initial_config.concept_summary_skip_if_no_claims,
+                    initial_config.concept_summary_include_see_also,
                     f"❌ **Error reloading configuration:** {str(e)}",
                 )
 
@@ -1305,6 +1483,15 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent_input,
                 trending_topics_min_mentions_input,
                 trending_topics_target_file_input,
+                # Subject Summary & Concept Summary Agent inputs
+                subject_summary_similarity_threshold_input,
+                subject_summary_min_concepts_input,
+                subject_summary_max_concepts_input,
+                subject_summary_allow_web_search_input,
+                subject_summary_skip_if_incoherent_input,
+                concept_summary_max_examples_input,
+                concept_summary_skip_if_no_claims_input,
+                concept_summary_include_see_also_input,
             ],
             outputs=[save_status],
         )
@@ -1346,10 +1533,19 @@ def create_configuration_panel() -> gr.Blocks:
                 trending_topics_percent_input,
                 trending_topics_min_mentions_input,
                 trending_topics_target_file_input,
+                # Subject Summary & Concept Summary Agent inputs
+                subject_summary_similarity_threshold_input,
+                subject_summary_min_concepts_input,
+                subject_summary_max_concepts_input,
+                subject_summary_allow_web_search_input,
+                subject_summary_skip_if_incoherent_input,
+                concept_summary_max_examples_input,
+                concept_summary_skip_if_no_claims_input,
+                concept_summary_include_see_also_input,
                 save_status,
             ],
         )
-    return gr.Blocks.from_config(interface.config, interface.fns)  # type: ignore
+    return interface
 
 
 if __name__ == "__main__":
