@@ -97,9 +97,9 @@ class TrendingTopicsJob:
         query = """
         MATCH (c:Concept)
         OPTIONAL MATCH (c)<-[r_current:SUPPORTS_CONCEPT|MENTIONS_CONCEPT]-(claim_current:Claim)
-        WHERE r_current.classified_at >= datetime($window_start) AND r_current.classified_at <= datetime($current_time)
+        WHERE r_current.classified_at >= $window_start AND r_current.classified_at <= $current_time
         OPTIONAL MATCH (c)<-[r_prev:SUPPORTS_CONCEPT|MENTIONS_CONCEPT]-(claim_prev:Claim)
-        WHERE r_prev.classified_at >= datetime($comparison_window_start) AND r_prev.classified_at < datetime($window_start)
+        WHERE r_prev.classified_at >= $comparison_window_start AND r_prev.classified_at < $window_start
 
         WITH c,
              count(DISTINCT r_current) as current_mentions,

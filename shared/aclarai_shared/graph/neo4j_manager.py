@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable, TransientError
 
-from tests.utils.test_runtime import is_running_under_pytest
+from ..utils.runtime import is_running_under_pytest
 
 from ..config import aclaraiConfig
 from .models import Claim, ClaimInput, Concept, ConceptInput, Sentence, SentenceInput

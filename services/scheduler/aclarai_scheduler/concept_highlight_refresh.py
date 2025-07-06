@@ -10,6 +10,7 @@ import time
 from typing import List, Optional, TypedDict
 
 from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 
 from .top_concepts_job import TopConceptsJob, TopConceptsJobStats
 from .trending_topics_job import TrendingTopicsJob, TrendingTopicsJobStats
@@ -47,8 +48,13 @@ class ConceptHighlightRefreshJob:
         self.logger = logging.getLogger(__name__)
 
         # Initialize the constituent jobs
-        self.top_concepts_job = TopConceptsJob(config)
-        self.trending_topics_job = TrendingTopicsJob(config)
+        # Initialize separate Neo4j managers for each job to avoid interference
+        self.top_concepts_neo4j = Neo4jGraphManager(config)
+        self.trending_topics_neo4j = Neo4jGraphManager(config)
+        
+        # Initialize jobs with their own Neo4j managers
+        self.top_concepts_job = TopConceptsJob(config, neo4j_manager=self.top_concepts_neo4j)
+        self.trending_topics_job = TrendingTopicsJob(config, neo4j_manager=self.trending_topics_neo4j)
 
     def run_job(self) -> ConceptHighlightRefreshJobStats:
         """

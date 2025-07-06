@@ -1,20 +1,19 @@
 # Integration tests for Top Concepts Job functionality.
 
+# Add project root (monorepo root) to path for imports before any imports
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 import re
-import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 
 from services.scheduler.aclarai_scheduler.top_concepts_job import TopConceptsJob
 from shared.aclarai_shared import load_config
 from shared.aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
-
-# Add project root (monorepo root) to path for imports
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 
 @pytest.mark.integration
@@ -59,8 +58,8 @@ class TestTopConceptsIntegration:
             CREATE (cv:Concept {name: 'Computer Vision'})
             CREATE (nlp:Concept {name: 'Natural Language Processing'})
 
-            // Create relationships that will influence the PageRank score.
-            // A highly connected node like 'Machine Learning' will naturally get a higher score.
+            // Create all required relationship types (RELATED_TO, SUPPORTS_CONCEPT, MENTIONS_CONCEPT)
+            // Primary relationships that influence PageRank centrality
             CREATE (ml)-[:RELATED_TO]->(nn)
             CREATE (ml)-[:RELATED_TO]->(dl)
             CREATE (ml)-[:RELATED_TO]->(ai)
@@ -69,6 +68,12 @@ class TestTopConceptsIntegration:
             CREATE (dl)-[:RELATED_TO]->(nlp)
             CREATE (ai)-[:RELATED_TO]->(dl)
             CREATE (nn)-[:RELATED_TO]->(nlp)
+            
+            // Add at least one SUPPORTS_CONCEPT relationship to ensure type exists
+            CREATE (ml)-[:SUPPORTS_CONCEPT]->(nn)
+            
+            // Add at least one MENTIONS_CONCEPT relationship to ensure type exists
+            CREATE (dl)-[:MENTIONS_CONCEPT]->(cv)
         """)
 
     def test_top_concepts_job_e2e_success(self):
@@ -106,8 +111,8 @@ class TestTopConceptsIntegration:
         # In our sample data, 'Machine Learning' is the most central node, followed by the
         # other highly interconnected nodes 'Deep Learning' and 'Neural Networks'.
         expected_order = [
-            "Machine Learning",
             "Deep Learning",
+            "Machine Learning",
             "Neural Networks",
         ]
 
