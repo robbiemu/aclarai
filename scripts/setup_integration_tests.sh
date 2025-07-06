@@ -2,6 +2,9 @@
 
 set -e  # Exit on any error
 
+# Clear any existing environment variables that might interfere
+unset RABBITMQ_PASSWORD RABBITMQ_DEFAULT_PASS
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -38,22 +41,10 @@ sed -i '' "s/RABBITMQ_HOST=rabbitmq/RABBITMQ_HOST=localhost/g" .env
 # Set vault path to local directory
 sed -i '' "s|VAULT_PATH=/vault|VAULT_PATH=$(pwd)/vault|g" .env
 
-# Load variables from .env file
+# Now load the final environment configuration
 set -a
 source .env
 set +a
-
-# Generate and export connection URLs
-export POSTGRES_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}"
-export NEO4J_URL="bolt://localhost:7687"
-
-# Ensure URLs are in .env file
-if ! grep -q "^POSTGRES_URL=" .env; then
-    echo "" >> .env
-    echo "# Integration test configuration" >> .env
-    echo "POSTGRES_URL=${POSTGRES_URL}" >> .env
-    echo "NEO4J_URL=${NEO4J_URL}" >> .env
-fi
 
 # Show what was configured
 echo -e "${GREEN}Environment file updated with secure configuration${NC}"
@@ -74,8 +65,8 @@ NEO4J_BOLT_PORT=${NEO4J_BOLT_PORT:-7687}
 check_service() {
     local service=$1
     local check_command=$2
-    local max_attempts=30
-    local wait_seconds=2
+    local max_attempts=2
+    local wait_seconds=1
 
     echo -e "${YELLOW}Checking $service availability...${NC}"
     
@@ -84,11 +75,13 @@ check_service() {
             echo -e "${GREEN}$service is ready!${NC}"
             return 0
         fi
-        echo -n "."
-        sleep $wait_seconds
+        if [ $i -lt $max_attempts ]; then
+            echo -n "."
+            sleep $wait_seconds
+        fi
     done
     
-    echo -e "\n${RED}$service is not available after $((max_attempts * wait_seconds)) seconds${NC}"
+    echo -e "\n${RED}$service is not available. This usually means the service is not running.${NC}"
     return 1
 }
 
@@ -126,7 +119,7 @@ setup_test_db() {
     docker cp scripts/setup_test_db.sql $PG_CONTAINER:/tmp/setup_test_db.sql
     
     # Execute the setup script inside the container
-    if docker exec $PG_CONTAINER psql -U $POSTGRES_USER -d $POSTGRES_DB -f /tmp/setup_test_db.sql; then
+    if docker exec $PG_CONTAINER psql -q -U $POSTGRES_USER -d $POSTGRES_DB -f /tmp/setup_test_db.sql; then
         echo -e "${GREEN}Test databases setup successfully${NC}"
     else
         echo -e "${RED}Failed to setup test databases${NC}"
@@ -143,17 +136,23 @@ main() {
     echo -e "${YELLOW}Checking required services...${NC}"
     
     check_postgres || {
-        echo -e "${RED}PostgreSQL is not running. Start it with: brew services start postgresql${NC}"
+        echo -e "${RED}PostgreSQL is not running.${NC}"
+        echo -e "${YELLOW}If using Docker:${NC} Run 'docker-compose up -d'"
+        echo -e "${YELLOW}If using local install:${NC} Run 'brew services start postgresql'"
         exit 1
     }
     
     check_neo4j || {
-        echo -e "${RED}Neo4j is not running. Start it with: brew services start neo4j${NC}"
+        echo -e "${RED}Neo4j is not running.${NC}"
+        echo -e "${YELLOW}If using Docker:${NC} Run 'docker-compose up -d'"
+        echo -e "${YELLOW}If using local install:${NC} Run 'brew services start neo4j'"
         exit 1
     }
     
     check_rabbitmq || {
-        echo -e "${RED}RabbitMQ is not running. Start it with: brew services start rabbitmq${NC}"
+        echo -e "${RED}RabbitMQ is not running.${NC}"
+        echo -e "${YELLOW}If using Docker:${NC} Run 'docker-compose up -d'"
+        echo -e "${YELLOW}If using local install:${NC} Run 'brew services start rabbitmq'"
         exit 1
     }
 
