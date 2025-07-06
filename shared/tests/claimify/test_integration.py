@@ -116,13 +116,15 @@ class TestClaimifyGraphIntegration:
     @pytest.fixture(scope="class")
     def integration_graph_manager(self):
         """Fixture to set up a connection to a real Neo4j database for testing."""
-        if not os.getenv("NEO4J_PASSWORD"):
-            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
-
         from aclarai_shared import load_config
         from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 
-        config = load_config(validate=True)
+        try:
+            config = load_config(validate=True)
+            if not config.neo4j.password:
+                pytest.skip("Neo4j password not configured for integration tests")
+        except ValueError as e:
+            pytest.skip(f"Config validation failed: {str(e)}")
         manager = Neo4jGraphManager(config=config)
         manager.setup_schema()
         # Clean up any existing test data

@@ -14,6 +14,7 @@ from unittest.mock import Mock
 import pika
 import pytest
 from aclarai_vault_watcher.main import VaultWatcherService
+from aclarai_shared import aclaraiConfig, load_config
 
 
 @pytest.mark.integration
@@ -21,41 +22,42 @@ class TestRabbitMQIntegration:
     """End-to-end tests for RabbitMQ message passing."""
 
     @pytest.fixture
-    def rabbitmq_connection(self):
-        """Fixture for RabbitMQ connection - requires live RabbitMQ instance."""
-        try:
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host="localhost", port=5672)
+    def config(self):
+        """Fixture that provides the aclarai config."""
+        return load_config(validate=False)  # Validation not needed for tests
+        
+    @pytest.fixture
+    def rabbitmq_connection(self, config):
+        """Fixture for RabbitMQ connection using Docker service."""
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=config.rabbitmq_host,
+                port=config.rabbitmq_port,
+                credentials=pika.PlainCredentials(
+                    config.rabbitmq_user,
+                    config.rabbitmq_password
+                )
             )
-            channel = connection.channel()
-            # Ensure the test queue exists
-            queue_name = "test_aclarai_dirty_blocks"
-            channel.queue_declare(queue=queue_name, durable=True)
-            yield connection, channel, queue_name
-            # Cleanup: purge test queue and close connection
-            channel.queue_purge(queue=queue_name)
-            connection.close()
-        except pika.exceptions.AMQPConnectionError:
-            pytest.skip("RabbitMQ not available for integration testing")
+        )
+        channel = connection.channel()
+        # Ensure the test queue exists
+        queue_name = "test_aclarai_dirty_blocks"
+        channel.queue_declare(queue=queue_name, durable=True)
+        yield connection, channel, queue_name
+        # Cleanup: purge test queue and close connection
+        channel.queue_purge(queue=queue_name)
+        connection.close()
 
     @pytest.fixture
-    def vault_watcher_service(self, rabbitmq_connection):
+    def vault_watcher_service(self, rabbitmq_connection, config):
         """Fixture that provides a vault watcher service with proper cleanup."""
         connection, channel, queue_name = rabbitmq_connection
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create mock config for testing
-            mock_config = Mock()
-            mock_config.vault_path = str(temp_dir)
-            mock_config.vault_watcher = Mock()
-            mock_config.vault_watcher.rabbitmq = Mock()
-            mock_config.vault_watcher.rabbitmq.queue_name = queue_name
-            mock_config.vault_watcher.rabbitmq.connection_timeout = 10
-            mock_config.vault_watcher.rabbitmq.retry_attempts = 2
-            mock_config.vault_watcher.rabbitmq.retry_delay = 1
-            mock_config.vault_watcher.watch = Mock()
-            mock_config.vault_watcher.watch.batch_interval = 0.1
-            mock_config.vault_watcher.watch.max_batch_size = 5
-            service = VaultWatcherService(mock_config)
+            # Start with the real config and just override what we need for testing
+            config.vault_path = temp_dir
+            config.paths.vault = temp_dir
+            config.vault_watcher.queue_name = queue_name
+            service = VaultWatcherService(config)
 
             yield service, temp_dir, queue_name
 
