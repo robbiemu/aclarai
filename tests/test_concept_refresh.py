@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 from aclarai_scheduler.concept_refresh import ConceptEmbeddingRefreshJob
+from aclarai_shared.config import aclaraiConfig, load_config
 
 
 class MockVectorStoreForConcepts:
@@ -445,7 +446,7 @@ Deep learning models consist of:
             from aclarai_shared.config import aclaraiConfig
 
             # Create config pointing to our temporary vault
-            config = aclaraiConfig()
+            config = load_config(validate=True)  # This will load from .env
             config.vault_path = str(vault_path)
             # Create mock embedding generator to avoid HuggingFace dependency
             mock_embedding_gen = Mock()
