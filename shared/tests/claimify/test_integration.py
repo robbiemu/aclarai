@@ -129,11 +129,11 @@ class TestClaimifyGraphIntegration:
         manager.setup_schema()
         # Clean up any existing test data
         with manager.session() as session:
-            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n", allow_dangerous_operations=True)
         yield manager
         # Clean up after tests
         with manager.session() as session:
-            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+            session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n", allow_dangerous_operations=True)
         manager.close()
 
     @pytest.fixture

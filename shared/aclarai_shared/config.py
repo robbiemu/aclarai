@@ -47,6 +47,18 @@ class ProcessingConfig:
     batch_sizes: Dict[str, Any] = field(default_factory=dict)
     retries: Dict[str, Any] = field(default_factory=dict)
 
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a configuration value by key with fallback to default."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        """Allow dictionary-style access to configuration values."""
+        return getattr(self, key)
+
+    def __contains__(self, key: str) -> bool:
+        """Check if a configuration key exists."""
+        return hasattr(self, key)
+
 
 @dataclass
 class EmbeddingConfig:

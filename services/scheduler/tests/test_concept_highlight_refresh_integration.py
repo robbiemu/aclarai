@@ -35,7 +35,7 @@ class TestConceptHighlightRefreshIntegration:
         self.neo4j_manager = Neo4jGraphManager(self.config)
 
         # Clear Neo4j before each test to ensure a clean state
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
 
         # Create sample data for the success test case
         self._create_sample_neo4j_data()
@@ -44,7 +44,7 @@ class TestConceptHighlightRefreshIntegration:
         """Clean up temporary directory and clear Neo4j."""
         self.temp_dir.cleanup()
         # Clear Neo4j after each test
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
         self.neo4j_manager.close()
 
     def _create_sample_neo4j_data(self):

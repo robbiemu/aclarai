@@ -35,7 +35,7 @@ class TestTopConceptsIntegration:
         self.neo4j_manager = Neo4jGraphManager(self.config)
 
         # Clear Neo4j before each test to ensure a clean state
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
 
         # Create sample data for the success test case
         self._create_sample_neo4j_data()
@@ -44,7 +44,7 @@ class TestTopConceptsIntegration:
         """Clean up temporary directory and clear Neo4j."""
         self.temp_dir.cleanup()
         # Clear Neo4j after each test
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
         self.neo4j_manager.close()
 
     def _create_sample_neo4j_data(self):
@@ -138,7 +138,7 @@ class TestTopConceptsIntegration:
     def test_top_concepts_job_no_concepts(self):
         """Test end-to-end execution when no concepts are found in Neo4j."""
         # Clear all data to ensure no concepts are present for this test
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
 
         # Initialize and run the job
         job = TopConceptsJob(self.config, neo4j_manager=self.neo4j_manager)

@@ -85,7 +85,7 @@ class TestNeo4jManagerIntegration:
         config = load_config(validate=True)
         manager = Neo4jGraphManager(config=config)
         with manager.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
+            session.run("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
         yield manager
         manager.close()
 
