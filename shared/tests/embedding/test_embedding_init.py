@@ -80,16 +80,16 @@ class TestEmbeddingInitFile:
     @pytest.mark.integration
     def test_embedding_pipeline_init_integration(self):
         """Test EmbeddingPipeline initialization with configurable dependencies (integration test)."""
-        
+
         # Load config from environment
         config = load_config(validate=True)
-        
+
         # Initialize vector store (this will create table if needed)
         try:
             vector_store = aclaraiVectorStore(config)
             assert vector_store is not None
             assert vector_store.config.embedding.collection_name == "utterances"
-            
+
             # Get metrics to verify connection
             metrics = vector_store.get_store_metrics()
             assert metrics is not None
@@ -111,13 +111,13 @@ class TestEmbeddingInitFile:
     @pytest.mark.integration
     def test_embedding_pipeline_init_no_config_integration(self):
         """Test EmbeddingPipeline initialization without config (integration test)."""
-        
+
         # Initialize vector store with default config
         try:
             vector_store = aclaraiVectorStore()  # This will load default config
             assert vector_store is not None
             assert vector_store.config.embedding.collection_name == "utterances"
-            
+
             # Get metrics to verify connection
             metrics = vector_store.get_store_metrics()
             assert metrics is not None
@@ -140,15 +140,15 @@ class TestEmbeddingInitFile:
     @pytest.mark.integration
     def test_process_tier1_content_empty_integration(self):
         """Test processing empty tier1 content (integration test)."""
-        
+
         # Load config and initialize pipeline
         config = load_config(validate=True)
         pipeline = EmbeddingPipeline(config)
-        
+
         # Test with empty content using process_single_block
         empty_content = ""
         empty_id = "test_empty_123"
-        
+
         # Process should handle empty content gracefully
         try:
             result = pipeline.process_single_block(empty_content, empty_id)

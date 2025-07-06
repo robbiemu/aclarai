@@ -71,19 +71,21 @@ class TestEmbeddingPipeline:
         """Test EmbeddingPipeline initialization with config (integration test)."""
         # Load config from environment
         config = load_config(validate=True)
-        
+
         # Initialize pipeline with config
         try:
             pipeline = EmbeddingPipeline(config)
             assert pipeline is not None
             assert pipeline.config == config
-            
+
             # Verify components are initialized
             assert pipeline.chunker is not None
             assert pipeline.embedding_generator is not None
             assert pipeline.vector_store is not None
-            assert pipeline.vector_store.config.embedding.collection_name == "utterances"
-            
+            assert (
+                pipeline.vector_store.config.embedding.collection_name == "utterances"
+            )
+
             # Verify database connection via metrics
             metrics = pipeline.vector_store.get_store_metrics()
             assert metrics is not None
@@ -104,13 +106,15 @@ class TestEmbeddingPipeline:
             pipeline = EmbeddingPipeline()
             assert pipeline is not None
             assert pipeline.config is not None
-            
+
             # Verify components are initialized
             assert pipeline.chunker is not None
             assert pipeline.embedding_generator is not None
             assert pipeline.vector_store is not None
-            assert pipeline.vector_store.config.embedding.collection_name == "utterances"
-            
+            assert (
+                pipeline.vector_store.config.embedding.collection_name == "utterances"
+            )
+
             # Verify database connection via metrics
             metrics = pipeline.vector_store.get_store_metrics()
             assert metrics is not None
@@ -129,10 +133,10 @@ class TestEmbeddingPipeline:
         # Load config and initialize pipeline
         config = load_config(validate=True)
         pipeline = EmbeddingPipeline(config)
-        
+
         # Test processing empty content
         empty_content = ""
-        
+
         # Process should handle empty content gracefully
         try:
             result = pipeline.process_tier1_content(empty_content)

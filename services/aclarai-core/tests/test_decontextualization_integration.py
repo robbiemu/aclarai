@@ -84,18 +84,26 @@ def integration_neo4j_driver():
 
     # Clean up before tests
     with driver.session() as session:
-        session.run("MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n", allow_dangerous_operations=True)
         session.run(
-            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n", allow_dangerous_operations=True
+            "MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
+        )
+        session.run(
+            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
         )
 
     yield driver
 
     # Clean up after tests
     with driver.session() as session:
-        session.run("MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n", allow_dangerous_operations=True)
         session.run(
-            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n", allow_dangerous_operations=True
+            "MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
+        )
+        session.run(
+            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
         )
     driver.close()
 

@@ -76,11 +76,11 @@ class aclaraiVectorStore(VectorStore):
             pool_recycle=3600,
             echo=config.debug,
             connect_args={
-                'host': config.postgres.host,
-                'port': config.postgres.port,
-                'user': config.postgres.user,
-                'password': config.postgres.password
-            }
+                "host": config.postgres.host,
+                "port": config.postgres.port,
+                "user": config.postgres.user,
+                "password": config.postgres.password,
+            },
         )
         # Initialize PGVectorStore
         self.vector_store = self._initialize_pgvector_store()

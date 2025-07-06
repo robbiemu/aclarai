@@ -6,7 +6,6 @@ from docs/arch/idea-neo4J-ineteraction.md.
 """
 
 import logging
-import sys
 import time
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
@@ -14,9 +13,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable, TransientError
 
-from ..utils.runtime import is_running_under_pytest
-
 from ..config import aclaraiConfig
+from ..utils.runtime import is_running_under_pytest
 from .models import Claim, ClaimInput, Concept, ConceptInput, Sentence, SentenceInput
 
 logger = logging.getLogger(__name__)

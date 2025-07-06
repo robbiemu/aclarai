@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 from aclarai_scheduler.concept_refresh import ConceptEmbeddingRefreshJob
-from aclarai_shared.config import aclaraiConfig, load_config
+from aclarai_shared.config import load_config
 
 
 class MockVectorStoreForConcepts:
@@ -442,8 +442,6 @@ Deep learning models consist of:
         # but real Neo4j and PostgreSQL services
         try:
             from unittest.mock import Mock
-
-            from aclarai_shared.config import aclaraiConfig
 
             # Create config pointing to our temporary vault
             config = load_config(validate=True)  # This will load from .env

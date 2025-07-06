@@ -11,6 +11,7 @@ from aclarai_shared.plugin_manager import ImportOrchestrator, ImportResult
 from aclarai_shared.plugin_manager import ImportStatus as PluginImportStatus
 
 from .config import config
+from .config_panel import create_configuration_panel
 from .review_panel import create_review_panel
 
 # Configure structured logging as per docs/arch/on-error-handling-and-resilience.md
@@ -596,7 +597,7 @@ def create_complete_interface() -> gr.Blocks:
                 into structured knowledge graphs. Use the tabs below to access different functionality."""
             )
             with gr.Tabs():
-                # Import panel content (existing functionality)
+                # Import panel content (This section remains unchanged)
                 with gr.Tab("📥 Import", id="import_tab"), gr.Group():
                     # Session-based state management for import status
                     import_status_state = gr.State(ImportStatusTracker())
@@ -633,7 +634,7 @@ def create_complete_interface() -> gr.Blocks:
                             label="Summary",
                         )
 
-                    # Event handlers with error handling and state management
+                    # Event handlers for the import tab
                     def safe_real_plugin_orchestrator(
                         file_input_value, import_status
                     ) -> Tuple[str, str, ImportStatusTracker]:
@@ -695,7 +696,6 @@ def create_complete_interface() -> gr.Blocks:
                             import_status_state,
                         ],
                     )
-                    # Auto-process on file upload
                     file_input.change(
                         fn=safe_real_plugin_orchestrator,
                         inputs=[file_input, import_status_state],
@@ -705,7 +705,6 @@ def create_complete_interface() -> gr.Blocks:
                             import_status_state,
                         ],
                     )
-                    # Clear queue handler
                     clear_btn.click(
                         fn=safe_clear_import_queue,
                         inputs=[import_status_state],
@@ -715,505 +714,17 @@ def create_complete_interface() -> gr.Blocks:
                             import_status_state,
                         ],
                     )
+
+                # Review Panel Tab (Unchanged)
                 with gr.Tab("📊 Review", id="review_tab"):
-                    # Embed the Review Panel
                     create_review_panel()
 
+                # Configuration Panel Tab (Drastically Simplified)
                 with gr.Tab("⚙️ Configuration", id="config_tab"):
-                    # Configuration panel - directly embed the components
-                    from .config_panel import (
-                        ConfigurationManager,
-                        validate_model_name,
-                        validate_threshold,
-                        validate_window_param,
-                    )
+                    # All the logic is now encapsulated in this single function call.
+                    # No more duplicated code.
+                    create_configuration_panel()
 
-                    # Initialize configuration manager
-                    config_manager = ConfigurationManager()
-                    gr.Markdown("## ⚙️ Configuration Panel")
-                    gr.Markdown("""
-                    Configure aclarai's behavior by setting model selections, embedding models,
-                    processing thresholds, and context window parameters. Changes are automatically
-                    saved to your configuration file.
-                    """)
-                    # Load current configuration
-                    current_config = config_manager.load_config()
-                    # Model & Embedding Settings Section
-                    with gr.Group():
-                        gr.Markdown("### 🤖 Model & Embedding Settings")
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Markdown("**Claimify Models**")
-                                claimify_default_input = gr.Textbox(
-                                    label="Default Model",
-                                    value=current_config.get("model", {})
-                                    .get("claimify", {})
-                                    .get("default", ""),
-                                    placeholder="e.g., gpt-3.5-turbo",
-                                    info="Base model for all Claimify stages",
-                                )
-                                claimify_selection_input = gr.Textbox(
-                                    label="Selection Model (Optional)",
-                                    value=current_config.get("model", {})
-                                    .get("claimify", {})
-                                    .get("selection", "")
-                                    or "",
-                                    placeholder="e.g., claude-3-opus",
-                                    info="Override for claim selection",
-                                )
-                                claimify_disambiguation_input = gr.Textbox(
-                                    label="Disambiguation Model (Optional)",
-                                    value=current_config.get("model", {})
-                                    .get("claimify", {})
-                                    .get("disambiguation", "")
-                                    or "",
-                                    placeholder="e.g., mistral-7b",
-                                    info="Override for ambiguity resolution",
-                                )
-                                claimify_decomposition_input = gr.Textbox(
-                                    label="Decomposition Model (Optional)",
-                                    value=current_config.get("model", {})
-                                    .get("claimify", {})
-                                    .get("decomposition", "")
-                                    or "",
-                                    placeholder="e.g., gpt-4",
-                                    info="Override for claim decomposition",
-                                )
-                            with gr.Column():
-                                gr.Markdown("**Agent Models**")
-                                concept_linker_input = gr.Textbox(
-                                    label="Concept Linker",
-                                    value=current_config.get("model", {}).get(
-                                        "concept_linker", ""
-                                    ),
-                                    placeholder="e.g., gpt-3.5-turbo",
-                                    info="Links claims to concepts",
-                                )
-                                concept_summary_input = gr.Textbox(
-                                    label="Concept Summary",
-                                    value=current_config.get("model", {}).get(
-                                        "concept_summary", ""
-                                    ),
-                                    placeholder="e.g., gpt-4",
-                                    info="Generates [[Concept]] pages",
-                                )
-                                subject_summary_input = gr.Textbox(
-                                    label="Subject Summary",
-                                    value=current_config.get("model", {}).get(
-                                        "subject_summary", ""
-                                    ),
-                                    placeholder="e.g., claude-3-sonnet",
-                                    info="Generates [[Subject:XYZ]] pages",
-                                )
-                                trending_concepts_agent_input = gr.Textbox(
-                                    label="Trending Concepts Agent",
-                                    value=current_config.get("model", {}).get(
-                                        "trending_concepts_agent", ""
-                                    ),
-                                    placeholder="e.g., gpt-3.5-turbo",
-                                    info="Writes trending topic summaries",
-                                )
-                                fallback_plugin_input = gr.Textbox(
-                                    label="Fallback Plugin",
-                                    value=current_config.get("model", {}).get(
-                                        "fallback_plugin", ""
-                                    ),
-                                    placeholder="e.g., gpt-3.5-turbo",
-                                    info="Used when format detection fails",
-                                )
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Markdown("**Embedding Models**")
-                                utterance_embedding_input = gr.Textbox(
-                                    label="Utterance Embeddings",
-                                    value=current_config.get("embedding", {}).get(
-                                        "utterance", ""
-                                    ),
-                                    placeholder="e.g., text-embedding-3-small",
-                                    info="For Tier 1 conversation blocks",
-                                )
-                                concept_embedding_input = gr.Textbox(
-                                    label="Concept Embeddings",
-                                    value=current_config.get("embedding", {}).get(
-                                        "concept", ""
-                                    ),
-                                    placeholder="e.g., sentence-transformers/all-MiniLM-L6-v2",
-                                    info="For Tier 3 concept files",
-                                )
-                            with gr.Column():
-                                summary_embedding_input = gr.Textbox(
-                                    label="Summary Embeddings",
-                                    value=current_config.get("embedding", {}).get(
-                                        "summary", ""
-                                    ),
-                                    placeholder="e.g., text-embedding-3-small",
-                                    info="For Tier 2 summaries",
-                                )
-                                fallback_embedding_input = gr.Textbox(
-                                    label="Fallback Embeddings",
-                                    value=current_config.get("embedding", {}).get(
-                                        "fallback", ""
-                                    ),
-                                    placeholder="e.g., text-embedding-3-small",
-                                    info="Used when other configs fail",
-                                )
-                    # Thresholds & Parameters Section
-                    with gr.Group():
-                        gr.Markdown("### 📏 Thresholds & Parameters")
-                        with gr.Row():
-                            with gr.Column():
-                                gr.Markdown("**Similarity Thresholds**")
-                                concept_merge_input = gr.Number(
-                                    label="Concept Merge Threshold",
-                                    value=current_config.get("threshold", {}).get(
-                                        "concept_merge", 0.90
-                                    ),
-                                    minimum=0.0,
-                                    maximum=1.0,
-                                    step=0.01,
-                                    info="Cosine similarity required to merge concept candidates (0.0-1.0)",
-                                )
-                                claim_link_strength_input = gr.Number(
-                                    label="Claim Link Strength",
-                                    value=current_config.get("threshold", {}).get(
-                                        "claim_link_strength", 0.60
-                                    ),
-                                    minimum=0.0,
-                                    maximum=1.0,
-                                    step=0.01,
-                                    info="Minimum strength to create claim→concept edges (0.0-1.0)",
-                                )
-                            with gr.Column():
-                                gr.Markdown("**Context Window Parameters**")
-                                window_p_input = gr.Number(
-                                    label="Previous Sentences (p)",
-                                    value=current_config.get("window", {})
-                                    .get("claimify", {})
-                                    .get("p", 3),
-                                    minimum=0,
-                                    maximum=10,
-                                    step=1,
-                                    info="How many sentences before target sentence to include (0-10)",
-                                )
-                                window_f_input = gr.Number(
-                                    label="Following Sentences (f)",
-                                    value=current_config.get("window", {})
-                                    .get("claimify", {})
-                                    .get("f", 1),
-                                    minimum=0,
-                                    maximum=10,
-                                    step=1,
-                                    info="How many sentences after target sentence to include (0-10)",
-                                )
-                    # Control Buttons
-                    with gr.Row():
-                        save_btn = gr.Button(
-                            "💾 Save Changes", variant="primary", size="lg"
-                        )
-                        reload_btn = gr.Button(
-                            "🔄 Reload from File", variant="secondary"
-                        )
-                    # Status Display
-                    save_status = gr.Markdown("Ready to configure settings.")
-
-                    def save_configuration(*args) -> str:
-                        """Save the configuration with validation."""
-                        try:
-                            # Unpack arguments in the same order as inputs
-                            (
-                                claimify_default,
-                                claimify_selection,
-                                claimify_disambiguation,
-                                claimify_decomposition,
-                                concept_linker,
-                                concept_summary,
-                                subject_summary,
-                                trending_concepts_agent,
-                                fallback_plugin,
-                                utterance_embedding,
-                                concept_embedding,
-                                summary_embedding,
-                                fallback_embedding,
-                                concept_merge,
-                                claim_link_strength,
-                                window_p,
-                                window_f,
-                            ) = args
-                            # Validate inputs
-                            validation_errors = []
-                            # Validate required model names
-                            for name, value in [
-                                ("Claimify Default", claimify_default),
-                                ("Concept Linker", concept_linker),
-                                ("Concept Summary", concept_summary),
-                                ("Subject Summary", subject_summary),
-                                ("Trending Concepts Agent", trending_concepts_agent),
-                                ("Fallback Plugin", fallback_plugin),
-                                ("Utterance Embedding", utterance_embedding),
-                                ("Concept Embedding", concept_embedding),
-                                ("Summary Embedding", summary_embedding),
-                                ("Fallback Embedding", fallback_embedding),
-                            ]:
-                                if value and value.strip():
-                                    is_valid, error = validate_model_name(value)
-                                    if not is_valid:
-                                        validation_errors.append(f"{name}: {error}")
-                            # Validate optional model names
-                            for name, value in [
-                                ("Claimify Selection", claimify_selection),
-                                ("Claimify Disambiguation", claimify_disambiguation),
-                                ("Claimify Decomposition", claimify_decomposition),
-                            ]:
-                                if value and value.strip():
-                                    is_valid, error = validate_model_name(value)
-                                    if not is_valid:
-                                        validation_errors.append(f"{name}: {error}")
-                            # Validate thresholds
-                            for name, value in [
-                                ("Concept Merge Threshold", concept_merge),
-                                ("Claim Link Strength", claim_link_strength),
-                            ]:
-                                is_valid, error = validate_threshold(value)
-                                if not is_valid:
-                                    validation_errors.append(f"{name}: {error}")
-                            # Validate window parameters
-                            for name, value in [
-                                ("Previous Sentences (p)", window_p),
-                                ("Following Sentences (f)", window_f),
-                            ]:
-                                is_valid, error = validate_window_param(value)
-                                if not is_valid:
-                                    validation_errors.append(f"{name}: {error}")
-                            if validation_errors:
-                                error_msg = "❌ **Validation Errors:**\n" + "\n".join(
-                                    f"- {error}" for error in validation_errors
-                                )
-                                return error_msg
-                            # Build configuration dictionary
-                            new_config = {
-                                "model": {
-                                    "claimify": {
-                                        "default": claimify_default,
-                                    },
-                                    "concept_linker": concept_linker,
-                                    "concept_summary": concept_summary,
-                                    "subject_summary": subject_summary,
-                                    "trending_concepts_agent": trending_concepts_agent,
-                                    "fallback_plugin": fallback_plugin,
-                                },
-                                "embedding": {
-                                    "utterance": utterance_embedding,
-                                    "concept": concept_embedding,
-                                    "summary": summary_embedding,
-                                    "fallback": fallback_embedding,
-                                },
-                                "threshold": {
-                                    "concept_merge": concept_merge,
-                                    "claim_link_strength": claim_link_strength,
-                                },
-                                "window": {
-                                    "claimify": {
-                                        "p": int(window_p),
-                                        "f": int(window_f),
-                                    }
-                                },
-                            }
-                            # Add optional claimify models if specified
-                            if claimify_selection and claimify_selection.strip():
-                                new_config["model"]["claimify"]["selection"] = (
-                                    claimify_selection
-                                )
-                            if (
-                                claimify_disambiguation
-                                and claimify_disambiguation.strip()
-                            ):
-                                new_config["model"]["claimify"]["disambiguation"] = (
-                                    claimify_disambiguation
-                                )
-                            if (
-                                claimify_decomposition
-                                and claimify_decomposition.strip()
-                            ):
-                                new_config["model"]["claimify"]["decomposition"] = (
-                                    claimify_decomposition
-                                )
-                            # Save configuration
-                            if config_manager.save_config(new_config):
-                                return "✅ **Configuration saved successfully!**\n\nChanges have been written to `settings/aclarai.config.yaml`."
-                            else:
-                                return "❌ **Failed to save configuration.** Please check file permissions and try again."
-                        except Exception as e:
-                            logger.error(
-                                "Configuration save failed",
-                                extra={
-                                    "service": "aclarai-ui",
-                                    "component": "config_panel",
-                                    "action": "save_config",
-                                    "error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                            )
-                            return f"❌ **Error saving configuration:** {str(e)}"
-
-                    def reload_configuration() -> Tuple[
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        str,
-                        float,
-                        float,
-                        int,
-                        int,
-                        str,
-                    ]:
-                        """Reload configuration from file."""
-                        try:
-                            current_config = config_manager.load_config()
-                            return (
-                                current_config.get("model", {})
-                                .get("claimify", {})
-                                .get("default", ""),
-                                current_config.get("model", {})
-                                .get("claimify", {})
-                                .get("selection", "")
-                                or "",
-                                current_config.get("model", {})
-                                .get("claimify", {})
-                                .get("disambiguation", "")
-                                or "",
-                                current_config.get("model", {})
-                                .get("claimify", {})
-                                .get("decomposition", "")
-                                or "",
-                                current_config.get("model", {}).get(
-                                    "concept_linker", ""
-                                ),
-                                current_config.get("model", {}).get(
-                                    "concept_summary", ""
-                                ),
-                                current_config.get("model", {}).get(
-                                    "subject_summary", ""
-                                ),
-                                current_config.get("model", {}).get(
-                                    "trending_concepts_agent", ""
-                                ),
-                                current_config.get("model", {}).get(
-                                    "fallback_plugin", ""
-                                ),
-                                current_config.get("embedding", {}).get(
-                                    "utterance", ""
-                                ),
-                                current_config.get("embedding", {}).get("concept", ""),
-                                current_config.get("embedding", {}).get("summary", ""),
-                                current_config.get("embedding", {}).get("fallback", ""),
-                                current_config.get("threshold", {}).get(
-                                    "concept_merge", 0.90
-                                ),
-                                current_config.get("threshold", {}).get(
-                                    "claim_link_strength", 0.60
-                                ),
-                                current_config.get("window", {})
-                                .get("claimify", {})
-                                .get("p", 3),
-                                current_config.get("window", {})
-                                .get("claimify", {})
-                                .get("f", 1),
-                                "🔄 **Configuration reloaded from file.**",
-                            )
-                        except Exception as e:
-                            logger.error(
-                                "Configuration reload failed",
-                                extra={
-                                    "service": "aclarai-ui",
-                                    "component": "config_panel",
-                                    "action": "reload_config",
-                                    "error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                            )
-                            # Return current values unchanged, just update status
-                            return (
-                                *[
-                                    comp.value
-                                    for comp in [
-                                        claimify_default_input,
-                                        claimify_selection_input,
-                                        claimify_disambiguation_input,
-                                        claimify_decomposition_input,
-                                        concept_linker_input,
-                                        concept_summary_input,
-                                        subject_summary_input,
-                                        trending_concepts_agent_input,
-                                        fallback_plugin_input,
-                                        utterance_embedding_input,
-                                        concept_embedding_input,
-                                        summary_embedding_input,
-                                        fallback_embedding_input,
-                                        concept_merge_input,
-                                        claim_link_strength_input,
-                                        window_p_input,
-                                        window_f_input,
-                                    ]
-                                ],
-                                f"❌ **Error reloading configuration:** {str(e)}",
-                            )
-
-                    # Wire up event handlers
-                    save_btn.click(
-                        fn=save_configuration,
-                        inputs=[
-                            claimify_default_input,
-                            claimify_selection_input,
-                            claimify_disambiguation_input,
-                            claimify_decomposition_input,
-                            concept_linker_input,
-                            concept_summary_input,
-                            subject_summary_input,
-                            trending_concepts_agent_input,
-                            fallback_plugin_input,
-                            utterance_embedding_input,
-                            concept_embedding_input,
-                            summary_embedding_input,
-                            fallback_embedding_input,
-                            concept_merge_input,
-                            claim_link_strength_input,
-                            window_p_input,
-                            window_f_input,
-                        ],
-                        outputs=[save_status],
-                    )
-                    reload_btn.click(
-                        fn=reload_configuration,
-                        outputs=[
-                            claimify_default_input,
-                            claimify_selection_input,
-                            claimify_disambiguation_input,
-                            claimify_decomposition_input,
-                            concept_linker_input,
-                            concept_summary_input,
-                            subject_summary_input,
-                            trending_concepts_agent_input,
-                            fallback_plugin_input,
-                            utterance_embedding_input,
-                            concept_embedding_input,
-                            summary_embedding_input,
-                            fallback_embedding_input,
-                            concept_merge_input,
-                            claim_link_strength_input,
-                            window_p_input,
-                            window_f_input,
-                            save_status,
-                        ],
-                    )
         logger.info(
             "Complete interface created successfully",
             extra={
@@ -1234,7 +745,7 @@ def create_complete_interface() -> gr.Blocks:
                 "error_type": type(e).__name__,
             },
         )
-        raise  # Always raise, never return None or Any
+        raise
 
 
 def main():
@@ -1244,9 +755,8 @@ def main():
             "Starting aclarai UI service",
             extra={"service": "aclarai-ui", "component": "main", "action": "startup"},
         )
-        # For now, we'll launch the import interface as the main interface
-        # The configuration panel can be accessed separately
-        interface = create_import_interface()
+        # Launch the complete interface with all tabs
+        interface = create_complete_interface()
         logger.info(
             "Launching Gradio interface",
             extra={

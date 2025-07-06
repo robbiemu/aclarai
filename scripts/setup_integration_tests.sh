@@ -65,8 +65,8 @@ NEO4J_BOLT_PORT=${NEO4J_BOLT_PORT:-7687}
 check_service() {
     local service=$1
     local check_command=$2
-    local max_attempts=2
-    local wait_seconds=1
+    local max_attempts=$3
+    local wait_seconds=$4
 
     echo -e "${YELLOW}Checking $service availability...${NC}"
     
@@ -87,21 +87,48 @@ check_service() {
 
 # Check if PostgreSQL is running
 check_postgres() {
-    check_service "PostgreSQL" "PGPASSWORD=$PG_PASSWORD pg_isready -h $PG_HOST -p $PG_PORT -U $PG_USER"
+    check_service "PostgreSQL" "PGPASSWORD=$PG_PASSWORD pg_isready -h $PG_HOST -p $PG_PORT -U $PG_USER" 2 1
 }
 
 # Check if Neo4j is running
 check_neo4j() {
     # Check both HTTP and Bolt ports
-    check_service "Neo4j HTTP" "curl -s http://$NEO4J_HOST:$NEO4J_HTTP_PORT/ > /dev/null" && 
-    check_service "Neo4j Bolt" "nc -z $NEO4J_HOST $NEO4J_BOLT_PORT"
+    check_service "Neo4j HTTP" "curl -s http://$NEO4J_HOST:$NEO4J_HTTP_PORT/ > /dev/null" 2 1 && 
+    check_service "Neo4j Bolt" "nc -z $NEO4J_HOST $NEO4J_BOLT_PORT" 2 1
 }
 
 # Check if RabbitMQ is running
 check_rabbitmq() {
     # Check both AMQP and management ports
-    check_service "RabbitMQ AMQP" "nc -z $RABBITMQ_HOST $RABBITMQ_PORT" &&
-    check_service "RabbitMQ Management" "nc -z $RABBITMQ_HOST $RABBITMQ_MANAGEMENT_PORT"
+    check_service "RabbitMQ AMQP" "nc -z $RABBITMQ_HOST $RABBITMQ_PORT" 2 1 &&
+    check_service "RabbitMQ Management" "nc -z $RABBITMQ_HOST $RABBITMQ_MANAGEMENT_PORT" 2 1
+}
+
+# Check if Gradio UI is running
+check_gradio() {
+    local gradio_host=${GRADIO_HOST:-localhost}
+    local gradio_port=${GRADIO_PORT:-7860}
+    check_service "Gradio UI" "curl -s http://$gradio_host:$gradio_port/ > /dev/null" 30 2
+}
+
+# Check if Playwright browsers are installed
+check_playwright_browsers() {
+    echo -e "${YELLOW}Checking Playwright browsers...${NC}"
+    
+    # Run the list command and check if browsers are listed
+    if python -m playwright install --list 2>/dev/null | grep -q "Browsers:"; then
+        echo -e "${GREEN}Playwright browsers are installed${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}Playwright browsers not found. Installing browsers...${NC}"
+        if python -m playwright install; then
+            echo -e "${GREEN}Playwright browsers installed successfully${NC}"
+            return 0
+        else
+            echo -e "${RED}Failed to install Playwright browsers${NC}"
+            return 1
+        fi
+    fi
 }
 
 # Setup test databases using docker exec
@@ -156,6 +183,18 @@ main() {
         exit 1
     }
 
+    check_gradio || {
+        echo -e "${RED}Gradio UI is not running.${NC}"
+        echo -e "${YELLOW}If using Docker:${NC} Run 'docker-compose up -d aclarai-ui'"
+        exit 1
+    }
+
+    # Check and install Playwright browsers if needed
+    check_playwright_browsers || {
+        echo -e "${RED}Failed to setup Playwright browsers.${NC}"
+        exit 1
+    }
+
     # Setup test environment
     setup_test_db
 
@@ -165,6 +204,7 @@ echo -e "\n${YELLOW}Service Status:${NC}"
 echo -e "PostgreSQL:  ${GREEN}Running on localhost:5432${NC}"
 echo -e "Neo4j:      ${GREEN}Running on localhost:7474/7687${NC}"
 echo -e "RabbitMQ:   ${GREEN}Running on localhost:5672/15672${NC}"
+echo -e "Gradio UI:  ${GREEN}Running on localhost:7860${NC}"
 
 echo -e "\n${YELLOW}Environment Configuration:${NC}"
 echo -e "Database:   ${GREEN}${POSTGRES_URL}${NC}"

@@ -13,8 +13,8 @@ from unittest.mock import Mock
 
 import pika
 import pytest
+from aclarai_shared import load_config
 from aclarai_vault_watcher.main import VaultWatcherService
-from aclarai_shared import aclaraiConfig, load_config
 
 
 @pytest.mark.integration
@@ -25,7 +25,7 @@ class TestRabbitMQIntegration:
     def config(self):
         """Fixture that provides the aclarai config."""
         return load_config(validate=False)  # Validation not needed for tests
-        
+
     @pytest.fixture
     def rabbitmq_connection(self, config):
         """Fixture for RabbitMQ connection using Docker service."""
@@ -34,9 +34,8 @@ class TestRabbitMQIntegration:
                 host=config.rabbitmq_host,
                 port=config.rabbitmq_port,
                 credentials=pika.PlainCredentials(
-                    config.rabbitmq_user,
-                    config.rabbitmq_password
-                )
+                    config.rabbitmq_user, config.rabbitmq_password
+                ),
             )
         )
         channel = connection.channel()

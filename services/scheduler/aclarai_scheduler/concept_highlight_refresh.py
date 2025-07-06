@@ -51,10 +51,14 @@ class ConceptHighlightRefreshJob:
         # Initialize separate Neo4j managers for each job to avoid interference
         self.top_concepts_neo4j = Neo4jGraphManager(config)
         self.trending_topics_neo4j = Neo4jGraphManager(config)
-        
+
         # Initialize jobs with their own Neo4j managers
-        self.top_concepts_job = TopConceptsJob(config, neo4j_manager=self.top_concepts_neo4j)
-        self.trending_topics_job = TrendingTopicsJob(config, neo4j_manager=self.trending_topics_neo4j)
+        self.top_concepts_job = TopConceptsJob(
+            config, neo4j_manager=self.top_concepts_neo4j
+        )
+        self.trending_topics_job = TrendingTopicsJob(
+            config, neo4j_manager=self.trending_topics_neo4j
+        )
 
     def run_job(self) -> ConceptHighlightRefreshJobStats:
         """

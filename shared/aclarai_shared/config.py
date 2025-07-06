@@ -169,10 +169,10 @@ class DatabaseConfig:
 
     def get_connection_url(self, scheme: str = "postgresql") -> str:
         """Build database connection URL.
-        
+
         Returns a connection URL in the format:
         postgresql://user:password@host:port/database
-        
+
         If POSTGRES_URL environment variable is set, it takes precedence over
         individual connection parameters.
         """
@@ -180,7 +180,7 @@ class DatabaseConfig:
         postgres_url = os.getenv("POSTGRES_URL")
         if postgres_url and scheme == "postgresql":
             return postgres_url
-            
+
         # Otherwise build from components
         if self.database:
             return f"{scheme}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
