@@ -47,8 +47,17 @@ class TestConsumerIntegration:
     def rabbitmq_connection(self):
         """Fixture for RabbitMQ connection - requires live RabbitMQ instance."""
         try:
+            # Get RabbitMQ credentials from config
+            config = load_config(validate=True)
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host="localhost", port=5672)
+                pika.ConnectionParameters(
+                    host=config.rabbitmq_host,
+                    port=config.rabbitmq_port,
+                    credentials=pika.PlainCredentials(
+                        config.rabbitmq_user,
+                        config.rabbitmq_password
+                    )
+                )
             )
             channel = connection.channel()
             # Ensure the test queue exists
@@ -71,15 +80,18 @@ class TestConsumerIntegration:
             tier1_path = vault_path / "tier1"
             tier1_path.mkdir(parents=True)
 
-            # Create a test markdown file
+            # Create a test markdown file  
             test_file = tier1_path / "test_consumer_doc.md"
             test_content = """# Consumer Test Document
 
-## Test Block
-aclarai:id=test_consumer_block_001 ver=2 hash=updated_hash_456
-
+## Test Block 001
 This is updated content that should be processed by the consumer.
 The version has been incremented to trigger an update.
+<!-- aclarai:id=test_consumer_block_001 ver=2 -->
+
+## Test Block 003
+This is new content for a new block.
+<!-- aclarai:id=test_consumer_block_003 ver=1 -->
 """
             test_file.write_text(test_content)
 
@@ -143,18 +155,18 @@ The version has been incremented to trigger an update.
 
             # Track if message was processed
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             # Start consumer in a separate thread
             consumer_thread = threading.Thread(target=consumer.start_consuming)
@@ -239,18 +251,18 @@ The version has been incremented to trigger an update.
 
             # Process one message and then stop
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             consumer_thread = threading.Thread(target=consumer.start_consuming)
             consumer_thread.daemon = True
@@ -318,18 +330,18 @@ The version has been incremented to trigger an update.
             consumer = DirtyBlockConsumer(config=config)
 
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             consumer_thread = threading.Thread(target=consumer.start_consuming)
             consumer_thread.daemon = True
@@ -345,9 +357,10 @@ The version has been incremented to trigger an update.
         with integration_neo4j_manager.session() as session:
             result = session.run("""
                 MATCH (b:Block {id: 'test_consumer_block_003'})
-                RETURN b.version as version, b.hash as hash, b.aclarai_id as aclarai_id
+                RETURN b.id as id, b.version as version, b.hash as hash, b.text as text
             """)
             record = result.single()
             assert record is not None
+            assert record["id"] == "test_consumer_block_003"
             assert record["version"] == 1
-            assert record["aclarai_id"] == "test_consumer_block_003"
+            assert "This is new content for a new block" in record["text"]
