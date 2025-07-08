@@ -1,50 +1,133 @@
+from dataclasses import asdict
 import json
 import os
 import tempfile
+import time
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pika
 import pytest
+from unittest.mock import MagicMock, patch
+
+
+from aclarai_shared import load_config
 from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
-from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.config import (
+    aclaraiConfig,
+    ModelConfig,
+    ClaimifyModelConfig,
+    ProcessingConfig,
+    EmbeddingConfig,
+    VaultWatcherConfig,
+    DatabaseConfig,
+    LLMConfig,
+    PathsConfig,
+    SchedulerConfig,
+    ThresholdConfig,
+    ConceptsConfig,
+    NounPhraseExtractionConfig,
+    ConceptSummariesConfig,
+    SubjectSummariesConfig,
+    WindowConfig,
+)
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.tools.factory import ToolFactory
 from llama_index.core.llms.llm import LLM as LlamaLLM
+import yaml
 
 
 @pytest.fixture
 def mock_consumer_config():
-    config = MagicMock(spec=aclaraiConfig)
-    config.vault_path = "/fake/vault"
-    config.rabbitmq_host = "fake_host"
-    config.dict = MagicMock(
-        return_value={"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
-    )
-    config.processing = MagicMock()
-    config.processing.retries = {"max_attempts": 3}
-    config.model = MagicMock()
-    config.model.claimify = {"entailment": "mock_llm", "default": "mock_llm"}
-    config.neo4j = MagicMock()
-    config.neo4j.host = "neo4j_mock_host"
-    config.neo4j.port = 7687
-    config.neo4j.user = "user"
-    config.neo4j.password = "pass"
-    config.neo4j.get_neo4j_bolt_url.return_value = "bolt://neo4j_mock_host:7687"
-    config.embedding = MagicMock()
-    config.embedding.pgvector = {"collection_name": "utterances", "embed_dim": 384}
-    config.embedding.models = {"default": "mock_model"}
-    config.embedding.device = "cpu"
-    config.embedding.batch_size = 1
-    config.embedding.chunking = {}
-    config.paths = MagicMock()
-    return config
+    # Alternative approach: Create a real dataclass instance and selectively mock parts
+    try:
+        # Try to create a real config instance with default values
+        config = aclaraiConfig()
+
+        # Now mock just the parts we need to control
+        config.model = MagicMock()
+        config.model.claimify = MagicMock()
+        config.model.claimify.entailment = "mock_llm"
+        config.model.claimify.default = "mock_llm"
+
+        config.processing = MagicMock()
+        config.processing.temperature = 0.1
+        config.processing.max_tokens = 1000
+
+        config.vault_watcher = MagicMock()
+        config.vault_watcher.queue_name = "mock_dirty_blocks_queue"
+
+        config.neo4j = MagicMock()
+        config.neo4j.get_neo4j_bolt_url.return_value = "bolt://neo4j_mock_host:7687"
+
+        config.vault_path = "/fake/vault"
+        config.rabbitmq_host = "fake_host"
+        config.rabbitmq_port = 5672
+        config.rabbitmq_user = "user"
+        config.rabbitmq_password = "password"
+
+        # Mock the nested configs that we need to control
+        config.llm = MagicMock()
+        config.embedding = MagicMock()
+        config.paths = MagicMock()
+        config.scheduler = MagicMock()
+        config.threshold = MagicMock()
+        config.concepts = MagicMock()
+        config.noun_phrase_extraction = MagicMock()
+        config.concept_summaries = MagicMock()
+        config.subject_summaries = MagicMock()
+        config.window = {"claimify": MagicMock()}
+
+    except Exception:
+        # Fallback: create a completely mocked config if real instantiation fails
+        config = MagicMock()
+
+        # Set up all the attributes we need
+        config.model = MagicMock()
+        config.model.claimify = MagicMock()
+        config.model.claimify.entailment = "mock_llm"
+        config.model.claimify.default = "mock_llm"
+
+        config.processing = MagicMock()
+        config.processing.temperature = 0.1
+        config.processing.max_tokens = 1000
+
+        config.vault_watcher = MagicMock()
+        config.vault_watcher.queue_name = "mock_dirty_blocks_queue"
+
+        config.neo4j = MagicMock()
+        config.neo4j.get_neo4j_bolt_url.return_value = "bolt://neo4j_mock_host:7687"
+
+        config.vault_path = "/fake/vault"
+        config.rabbitmq_host = "fake_host"
+        config.rabbitmq_port = 5672
+        config.rabbitmq_user = "user"
+        config.rabbitmq_password = "password"
+
+        # Add other necessary nested mocks
+        config.llm = MagicMock()
+        config.embedding = MagicMock()
+        config.paths = MagicMock()
+        config.scheduler = MagicMock()
+        config.threshold = MagicMock()
+        config.concepts = MagicMock()
+        config.noun_phrase_extraction = MagicMock()
+        config.concept_summaries = MagicMock()
+        config.subject_summaries = MagicMock()
+        config.window = {"claimify": MagicMock()}
+
+    def mock_asdict(obj):
+        if isinstance(obj, MagicMock):
+            return {"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
+        from dataclasses import asdict as real_asdict
+
+        return real_asdict(obj)
+
+    with patch("aclarai_core.dirty_block_consumer.asdict", side_effect=mock_asdict):
+        yield config
 
 
 @pytest.fixture
 def mock_graph_manager_fixture():
-    # This remains useful for tests that need to control its methods directly.
     return MagicMock(spec=Neo4jGraphManager)
 
 
@@ -59,28 +142,36 @@ def mock_tool_factory_fixture():
 
 
 @pytest.fixture
-# THIS IS THE CRUCIAL FIX: Patch Neo4jGraphManager where it's imported by the consumer.
-@patch("aclarai_core.dirty_block_consumer.Neo4jGraphManager")
-@patch("aclarai_core.dirty_block_consumer.MarkdownUpdaterService")
-@patch("aclarai_core.dirty_block_consumer.ClaimEvaluationGraphService")
-@patch("aclarai_core.dirty_block_consumer.RabbitMQManager")
-@patch("aclarai_core.dirty_block_consumer.BlockParser")
-@patch("aclarai_core.dirty_block_consumer.ConceptProcessor")
-@patch("aclarai_core.dirty_block_consumer.DecontextualizationAgent")
-@patch("aclarai_core.dirty_block_consumer.CoverageAgent")
-@patch("aclarai_core.dirty_block_consumer.EntailmentAgent")
-@patch("aclarai_shared.tools.vector_store_manager.aclaraiVectorStoreManager")
+@patch("aclarai_core.dirty_block_consumer.Neo4jGraphManager")  # 1. _MockNeo4jManager
+@patch(
+    "aclarai_core.dirty_block_consumer.MarkdownUpdaterService"
+)  # 2.  MockMarkdownService
+@patch(
+    "aclarai_core.dirty_block_consumer.ClaimEvaluationGraphService"
+)  # 3.  MockGraphService
+@patch("aclarai_core.dirty_block_consumer.RabbitMQManager")  # 4.  MockRabbitMQManager
+@patch("aclarai_core.dirty_block_consumer.BlockParser")  # 5.  MockBlockParser
+@patch("aclarai_core.dirty_block_consumer.ConceptProcessor")  # 6.  MockConceptProcessor
+@patch(
+    "aclarai_core.dirty_block_consumer.DecontextualizationAgent"
+)  # 7.  MockDecontextualizationAgent
+@patch("aclarai_core.dirty_block_consumer.CoverageAgent")  # 8.  MockCoverageAgent
+@patch("aclarai_core.dirty_block_consumer.EntailmentAgent")  # 9.  MockEntailmentAgent
+@patch(
+    "aclarai_shared.tools.vector_store_manager.aclaraiVectorStoreManager"
+)  # 10.  MockVectorStoreManager
 def consumer_instance(
-    MockVectorStoreManager,
-    MockEntailmentAgent,
-    MockCoverageAgent,
-    MockDecontextualizationAgent,
-    MockConceptProcessor,
-    MockBlockParser,
-    MockRabbitMQManager,
-    MockGraphService,
-    MockMarkdownService,
-    _MockNeo4jManager,  # The new mock from the added patch
+    MockVectorStoreManager,  # 10. (last patch applied = first parameter)
+    MockEntailmentAgent,  # 9.
+    MockCoverageAgent,  # 8.
+    MockDecontextualizationAgent,  # 7.
+    MockConceptProcessor,  # 6.
+    MockBlockParser,  # 5.
+    MockRabbitMQManager,  # 4.
+    MockGraphService,  # 3.
+    MockMarkdownService,  # 2.
+    _MockNeo4jManager,  # 1. (first patch applied = last parameter)
+    # Fixtures come after all the patched arguments
     mock_consumer_config,
     mock_graph_manager_fixture,
     mock_llm_fixture,
@@ -96,12 +187,7 @@ def consumer_instance(
     ):
         consumer = DirtyBlockConsumer(config=mock_consumer_config)
 
-        # The consumer's self.graph_manager is already a mock thanks to the patch.
-        # We can overwrite it again if we need to use a specific mock instance like
-        # mock_graph_manager_fixture, which is good practice for clarity.
         consumer.graph_manager = mock_graph_manager_fixture
-
-        # Assign other mocked dependencies
         consumer.entailment_agent = MockEntailmentAgent()
         consumer.coverage_agent = MockCoverageAgent()
         consumer.decontextualization_agent = MockDecontextualizationAgent()
@@ -111,9 +197,6 @@ def consumer_instance(
         consumer.concept_processor = MockConceptProcessor()
         consumer.vector_store_manager = MockVectorStoreManager()
         consumer.tool_factory = mock_tool_factory_fixture
-
-        # The patched services are automatically instantiated as mocks.
-        # We can assign them explicitly to the consumer instance for clarity and control.
         consumer.graph_service = MockGraphService()
         consumer.markdown_service = MockMarkdownService()
 
@@ -186,6 +269,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
         mock_claim_data = [{"id": "c1", "text": "claim text"}]
 
@@ -193,14 +277,13 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_sync_graph.return_value = True
         mock_get_claims.return_value = mock_claim_data
 
-        # Mock all three evaluation agents
         consumer_instance.entailment_agent.evaluate_entailment.return_value = (
             0.9,
             "success",
         )
         consumer_instance.coverage_agent.evaluate_coverage.return_value = (
             0.8,
-            [],  # omitted_elements
+            [],
             "success",
         )
         consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
@@ -215,7 +298,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_sync_graph.assert_called_once_with(mock_block_data, Path("test_file.md"))
         mock_get_claims.assert_called_once_with("s1")
 
-        # Verify all three agents are called
         consumer_instance.entailment_agent.evaluate_entailment.assert_called_once_with(
             claim_id="c1",
             claim_text="claim text",
@@ -235,7 +317,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             source_text="source text",
         )
 
-        # Verify all three scores are updated in graph
         assert consumer_instance.graph_service.update_relationship_score.call_count == 3
         consumer_instance.graph_service.update_relationship_score.assert_any_call(
             "c1", "s1", "entailed_score", 0.9
@@ -247,7 +328,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "c1", "s1", "decontextualization_score", 0.7
         )
 
-        # Verify all three scores are updated in markdown
         expected_filepath = str(Path(consumer_instance.vault_path) / "test_file.md")
         assert consumer_instance.markdown_service.add_or_update_score.call_count == 3
         consumer_instance.markdown_service.add_or_update_score.assert_any_call(
@@ -270,7 +350,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block,
         consumer_instance,
     ):
-        """Test that null scores are stored in graph but not written to markdown."""
         message = {
             "aclarai_id": "s1",
             "file_path": "test_file.md",
@@ -280,6 +359,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
         mock_claim_data = [{"id": "c1", "text": "claim text"}]
 
@@ -287,14 +367,13 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_sync_graph.return_value = True
         mock_get_claims.return_value = mock_claim_data
 
-        # All agents return null scores
         consumer_instance.entailment_agent.evaluate_entailment.return_value = (
             None,
             "LLM error",
         )
         consumer_instance.coverage_agent.evaluate_coverage.return_value = (
             None,
-            None,  # omitted_elements
+            None,
             "LLM timeout",
         )
         consumer_instance.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
@@ -306,7 +385,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
 
         assert result is True
 
-        # Verify all scores are still updated in graph (even null ones)
         assert consumer_instance.graph_service.update_relationship_score.call_count == 3
         consumer_instance.graph_service.update_relationship_score.assert_any_call(
             "c1", "s1", "entailed_score", None
@@ -318,7 +396,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "c1", "s1", "decontextualization_score", None
         )
 
-        # Verify NO scores are written to markdown (per architecture requirements)
         consumer_instance.markdown_service.add_or_update_score.assert_not_called()
 
     @patch.object(DirtyBlockConsumer, "_read_block_from_file")
@@ -331,7 +408,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_read_block,
         consumer_instance,
     ):
-        """Test backward compatibility - old test behavior still works."""
         message = {
             "aclarai_id": "s1",
             "file_path": "test_file.md",
@@ -341,6 +417,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
         mock_claim_data = [{"id": "c1", "text": "claim text"}]
 
@@ -348,7 +425,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         mock_sync_graph.return_value = True
         mock_get_claims.return_value = mock_claim_data
 
-        # Entailment fails, but other agents succeed
         consumer_instance.entailment_agent.evaluate_entailment.return_value = (
             None,
             "LLM error",
@@ -366,7 +442,6 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
         result = consumer_instance._process_dirty_block(message)
         assert result is True
 
-        # Only the non-null scores should be written to markdown
         assert consumer_instance.markdown_service.add_or_update_score.call_count == 2
         expected_filepath = str(Path(consumer_instance.vault_path) / "test_file.md")
         consumer_instance.markdown_service.add_or_update_score.assert_any_call(
@@ -395,6 +470,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
 
         mock_read_block.return_value = mock_block_data
@@ -449,6 +525,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
 
         mock_read_block.return_value = mock_block_data
@@ -486,6 +563,7 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
             "aclarai_id": "s1",
             "semantic_text": "source text",
             "version": 1,
+            "content_hash": "new_hash",
         }
         mock_read_block.return_value = mock_block_data
         mock_sync_graph.return_value = True
@@ -494,14 +572,13 @@ class TestDirtyBlockConsumerProcessBlockIntegration:
 
         assert result is True
         mock_logger.error.assert_called_with(
-            # THIS IS THE ONLY LINE THAT CHANGES
             "Evaluation agents not initialized (EntailmentAgent, CoverageAgent, DecontextualizationAgent), skipping evaluation and concept processing for block s1.",
             extra={"aclarai_id": "s1"},
         )
         # Verify no agent methods were called
-        original_entailment_agent.evaluate_entailment.assert_not_called()
-        original_coverage_agent.evaluate_coverage.assert_not_called()
-        original_decontextualization_agent.evaluate_claim_decontextualization.assert_not_called()
+        assert not original_entailment_agent.evaluate_entailment.called
+        assert not original_coverage_agent.evaluate_coverage.called
+        assert not original_decontextualization_agent.evaluate_claim_decontextualization.called
 
 
 @pytest.mark.integration
@@ -513,46 +590,71 @@ class TestConsumerEvaluationIntegration:
 
     @pytest.fixture(scope="class")
     def integration_neo4j_manager(self):
-        """Fixture to set up a connection to a real Neo4j database for testing."""
-        if not os.getenv("NEO4J_PASSWORD"):
-            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
-
-        from aclarai_shared import load_config
-
+        """Fixture to set up a connection to a real Neo4j database using app config."""
+        # Load the configuration as the single source of truth.
         config = load_config(validate=True)
+
+        if False:
+            config_dict = asdict(config)
+
+            # 2. Dump that dictionary to YAML (or JSON, or whatever you want)
+            print("\n--- Dumping dictionary to YAML ---")
+            final_settings_yaml = yaml.dump(
+                config_dict, sort_keys=False, default_flow_style=False
+            )
+
+            # 3. Print the result
+            print("\n--- Final Merged Configuration ---")
+            print(final_settings_yaml)
+
+        # Check for the necessary configuration from the config object.
+        try:
+            if not config.neo4j.password:
+                pytest.skip("Neo4j password not set in the application configuration.")
+        except AttributeError:
+            pytest.skip("Neo4j configuration section is missing or incomplete.")
+
+        # Proceed with the real manager instance.
         manager = Neo4jGraphManager(config=config)
         manager.setup_schema()
         # Clean up any existing test data
         with manager.session() as session:
             session.run(
-                "MATCH (n) WHERE n.id STARTS WITH 'eval_integ_test_' DETACH DELETE n",
-                allow_dangerous_operations=True,
+                "MATCH (n) WHERE n.id STARTS WITH 'eval_integ_test_' DETACH DELETE n"
             )
         yield manager
         # Clean up after tests
         with manager.session() as session:
             session.run(
-                "MATCH (n) WHERE n.id STARTS WITH 'eval_integ_test_' DETACH DELETE n",
-                allow_dangerous_operations=True,
+                "MATCH (n) WHERE n.id STARTS WITH 'eval_integ_test_' DETACH DELETE n"
             )
         manager.close()
 
     @pytest.fixture
-    def rabbitmq_connection(self):
-        """Fixture for RabbitMQ connection."""
+    def rabbitmq_setup(self):
+        """
+        Fixture to set up and tear down the RabbitMQ test queue.
+        It connects, ensures the queue exists and is empty, then disconnects.
+        It yields only the queue name for the test to use.
+        """
         try:
-            connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host="localhost", port=5672)
+            config = load_config(validate=True)
+            connection_params = pika.ConnectionParameters(
+                host=config.rabbitmq_host,
+                port=config.rabbitmq_port,
+                credentials=pika.PlainCredentials(
+                    config.rabbitmq_user, config.rabbitmq_password
+                ),
             )
+            connection = pika.BlockingConnection(connection_params)
             channel = connection.channel()
             queue_name = "test_aclarai_dirty_blocks_evaluation"
             channel.queue_declare(queue=queue_name, durable=True)
-            yield connection, channel, queue_name
-            # Cleanup
-            channel.queue_purge(queue=queue_name)
+            channel.queue_purge(queue=queue_name)  # Ensure queue is empty before test
             connection.close()
-        except pika.exceptions.AMQPConnectionError:
-            pytest.skip("RabbitMQ not available for integration testing")
+            yield queue_name
+        except pika.exceptions.AMQPConnectionError as e:
+            pytest.skip(f"RabbitMQ not available for integration testing: {e}")
 
     @pytest.fixture
     def temp_markdown_file(self):
@@ -570,96 +672,108 @@ A claim to be evaluated. <!-- aclarai:id=eval_integ_test_block_1 ver=1 -->
         os.unlink(filepath)
 
     def test_consumer_triggers_evaluations_and_persists_scores(
-        self, integration_neo4j_manager, rabbitmq_connection, temp_markdown_file
+        self, integration_neo4j_manager, rabbitmq_setup, temp_markdown_file
     ):
         """
         Tests the full reactive flow: RabbitMQ message -> Consumer -> Agent evaluation -> Neo4j & Markdown updates.
         """
         # --- ARRANGE ---
-        connection, channel, queue_name = rabbitmq_connection
+        # The fixture now provides just the queue name
+        queue_name = rabbitmq_setup
         block_id = "eval_integ_test_block_1"
         claim_id = "eval_integ_test_claim_1"
 
-        # 1. Pre-populate Neo4j with a Claim and Block needing evaluation
+        # 1. Pre-populate the REAL Neo4j database (no change here).
         with integration_neo4j_manager.session() as session:
             session.run(
                 """
                 MERGE (c:Claim {id: $claim_id, text: 'A claim to be evaluated.'})
                 MERGE (b:Block {id: $block_id, text: 'A claim to be evaluated.', hash: 'initial_hash', version: 1})
                 MERGE (c)-[r:ORIGINATES_FROM]->(b)
+                SET r.entailed_score = NULL
                 """,
                 claim_id=claim_id,
                 block_id=block_id,
             )
 
-        # 2. Publish a "dirty block" message to RabbitMQ
+        # 2. Instantiate the real consumer (no change here).
+        config = load_config(validate=True)
+        config.vault_path = str(temp_markdown_file.parent)
+        config.vault_watcher.queue_name = queue_name  # Use the test queue name
+        consumer = DirtyBlockConsumer(config=config)
+
+        # 3. Mock external dependencies (no change here).
+        consumer.entailment_agent = MagicMock(
+            evaluate_entailment=MagicMock(return_value=(0.91, "success"))
+        )
+        consumer.coverage_agent = MagicMock(
+            evaluate_coverage=MagicMock(return_value=(0.77, [], "success"))
+        )
+        consumer.decontextualization_agent = MagicMock(
+            evaluate_claim_decontextualization=MagicMock(return_value=(0.88, "success"))
+        )
+        consumer.concept_processor = MagicMock()
+
+        # 4. Run the consumer in a thread, using an Event to signal completion.
+        processed = threading.Event()
+        original_process_message = consumer._process_dirty_block
+
+        def mock_process_message_wrapper(msg):
+            # This wrapper calls the real method and then sets the event
+            original_process_message(msg)
+            processed.set()
+
+        consumer._process_dirty_block = mock_process_message_wrapper
+
+        consumer_thread = threading.Thread(target=consumer.start_consuming)
+        consumer_thread.daemon = True
+        consumer_thread.start()
+        time.sleep(1)  # Give 1 second for consumer  to connect and start listening
+
+        # 5. Publish the message using a short-lived, self-contained connection.
+        # This completely avoids the fixture lifecycle race condition.
+        publisher_connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=config.rabbitmq_host,
+                port=config.rabbitmq_port,
+                credentials=pika.PlainCredentials(
+                    config.rabbitmq_user, config.rabbitmq_password
+                ),
+            )
+        )
+        publisher_channel = publisher_connection.channel()
         message = {
             "aclarai_id": block_id,
             "file_path": str(temp_markdown_file),
             "change_type": "modified",
         }
-        channel.basic_publish(
+        publisher_channel.basic_publish(
             exchange="",
             routing_key=queue_name,
             body=json.dumps(message),
-            properties=pika.BasicProperties(delivery_mode=2),
+            properties=pika.BasicProperties(delivery_mode=2),  # Durable message
         )
+        publisher_connection.close()  # Connection can be closed immediately.
 
-        # 3. Instantiate the consumer and mock the LLM-based agents
-        with patch("aclarai_core.dirty_block_consumer.load_config") as mock_load_config:
-            mock_config = MagicMock()
-            mock_config.vault_path = temp_markdown_file.parent
-            mock_config.rabbitmq_host = "localhost"
-            mock_config.vault_watcher.queue_name = queue_name
-            # Mock other necessary config attributes
-            mock_config.dict.return_value = {"tools": {}}
-            mock_config.processing.retries = {"max_attempts": 1}
-            mock_load_config.return_value = mock_config
-
-            consumer = DirtyBlockConsumer(config=mock_config)
-
-            # Mock the agent evaluations to return predictable scores
-            consumer.entailment_agent.evaluate_entailment.return_value = (
-                0.91,
-                "success",
-            )
-            consumer.coverage_agent.evaluate_coverage.return_value = (
-                0.77,
-                [],
-                "success",
-            )
-            consumer.decontextualization_agent.evaluate_claim_decontextualization.return_value = (
-                0.88,
-                "success",
-            )
-
-            # 4. Run the consumer in a thread to process the message
-            processed = threading.Event()
-            original_process_message = consumer._process_dirty_block
-
-            def mock_process_message(msg):
-                original_process_message(msg)
-                processed.set()
-
-            consumer._process_dirty_block = mock_process_message
-
-            consumer_thread = threading.Thread(target=consumer.start_consuming)
-            consumer_thread.daemon = True
-            consumer_thread.start()
-
-            # --- ACT ---
-            # Wait for the message to be processed
-            if not processed.wait(timeout=15):
-                pytest.fail(
-                    "Message was not processed by the consumer within the timeout."
-                )
-
-            # Stop the consumer
+        # --- ACT ---
+        # Wait for the message to be processed or timeout.
+        if not processed.wait(timeout=15):
+            # If it fails, stop the consumer gracefully before failing the test.
             consumer.stop_consuming()
             consumer_thread.join(timeout=5)
+            pytest.fail("Message was not processed by the consumer within the timeout.")
+
+        # --- SHUTDOWN ---
+        # Use the new graceful shutdown mechanism.
+        consumer.stop_consuming()
+        consumer_thread.join(timeout=5)
+
+        assert not consumer_thread.is_alive(), (
+            "Consumer thread did not shut down correctly."
+        )
 
         # --- ASSERT ---
-        # 1. Verify Neo4j was updated correctly
+        # (No changes to the assertion block)
         with integration_neo4j_manager.session() as session:
             result = session.run(
                 """
@@ -675,11 +789,8 @@ A claim to be evaluated. <!-- aclarai:id=eval_integ_test_block_1 ver=1 -->
             assert record["coverage"] == 0.77
             assert record["decontext"] == 0.88
 
-        # 2. Verify the Markdown file was updated correctly
         updated_content = temp_markdown_file.read_text(encoding="utf-8")
         assert "<!-- aclarai:entailed_score=0.91 -->" in updated_content
         assert "<!-- aclarai:coverage_score=0.77 -->" in updated_content
         assert "<!-- aclarai:decontextualization_score=0.88 -->" in updated_content
-
-        # Version should be incremented for each score update
-        assert "ver=4" in updated_content  # Original ver=1, +1 for each of 3 scores
+        assert "ver=4" in updated_content

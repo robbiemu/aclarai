@@ -25,9 +25,6 @@ class TestConsumerIntegration:
     @pytest.fixture(scope="class")
     def integration_neo4j_manager(self):
         """Fixture to set up a connection to a real Neo4j database for testing."""
-        if not os.getenv("NEO4J_PASSWORD"):
-            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
-
         config = load_config(validate=True)
         manager = Neo4jGraphManager(config=config)
         manager.setup_schema()

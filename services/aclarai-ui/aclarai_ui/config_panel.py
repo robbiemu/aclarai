@@ -10,12 +10,16 @@ Follows the design specification from docs/arch/design_config_panel.md
 import copy
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import gradio as gr
 import yaml
+
+from aclarai_shared.config import aclaraiConfig
+
+logger = logging.getLogger("aclarai-ui.config_panel")
 
 
 @dataclass
@@ -53,12 +57,12 @@ class ConfigData:
 
     # --- Section: Highlight & Summary ---
     top_concepts_metric: str
-    top_concepts_count: int
-    top_concepts_percent: float
+    top_concepts_count: Optional[int]
+    top_concepts_percent: Optional[float]
     top_concepts_target_file: str
     trending_topics_window_days: int
-    trending_topics_count: int
-    trending_topics_percent: float
+    trending_topics_count: Optional[int]
+    trending_topics_percent: Optional[float]
     trending_topics_min_mentions: int
     trending_topics_target_file: str
 
@@ -73,9 +77,6 @@ class ConfigData:
     concept_summary_include_see_also: bool
 
 
-logger = logging.getLogger("aclarai-ui.config_panel")
-
-
 class ConfigurationManager:
     """Manages reading and writing configuration to/from YAML files."""
 
@@ -88,44 +89,31 @@ class ConfigurationManager:
             "shared/aclarai_shared/aclarai.config.default.yaml"
         ).absolute()
 
-    def load_config(self) -> Dict[str, Any]:
-        """Load configuration from YAML file with defaults merge."""
+    def load_config(self) -> aclaraiConfig:
+        """Load configuration using the shared loader."""
         try:
-            # Load default configuration first
-            default_config: Dict[str, Any] = {}
-            if self.default_config_path.exists():
-                with open(self.default_config_path, "r") as f:
-                    default_config = yaml.safe_load(f) or {}
-            # Load user configuration
-            user_config: Dict[str, Any] = {}
-            if self.config_path.exists():
-                with open(self.config_path, "r") as f:
-                    user_config = yaml.safe_load(f) or {}
-            # Deep merge user config over default config
-            merged_config = self._deep_merge_configs(default_config, user_config)
+            config = aclaraiConfig.from_env(config_file=str(self.config_path))
             logger.info(
-                "Configuration loaded successfully",
+                "Configuration loaded successfully via shared loader",
                 extra={
                     "service": "aclarai-ui",
                     "component": "config_panel",
                     "action": "load_config",
-                    "config_file": str(self.config_path),
                 },
             )
-            return merged_config
+            return config
         except Exception as e:
             logger.error(
-                "Failed to load configuration",
+                "Failed to load configuration via shared loader",
                 extra={
                     "service": "aclarai-ui",
                     "component": "config_panel",
                     "action": "load_config",
                     "error": str(e),
-                    "error_type": type(e).__name__,
                 },
             )
             # Return default configuration as fallback
-            return self._get_default_fallback_config()
+            return aclaraiConfig()
 
     def save_config(self, config: Dict[str, Any]) -> bool:
         """Save configuration to YAML file atomically."""
@@ -160,61 +148,6 @@ class ConfigurationManager:
                 },
             )
             return False
-
-    @staticmethod
-    def _deep_merge_configs(
-        default: Dict[str, Any], user: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Deep merge user configuration over default configuration."""
-        result = copy.deepcopy(default)
-
-        def _merge_recursive(base_dict: Dict[str, Any], override_dict: Dict[str, Any]):
-            for key, value in override_dict.items():
-                if (
-                    key in base_dict
-                    and isinstance(base_dict[key], dict)
-                    and isinstance(value, dict)
-                ):
-                    _merge_recursive(base_dict[key], value)
-                else:
-                    base_dict[key] = value
-
-        _merge_recursive(result, user)
-        return result
-
-    def _get_default_fallback_config(self) -> Dict[str, Any]:
-        """Return minimal fallback configuration."""
-        return {
-            "model": {
-                "claimify": {
-                    "default": "gpt-3.5-turbo",
-                    "selection": None,
-                    "disambiguation": None,
-                    "decomposition": None,
-                },
-                "concept_linker": "gpt-3.5-turbo",
-                "concept_summary": "gpt-4",
-                "subject_summary": "gpt-3.5-turbo",
-                "trending_concepts_agent": "gpt-4",
-                "fallback_plugin": "gpt-3.5-turbo",
-            },
-            "embedding": {
-                "utterance": "sentence-transformers/all-MiniLM-L6-v2",
-                "concept": "text-embedding-3-small",
-                "summary": "sentence-transformers/all-MiniLM-L6-v2",
-                "fallback": "sentence-transformers/all-mpnet-base-v2",
-            },
-            "threshold": {
-                "concept_merge": 0.90,
-                "claim_link_strength": 0.60,
-            },
-            "window": {
-                "claimify": {
-                    "p": 3,
-                    "f": 1,
-                }
-            },
-        }
 
 
 def validate_model_name(model_name: str) -> Tuple[bool, str]:
@@ -297,17 +230,21 @@ def validate_summary_agents_config(
 
 def validate_concept_highlights_config(
     top_concepts_metric: str,
-    top_concepts_count: int,
-    top_concepts_percent: float,
+    top_concepts_count: Optional[int],
+    top_concepts_percent: Optional[float],
     top_concepts_target_file: str,
     trending_topics_window_days: int,
-    trending_topics_count: int,
-    trending_topics_percent: float,
+    trending_topics_count: Optional[int],
+    trending_topics_percent: Optional[float],
     trending_topics_min_mentions: int,
     trending_topics_target_file: str,
 ) -> Tuple[bool, List[str]]:
     """Validate concept highlights parameters. Assumes inputs are not None."""
     validation_errors = []
+    top_concepts_count = top_concepts_count or 0
+    top_concepts_percent = top_concepts_percent or 0.0
+    trending_topics_count = trending_topics_count or 0
+    trending_topics_percent = trending_topics_percent or 0.0
 
     if top_concepts_metric not in ["pagerank", "degree"]:
         validation_errors.append(
@@ -392,232 +329,104 @@ def create_configuration_panel() -> gr.Blocks:
     def load_current_config() -> ConfigData:
         """Load current configuration values into a structured dataclass."""
         config = config_manager.load_config()
-        # Extract model configurations
-        model_config = config.get("model", {})
-        claimify_config = model_config.get("claimify", {})
-        claimify_default = claimify_config.get("default", "gpt-3.5-turbo")
-        claimify_selection = claimify_config.get("selection") or claimify_default
-        claimify_disambiguation = (
-            claimify_config.get("disambiguation") or claimify_default
-        )
-        claimify_decomposition = (
-            claimify_config.get("decomposition") or claimify_default
-        )
-        concept_linker = model_config.get("concept_linker", "gpt-3.5-turbo")
-        concept_summary = model_config.get("concept_summary", "gpt-4")
-        subject_summary = model_config.get("subject_summary", "gpt-3.5-turbo")
-        trending_concepts_agent = model_config.get("trending_concepts_agent", "gpt-4")
-        fallback_plugin = model_config.get("fallback_plugin", "gpt-3.5-turbo")
-        # Extract embedding configurations
-        embedding_config = config.get("embedding", {})
-        utterance_embedding = embedding_config.get(
-            "utterance", "sentence-transformers/all-MiniLM-L6-v2"
-        )
-        concept_embedding = embedding_config.get("concept", "text-embedding-3-small")
-        summary_embedding = embedding_config.get(
-            "summary", "sentence-transformers/all-MiniLM-L6-v2"
-        )
-        fallback_embedding = embedding_config.get(
-            "fallback", "sentence-transformers/all-mpnet-base-v2"
-        )
-        # Extract threshold configurations
-        threshold_config = config.get("threshold", {})
-        concept_merge = threshold_config.get("concept_merge", 0.90)
-        claim_link_strength = threshold_config.get("claim_link_strength", 0.60)
-        # Extract window configurations
-        window_config = config.get("window", {})
-        claimify_window = window_config.get("claimify", {})
-        window_p = claimify_window.get("p", 3)
-        window_f = claimify_window.get("f", 1)
 
-        # Extract scheduler configurations
-        scheduler_config = config.get("scheduler", {})
-        jobs_config = scheduler_config.get("jobs", {})
-
-        # concept_embedding_refresh job
-        concept_refresh_config = jobs_config.get("concept_embedding_refresh", {})
-        concept_refresh_enabled = concept_refresh_config.get("enabled", True)
-        concept_refresh_manual_only = concept_refresh_config.get("manual_only", False)
-        concept_refresh_cron = str(concept_refresh_config.get("cron", "0 3 * * *"))
-
-        # vault_sync job
-        vault_sync_config = jobs_config.get("vault_sync", {})
-        vault_sync_enabled = vault_sync_config.get("enabled", True)
-        vault_sync_manual_only = vault_sync_config.get("manual_only", False)
-        vault_sync_cron = str(vault_sync_config.get("cron", "*/30 * * * *"))
-
-        # Extract concept highlights configurations
-        concept_highlights_config = config.get("concept_highlights", {})
-
-        # Top concepts configuration
-        top_concepts_config = concept_highlights_config.get("top_concepts", {})
-        top_concepts_metric = top_concepts_config.get("metric", "pagerank")
-        top_concepts_count = top_concepts_config.get("count", 25)
-        top_concepts_percent = top_concepts_config.get("percent", 0.0)
-        top_concepts_target_file = top_concepts_config.get(
-            "target_file", "Top Concepts.md"
-        )
-
-        # Trending topics configuration
-        trending_topics_config = concept_highlights_config.get("trending_topics", {})
-        trending_topics_window_days = trending_topics_config.get("window_days", 7)
-        trending_topics_count = trending_topics_config.get("count", 0)
-        trending_topics_percent = trending_topics_config.get("percent", 5.0)
-        trending_topics_min_mentions = trending_topics_config.get("min_mentions", 2)
-        trending_topics_target_file = trending_topics_config.get(
-            "target_file", "Trending Topics - {date}.md"
-        )
-
-        # Extract subject summaries configuration
-        subject_summaries_config = config.get("subject_summaries", {})
-        subject_summary_similarity_threshold = subject_summaries_config.get(
-            "similarity_threshold", 0.92
-        )
-        subject_summary_min_concepts = subject_summaries_config.get("min_concepts", 3)
-        subject_summary_max_concepts = subject_summaries_config.get("max_concepts", 15)
-        subject_summary_allow_web_search = subject_summaries_config.get(
-            "allow_web_search", True
-        )
-        subject_summary_skip_if_incoherent = subject_summaries_config.get(
-            "skip_if_incoherent", False
-        )
-
-        # Extract concept summaries configuration
-        concept_summaries_config = config.get("concept_summaries", {})
-        concept_summary_max_examples = concept_summaries_config.get("max_examples", 5)
-        concept_summary_skip_if_no_claims = concept_summaries_config.get(
-            "skip_if_no_claims", True
-        )
-        concept_summary_include_see_also = concept_summaries_config.get(
-            "include_see_also", True
-        )
+        # Extract values from the nested aclaraiConfig object
+        model = config.model
+        claimify = model.claimify
+        embedding = config.embedding
+        threshold = config.threshold
+        window = config.window.get("claimify")
+        scheduler_jobs = config.scheduler.jobs
+        concept_refresh = scheduler_jobs.concept_embedding_refresh
+        vault_sync = scheduler_jobs.vault_sync
+        top_concepts = scheduler_jobs.top_concepts
+        trending_topics = scheduler_jobs.trending_topics
+        subject_summaries = config.subject_summaries
+        concept_summaries = config.concept_summaries
 
         return ConfigData(
-            claimify_default=claimify_default,
-            claimify_selection=claimify_selection,
-            claimify_disambiguation=claimify_disambiguation,
-            claimify_decomposition=claimify_decomposition,
-            concept_linker=concept_linker,
-            concept_summary=concept_summary,
-            subject_summary=subject_summary,
-            trending_concepts_agent=trending_concepts_agent,
-            fallback_plugin=fallback_plugin,
-            utterance_embedding=utterance_embedding,
-            concept_embedding=concept_embedding,
-            summary_embedding=summary_embedding,
-            fallback_embedding=fallback_embedding,
-            concept_merge=concept_merge,
-            claim_link_strength=claim_link_strength,
-            window_p=window_p,
-            window_f=window_f,
-            concept_refresh_enabled=concept_refresh_enabled,
-            concept_refresh_manual_only=concept_refresh_manual_only,
-            concept_refresh_cron=concept_refresh_cron,
-            vault_sync_enabled=vault_sync_enabled,
-            vault_sync_manual_only=vault_sync_manual_only,
-            vault_sync_cron=vault_sync_cron,
-            top_concepts_metric=top_concepts_metric,
-            top_concepts_count=top_concepts_count,
-            top_concepts_percent=top_concepts_percent,
-            top_concepts_target_file=top_concepts_target_file,
-            trending_topics_window_days=trending_topics_window_days,
-            trending_topics_count=trending_topics_count,
-            trending_topics_percent=trending_topics_percent,
-            trending_topics_min_mentions=trending_topics_min_mentions,
-            trending_topics_target_file=trending_topics_target_file,
-            subject_summary_similarity_threshold=subject_summary_similarity_threshold,
-            subject_summary_min_concepts=subject_summary_min_concepts,
-            subject_summary_max_concepts=subject_summary_max_concepts,
-            subject_summary_allow_web_search=subject_summary_allow_web_search,
-            subject_summary_skip_if_incoherent=subject_summary_skip_if_incoherent,
-            concept_summary_max_examples=concept_summary_max_examples,
-            concept_summary_skip_if_no_claims=concept_summary_skip_if_no_claims,
-            concept_summary_include_see_also=concept_summary_include_see_also,
+            # Model & Embedding Settings
+            claimify_default=claimify.default,
+            claimify_selection=claimify.selection or claimify.default,
+            claimify_disambiguation=claimify.disambiguation or claimify.default,
+            claimify_decomposition=claimify.decomposition or claimify.default,
+            concept_linker=model.concept_linker,
+            concept_summary=model.concept_summary,
+            subject_summary=model.subject_summary,
+            trending_concepts_agent=model.trending_concepts_agent,
+            fallback_plugin=model.fallback_plugin,
+            utterance_embedding=embedding.utterance,
+            concept_embedding=embedding.concept,
+            summary_embedding=embedding.summary,
+            fallback_embedding=embedding.fallback,
+            # Thresholds & Parameters
+            concept_merge=threshold.concept_merge,
+            claim_link_strength=threshold.claim_link_strength,
+            window_p=window.p if window else 3,
+            window_f=window.f if window else 1,
+            # Automation & Scheduler Control
+            concept_refresh_enabled=concept_refresh.enabled,
+            concept_refresh_manual_only=concept_refresh.manual_only,
+            concept_refresh_cron=concept_refresh.cron,
+            vault_sync_enabled=vault_sync.enabled,
+            vault_sync_manual_only=vault_sync.manual_only,
+            vault_sync_cron=vault_sync.cron,
+            # Highlight & Summary
+            top_concepts_metric=top_concepts.metric,
+            top_concepts_count=top_concepts.count,
+            top_concepts_percent=top_concepts.percent,
+            top_concepts_target_file=top_concepts.target_file,
+            trending_topics_window_days=trending_topics.window_days,
+            trending_topics_count=trending_topics.count,
+            trending_topics_percent=trending_topics.percent,
+            trending_topics_min_mentions=trending_topics.min_mentions,
+            trending_topics_target_file=trending_topics.target_file,
+            # Subject Summary & Concept Summary Agents
+            subject_summary_similarity_threshold=subject_summaries.similarity_threshold,
+            subject_summary_min_concepts=subject_summaries.min_concepts,
+            subject_summary_max_concepts=subject_summaries.max_concepts,
+            subject_summary_allow_web_search=subject_summaries.allow_web_search,
+            subject_summary_skip_if_incoherent=subject_summaries.skip_if_incoherent,
+            concept_summary_max_examples=concept_summaries.max_examples,
+            concept_summary_skip_if_no_claims=concept_summaries.skip_if_no_claims,
+            concept_summary_include_see_also=concept_summaries.include_see_also,
         )
 
     def save_configuration(*args) -> str:
         """Save configuration changes to YAML file after validation."""
+        # 1. Unpack all arguments into the ConfigData structure for clarity.
+        ui_data = ConfigData(*args)
 
-        # 1. Unpack all arguments from the *args tuple.
-        (
-            claimify_default,
-            claimify_selection,
-            claimify_disambiguation,
-            claimify_decomposition,
-            concept_linker,
-            concept_summary,
-            subject_summary,
-            trending_concepts_agent,
-            fallback_plugin,
-            utterance_embedding,
-            concept_embedding,
-            summary_embedding,
-            fallback_embedding,
-            concept_merge,
-            claim_link_strength,
-            window_p,
-            window_f,
-            concept_refresh_enabled,
-            concept_refresh_manual_only,
-            concept_refresh_cron,
-            vault_sync_enabled,
-            vault_sync_manual_only,
-            vault_sync_cron,
-            top_concepts_metric,
-            top_concepts_count,
-            top_concepts_percent,
-            top_concepts_target_file,
-            trending_topics_window_days,
-            trending_topics_count,
-            trending_topics_percent,
-            trending_topics_min_mentions,
-            trending_topics_target_file,
-            subject_summary_similarity_threshold,
-            subject_summary_min_concepts,
-            subject_summary_max_concepts,
-            subject_summary_allow_web_search,
-            subject_summary_skip_if_incoherent,
-            concept_summary_max_examples,
-            concept_summary_skip_if_no_claims,
-            concept_summary_include_see_also,
-        ) = args
-
-        # 2. Coalesce None to zero-values immediately after unpacking.
-        concept_merge = concept_merge or 0.0
-        claim_link_strength = claim_link_strength or 0.0
-        window_p = window_p or 0
-        window_f = window_f or 0
-        top_concepts_count = top_concepts_count or 0
-        top_concepts_percent = top_concepts_percent or 0.0
-        trending_topics_window_days = trending_topics_window_days or 0
-        trending_topics_count = trending_topics_count or 0
-        trending_topics_percent = trending_topics_percent or 0.0
-        trending_topics_min_mentions = trending_topics_min_mentions or 0
+        # 2. Coalesce None to zero-values for validation where needed.
+        concept_merge = ui_data.concept_merge or 0.0
+        claim_link_strength = ui_data.claim_link_strength or 0.0
+        window_p = ui_data.window_p or 0
+        window_f = ui_data.window_f or 0
         subject_summary_similarity_threshold = (
-            subject_summary_similarity_threshold or 0.0
+            ui_data.subject_summary_similarity_threshold or 0.0
         )
-        subject_summary_min_concepts = subject_summary_min_concepts or 0
-        subject_summary_max_concepts = subject_summary_max_concepts or 0
-        concept_summary_max_examples = concept_summary_max_examples or 0
+        subject_summary_min_concepts = ui_data.subject_summary_min_concepts or 0
+        subject_summary_max_concepts = ui_data.subject_summary_max_concepts or 0
+        concept_summary_max_examples = ui_data.concept_summary_max_examples or 0
 
         # 3. Perform all input validation
         validation_errors = []
-
-        for name, model in [
-            ("Claimify Default", claimify_default),
-            ("Claimify Selection", claimify_selection),
-            ("Claimify Disambiguation", claimify_disambiguation),
-            ("Claimify Decomposition", claimify_decomposition),
-            ("Concept Linker", concept_linker),
-            ("Concept Summary", concept_summary),
-            ("Subject Summary", subject_summary),
-            ("Trending Concepts Agent", trending_concepts_agent),
-            ("Fallback Plugin", fallback_plugin),
-            ("Utterance Embedding", utterance_embedding),
-            ("Concept Embedding", concept_embedding),
-            ("Summary Embedding", summary_embedding),
-            ("Fallback Embedding", fallback_embedding),
-        ]:
+        models_to_validate = {
+            "Claimify Default": ui_data.claimify_default,
+            "Claimify Selection": ui_data.claimify_selection,
+            "Claimify Disambiguation": ui_data.claimify_disambiguation,
+            "Claimify Decomposition": ui_data.claimify_decomposition,
+            "Concept Linker": ui_data.concept_linker,
+            "Concept Summary": ui_data.concept_summary,
+            "Subject Summary": ui_data.subject_summary,
+            "Trending Concepts Agent": ui_data.trending_concepts_agent,
+            "Fallback Plugin": ui_data.fallback_plugin,
+            "Utterance Embedding": ui_data.utterance_embedding,
+            "Concept Embedding": ui_data.concept_embedding,
+            "Summary Embedding": ui_data.summary_embedding,
+            "Fallback Embedding": ui_data.fallback_embedding,
+        }
+        for name, model in models_to_validate.items():
             is_valid, error = validate_model_name(model)
             if not is_valid:
                 validation_errors.append(f"{name}: {error}")
@@ -630,32 +439,29 @@ def create_configuration_panel() -> gr.Blocks:
             if not is_valid:
                 validation_errors.append(f"{desc}: {error}")
 
-        for desc, value in [
-            ("Window Previous (p)", window_p),
-            ("Window Following (f)", window_f),
-        ]:
+        for desc, value in [("Window P", window_p), ("Window F", window_f)]:
             is_valid, error = validate_window_param(value)
             if not is_valid:
                 validation_errors.append(f"{desc}: {error}")
 
         for desc, value_str in [
-            ("Concept Refresh Cron", str(concept_refresh_cron).strip()),
-            ("Vault Sync Cron", str(vault_sync_cron).strip()),
+            ("Concept Refresh Cron", str(ui_data.concept_refresh_cron).strip()),
+            ("Vault Sync Cron", str(ui_data.vault_sync_cron).strip()),
         ]:
             is_valid, error = validate_cron_expression(value_str)
             if not is_valid:
                 validation_errors.append(f"{desc}: {error}")
 
         is_valid, highlights_errors = validate_concept_highlights_config(
-            top_concepts_metric,
-            top_concepts_count,
-            top_concepts_percent,
-            top_concepts_target_file,
-            trending_topics_window_days,
-            trending_topics_count,
-            trending_topics_percent,
-            trending_topics_min_mentions,
-            trending_topics_target_file,
+            ui_data.top_concepts_metric,
+            ui_data.top_concepts_count,
+            ui_data.top_concepts_percent,
+            ui_data.top_concepts_target_file,
+            ui_data.trending_topics_window_days,
+            ui_data.trending_topics_count,
+            ui_data.trending_topics_percent,
+            ui_data.trending_topics_min_mentions,
+            ui_data.trending_topics_target_file,
         )
         if not is_valid:
             validation_errors.extend(highlights_errors)
@@ -675,153 +481,124 @@ def create_configuration_panel() -> gr.Blocks:
             )
             logger.warning(
                 "Configuration validation failed",
-                extra={
-                    "service": "aclarai-ui",
-                    "component": "config_panel",
-                    "action": "save_configuration",
-                    "validation_errors": validation_errors,
-                },
+                extra={"validation_errors": validation_errors},
             )
             return error_msg
 
-        # 5. Build the configuration dictionary and save it
-        current_config = config_manager.load_config()
+        # 4. Build the configuration dictionary for saving.
+        # Start with a deepcopy of the current config to preserve sections not edited by the UI.
+        current_config_obj = config_manager.load_config()
+        config_dict = asdict(current_config_obj)
 
-        current_config.setdefault("model", {})
-        current_config.setdefault("embedding", {})
-        current_config.setdefault("threshold", {})
-        current_config.setdefault("window", {})
-        current_config["window"].setdefault("claimify", {})
-        current_config.setdefault("scheduler", {})
-        current_config["scheduler"].setdefault("jobs", {})
-        current_config["scheduler"]["jobs"].setdefault("concept_embedding_refresh", {})
-        current_config["scheduler"]["jobs"].setdefault("vault_sync", {})
-        current_config.setdefault("concept_highlights", {})
-        current_config["concept_highlights"].setdefault("top_concepts", {})
-        current_config["concept_highlights"].setdefault("trending_topics", {})
-        current_config.setdefault("subject_summaries", {})
-        current_config.setdefault("concept_summaries", {})
+        # Update sections from UI data
+        config_dict["model"]["claimify"]["default"] = ui_data.claimify_default.strip()
+        config_dict["model"]["claimify"]["selection"] = (
+            ui_data.claimify_selection.strip()
+            if ui_data.claimify_selection.strip() != ui_data.claimify_default.strip()
+            else None
+        )
+        config_dict["model"]["claimify"]["disambiguation"] = (
+            ui_data.claimify_disambiguation.strip()
+            if ui_data.claimify_disambiguation.strip()
+            != ui_data.claimify_default.strip()
+            else None
+        )
+        config_dict["model"]["claimify"]["decomposition"] = (
+            ui_data.claimify_decomposition.strip()
+            if ui_data.claimify_decomposition.strip()
+            != ui_data.claimify_default.strip()
+            else None
+        )
+        config_dict["model"]["concept_linker"] = ui_data.concept_linker.strip()
+        config_dict["model"]["concept_summary"] = ui_data.concept_summary.strip()
+        config_dict["model"]["subject_summary"] = ui_data.subject_summary.strip()
+        config_dict["model"]["trending_concepts_agent"] = (
+            ui_data.trending_concepts_agent.strip()
+        )
+        config_dict["model"]["fallback_plugin"] = ui_data.fallback_plugin.strip()
 
-        current_config["model"]["claimify"] = {
-            "default": claimify_default.strip(),
-            "selection": claimify_selection.strip()
-            if claimify_selection.strip() != claimify_default.strip()
-            else None,
-            "disambiguation": claimify_disambiguation.strip()
-            if claimify_disambiguation.strip() != claimify_default.strip()
-            else None,
-            "decomposition": claimify_decomposition.strip()
-            if claimify_decomposition.strip() != claimify_default.strip()
-            else None,
-        }
-        current_config["model"]["concept_linker"] = concept_linker.strip()
-        current_config["model"]["concept_summary"] = concept_summary.strip()
-        current_config["model"]["subject_summary"] = subject_summary.strip()
-        current_config["model"]["trending_concepts_agent"] = (
-            trending_concepts_agent.strip()
+        config_dict["embedding"]["utterance"] = ui_data.utterance_embedding.strip()
+        config_dict["embedding"]["concept"] = ui_data.concept_embedding.strip()
+        config_dict["embedding"]["summary"] = ui_data.summary_embedding.strip()
+        config_dict["embedding"]["fallback"] = ui_data.fallback_embedding.strip()
+
+        config_dict["threshold"]["concept_merge"] = concept_merge
+        config_dict["threshold"]["claim_link_strength"] = claim_link_strength
+
+        config_dict["window"]["claimify"]["p"] = window_p
+        config_dict["window"]["claimify"]["f"] = window_f
+
+        # Correctly update scheduler jobs
+        jobs = config_dict["scheduler"]["jobs"]
+        jobs["concept_embedding_refresh"]["enabled"] = ui_data.concept_refresh_enabled
+        jobs["concept_embedding_refresh"]["manual_only"] = (
+            ui_data.concept_refresh_manual_only
         )
-        current_config["model"]["fallback_plugin"] = fallback_plugin.strip()
-        current_config["embedding"]["utterance"] = utterance_embedding.strip()
-        current_config["embedding"]["concept"] = concept_embedding.strip()
-        current_config["embedding"]["summary"] = summary_embedding.strip()
-        current_config["embedding"]["fallback"] = fallback_embedding.strip()
-        current_config["threshold"]["concept_merge"] = concept_merge
-        current_config["threshold"]["claim_link_strength"] = claim_link_strength
-        current_config["window"]["claimify"]["p"] = window_p
-        current_config["window"]["claimify"]["f"] = window_f
-        current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["enabled"] = (
-            concept_refresh_enabled
-        )
-        current_config["scheduler"]["jobs"]["concept_embedding_refresh"][
-            "manual_only"
-        ] = concept_refresh_manual_only
-        current_config["scheduler"]["jobs"]["concept_embedding_refresh"]["cron"] = str(
-            concept_refresh_cron
+        jobs["concept_embedding_refresh"]["cron"] = str(
+            ui_data.concept_refresh_cron
         ).strip()
-        current_config["scheduler"]["jobs"]["vault_sync"]["enabled"] = (
-            vault_sync_enabled
+        jobs["vault_sync"]["enabled"] = ui_data.vault_sync_enabled
+        jobs["vault_sync"]["manual_only"] = ui_data.vault_sync_manual_only
+        jobs["vault_sync"]["cron"] = str(ui_data.vault_sync_cron).strip()
+
+        top_concepts_job = jobs["top_concepts"]
+        top_concepts_job["metric"] = ui_data.top_concepts_metric.strip()
+        top_concepts_job["count"] = (
+            ui_data.top_concepts_count
+            if (ui_data.top_concepts_count or 0) > 0
+            else None
         )
-        current_config["scheduler"]["jobs"]["vault_sync"]["manual_only"] = (
-            vault_sync_manual_only
+        top_concepts_job["percent"] = (
+            ui_data.top_concepts_percent
+            if (ui_data.top_concepts_percent or 0) > 0
+            else None
         )
-        current_config["scheduler"]["jobs"]["vault_sync"]["cron"] = str(
-            vault_sync_cron
-        ).strip()
-        current_config["concept_highlights"]["top_concepts"]["metric"] = (
-            top_concepts_metric.strip()
+        top_concepts_job["target_file"] = ui_data.top_concepts_target_file.strip()
+
+        trending_topics_job = jobs["trending_topics"]
+        trending_topics_job["window_days"] = ui_data.trending_topics_window_days
+        trending_topics_job["count"] = (
+            ui_data.trending_topics_count
+            if (ui_data.trending_topics_count or 0) > 0
+            else None
         )
-        current_config["concept_highlights"]["top_concepts"]["count"] = (
-            top_concepts_count if top_concepts_count > 0 else None
+        trending_topics_job["percent"] = (
+            ui_data.trending_topics_percent
+            if (ui_data.trending_topics_percent or 0) > 0
+            else None
         )
-        current_config["concept_highlights"]["top_concepts"]["percent"] = (
-            top_concepts_percent if top_concepts_percent > 0 else None
-        )
-        current_config["concept_highlights"]["top_concepts"]["target_file"] = (
-            top_concepts_target_file.strip()
-        )
-        current_config["concept_highlights"]["trending_topics"]["window_days"] = (
-            trending_topics_window_days
-        )
-        current_config["concept_highlights"]["trending_topics"]["count"] = (
-            trending_topics_count if trending_topics_count > 0 else None
-        )
-        current_config["concept_highlights"]["trending_topics"]["percent"] = (
-            trending_topics_percent if trending_topics_percent > 0 else None
-        )
-        current_config["concept_highlights"]["trending_topics"]["min_mentions"] = (
-            trending_topics_min_mentions
-        )
-        current_config["concept_highlights"]["trending_topics"]["target_file"] = (
-            trending_topics_target_file.strip()
-        )
-        current_config["subject_summaries"]["similarity_threshold"] = (
+        trending_topics_job["min_mentions"] = ui_data.trending_topics_min_mentions
+        trending_topics_job["target_file"] = ui_data.trending_topics_target_file.strip()
+
+        config_dict["subject_summaries"]["similarity_threshold"] = (
             subject_summary_similarity_threshold
         )
-        current_config["subject_summaries"]["min_concepts"] = (
-            subject_summary_min_concepts
+        config_dict["subject_summaries"]["min_concepts"] = subject_summary_min_concepts
+        config_dict["subject_summaries"]["max_concepts"] = subject_summary_max_concepts
+        config_dict["subject_summaries"]["allow_web_search"] = (
+            ui_data.subject_summary_allow_web_search
         )
-        current_config["subject_summaries"]["max_concepts"] = (
-            subject_summary_max_concepts
-        )
-        current_config["subject_summaries"]["allow_web_search"] = (
-            subject_summary_allow_web_search
-        )
-        current_config["subject_summaries"]["skip_if_incoherent"] = (
-            subject_summary_skip_if_incoherent
-        )
-        current_config["concept_summaries"]["max_examples"] = (
-            concept_summary_max_examples
-        )
-        current_config["concept_summaries"]["skip_if_no_claims"] = (
-            concept_summary_skip_if_no_claims
-        )
-        current_config["concept_summaries"]["include_see_also"] = (
-            concept_summary_include_see_also
+        config_dict["subject_summaries"]["skip_if_incoherent"] = (
+            ui_data.subject_summary_skip_if_incoherent
         )
 
+        config_dict["concept_summaries"]["max_examples"] = concept_summary_max_examples
+        config_dict["concept_summaries"]["skip_if_no_claims"] = (
+            ui_data.concept_summary_skip_if_no_claims
+        )
+        config_dict["concept_summaries"]["include_see_also"] = (
+            ui_data.concept_summary_include_see_also
+        )
+
+        # 5. Save the configuration
         try:
-            success = config_manager.save_config(current_config)
+            success = config_manager.save_config(config_dict)
             if success:
-                logger.info(
-                    "Configuration saved successfully",
-                    extra={
-                        "service": "aclarai-ui",
-                        "component": "config_panel",
-                        "action": "save_configuration",
-                    },
-                )
+                logger.info("Configuration saved successfully")
                 return "✅ **Configuration saved successfully!**"
             return "❌ **Failed to save configuration.** Please check the logs for details."
         except Exception as e:
-            logger.error(
-                "Failed to save configuration",
-                extra={
-                    "service": "aclarai-ui",
-                    "component": "config_panel",
-                    "action": "save_configuration",
-                    "error": str(e),
-                },
-            )
+            logger.error("Failed to save configuration", error=str(e))
             return f"❌ **Error saving configuration:** {str(e)}"
 
     # Create the Gradio interface
@@ -1033,16 +810,6 @@ def create_configuration_panel() -> gr.Blocks:
             )
 
             with gr.Group():
-                gr.Markdown("### 🤖 Writing Agent")
-                trending_concepts_agent_summary_input = gr.Textbox(
-                    label="Model for Trending Concepts Agent",
-                    value=initial_config.trending_concepts_agent,
-                    placeholder="gpt-4",
-                    info="LLM model used to generate concept highlight content (also configured in Model & Embedding Settings)",
-                    lines=1,
-                )
-
-            with gr.Group():
                 gr.Markdown("### 🏆 Top Concepts")
                 gr.Markdown("Generate ranked lists of most important concepts")
                 with gr.Row():
@@ -1056,14 +823,14 @@ def create_configuration_panel() -> gr.Blocks:
                         label="Count",
                         value=initial_config.top_concepts_count,
                         step=1,
-                        info="Number of top concepts to include (0 to use percent instead)",
+                        info="Number of top concepts to include (0 or empty to use percent instead)",
                     )
                 with gr.Row():
                     top_concepts_percent_input = gr.Number(
                         label="Percent",
                         value=initial_config.top_concepts_percent,
                         step=0.1,
-                        info="Percentage of top concepts to include (0 to use count instead)",
+                        info="Percentage of top concepts to include (0 or empty to use count instead)",
                     )
                     top_concepts_target_file_input = gr.Textbox(
                         label="Target File",
@@ -1071,12 +838,6 @@ def create_configuration_panel() -> gr.Blocks:
                         placeholder="Top Concepts.md",
                         info="Output filename for the top concepts page",
                         lines=1,
-                    )
-
-                with gr.Row():
-                    top_concepts_preview = gr.Markdown(
-                        value=f"**Preview:** `{initial_config.top_concepts_target_file}`",
-                        label="Filename Preview",
                     )
 
             with gr.Group():
@@ -1093,14 +854,14 @@ def create_configuration_panel() -> gr.Blocks:
                         label="Count",
                         value=initial_config.trending_topics_count,
                         step=1,
-                        info="Number of trending topics to include (0 to use percent instead)",
+                        info="Number of trending topics to include (0 or empty to use percent instead)",
                     )
                 with gr.Row():
                     trending_topics_percent_input = gr.Number(
                         label="Percent",
                         value=initial_config.trending_topics_percent,
                         step=0.1,
-                        info="Percentage of trending topics to include (0 to use count instead)",
+                        info="Percentage of trending topics to include (0 or empty to use count instead)",
                     )
                     trending_topics_min_mentions_input = gr.Number(
                         label="Min Mentions",
@@ -1114,51 +875,6 @@ def create_configuration_panel() -> gr.Blocks:
                     placeholder="Trending Topics - {date}.md",
                     info="Output filename pattern for trending topics (use {date} for current date)",
                     lines=1,
-                )
-
-                with gr.Row():
-                    trending_topics_preview = gr.Markdown(
-                        value=f"**Preview:** `{initial_config.trending_topics_target_file.replace('{date}', '2024-01-01')}`",
-                        label="Filename Preview",
-                    )
-
-                def update_top_concepts_preview(filename: str) -> str:
-                    return f"**Preview:** `{filename}`"
-
-                def update_trending_topics_preview(filename: str) -> str:
-                    from datetime import date
-
-                    preview_filename = filename.replace(
-                        "{date}", date.today().strftime("%Y-%m-%d")
-                    )
-                    return f"**Preview:** `{preview_filename}`"
-
-                top_concepts_target_file_input.change(
-                    fn=update_top_concepts_preview,
-                    inputs=[top_concepts_target_file_input],
-                    outputs=[top_concepts_preview],
-                )
-                trending_topics_target_file_input.change(
-                    fn=update_trending_topics_preview,
-                    inputs=[trending_topics_target_file_input],
-                    outputs=[trending_topics_preview],
-                )
-
-                def sync_trending_agent_to_summary(value: str) -> str:
-                    return value
-
-                def sync_trending_agent_to_main(value: str) -> str:
-                    return value
-
-                trending_concepts_agent_input.change(
-                    fn=sync_trending_agent_to_summary,
-                    inputs=[trending_concepts_agent_input],
-                    outputs=[trending_concepts_agent_summary_input],
-                )
-                trending_concepts_agent_summary_input.change(
-                    fn=sync_trending_agent_to_main,
-                    inputs=[trending_concepts_agent_summary_input],
-                    outputs=[trending_concepts_agent_input],
                 )
 
             with gr.Group():
@@ -1237,164 +953,71 @@ def create_configuration_panel() -> gr.Blocks:
             )
 
         # Event handlers
+        all_inputs = [
+            claimify_default_input,
+            claimify_selection_input,
+            claimify_disambiguation_input,
+            claimify_decomposition_input,
+            concept_linker_input,
+            concept_summary_input,
+            subject_summary_input,
+            trending_concepts_agent_input,
+            fallback_plugin_input,
+            utterance_embedding_input,
+            concept_embedding_input,
+            summary_embedding_input,
+            fallback_embedding_input,
+            concept_merge_input,
+            claim_link_strength_input,
+            window_p_input,
+            window_f_input,
+            concept_refresh_enabled_input,
+            concept_refresh_manual_only_input,
+            concept_refresh_cron_input,
+            vault_sync_enabled_input,
+            vault_sync_manual_only_input,
+            vault_sync_cron_input,
+            top_concepts_metric_input,
+            top_concepts_count_input,
+            top_concepts_percent_input,
+            top_concepts_target_file_input,
+            trending_topics_window_days_input,
+            trending_topics_count_input,
+            trending_topics_percent_input,
+            trending_topics_min_mentions_input,
+            trending_topics_target_file_input,
+            subject_summary_similarity_threshold_input,
+            subject_summary_min_concepts_input,
+            subject_summary_max_concepts_input,
+            subject_summary_allow_web_search_input,
+            subject_summary_skip_if_incoherent_input,
+            concept_summary_max_examples_input,
+            concept_summary_skip_if_no_claims_input,
+            concept_summary_include_see_also_input,
+        ]
+
         def reload_configuration() -> Tuple[Any, ...]:
             """Reload configuration from file and return values for all UI components."""
             try:
                 config = load_current_config()
                 status_message = "🔄 **Configuration reloaded.**"
                 gr.Info("Configuration reloaded")
+                return (*asdict(config).values(), status_message)
             except Exception as e:
-                logger.error(
-                    "Failed to reload configuration",
-                    extra={
-                        "service": "aclarai-ui",
-                        "component": "config_panel",
-                        "action": "reload_configuration",
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
+                logger.error("Failed to reload configuration", error=str(e))
                 config = initial_config
                 status_message = f"❌ **Error reloading configuration:** {str(e)}"
                 gr.Error("Error reloading configuration")
-
-            return (
-                config.claimify_default,
-                config.claimify_selection,
-                config.claimify_disambiguation,
-                config.claimify_decomposition,
-                config.concept_linker,
-                config.concept_summary,
-                config.subject_summary,
-                config.trending_concepts_agent,
-                config.trending_concepts_agent,
-                config.fallback_plugin,
-                config.utterance_embedding,
-                config.concept_embedding,
-                config.summary_embedding,
-                config.fallback_embedding,
-                config.concept_merge,
-                config.claim_link_strength,
-                config.window_p,
-                config.window_f,
-                config.concept_refresh_enabled,
-                config.concept_refresh_manual_only,
-                config.concept_refresh_cron,
-                config.vault_sync_enabled,
-                config.vault_sync_manual_only,
-                config.vault_sync_cron,
-                config.top_concepts_metric,
-                config.top_concepts_count,
-                config.top_concepts_percent,
-                config.top_concepts_target_file,
-                config.trending_topics_window_days,
-                config.trending_topics_count,
-                config.trending_topics_percent,
-                config.trending_topics_min_mentions,
-                config.trending_topics_target_file,
-                config.subject_summary_similarity_threshold,
-                config.subject_summary_min_concepts,
-                config.subject_summary_max_concepts,
-                config.subject_summary_allow_web_search,
-                config.subject_summary_skip_if_incoherent,
-                config.concept_summary_max_examples,
-                config.concept_summary_skip_if_no_claims,
-                config.concept_summary_include_see_also,
-                status_message,
-            )
+                return (*asdict(config).values(), status_message)
 
         save_btn.click(
             fn=save_configuration,
-            inputs=[
-                claimify_default_input,
-                claimify_selection_input,
-                claimify_disambiguation_input,
-                claimify_decomposition_input,
-                concept_linker_input,
-                concept_summary_input,
-                subject_summary_input,
-                trending_concepts_agent_input,
-                fallback_plugin_input,
-                utterance_embedding_input,
-                concept_embedding_input,
-                summary_embedding_input,
-                fallback_embedding_input,
-                concept_merge_input,
-                claim_link_strength_input,
-                window_p_input,
-                window_f_input,
-                concept_refresh_enabled_input,
-                concept_refresh_manual_only_input,
-                concept_refresh_cron_input,
-                vault_sync_enabled_input,
-                vault_sync_manual_only_input,
-                vault_sync_cron_input,
-                top_concepts_metric_input,
-                top_concepts_count_input,
-                top_concepts_percent_input,
-                top_concepts_target_file_input,
-                trending_topics_window_days_input,
-                trending_topics_count_input,
-                trending_topics_percent_input,
-                trending_topics_min_mentions_input,
-                trending_topics_target_file_input,
-                subject_summary_similarity_threshold_input,
-                subject_summary_min_concepts_input,
-                subject_summary_max_concepts_input,
-                subject_summary_allow_web_search_input,
-                subject_summary_skip_if_incoherent_input,
-                concept_summary_max_examples_input,
-                concept_summary_skip_if_no_claims_input,
-                concept_summary_include_see_also_input,
-            ],
+            inputs=all_inputs,
             outputs=[save_status],
         )
         reload_btn.click(
             fn=reload_configuration,
-            outputs=[
-                claimify_default_input,
-                claimify_selection_input,
-                claimify_disambiguation_input,
-                claimify_decomposition_input,
-                concept_linker_input,
-                concept_summary_input,
-                subject_summary_input,
-                trending_concepts_agent_input,
-                trending_concepts_agent_summary_input,
-                fallback_plugin_input,
-                utterance_embedding_input,
-                concept_embedding_input,
-                summary_embedding_input,
-                fallback_embedding_input,
-                concept_merge_input,
-                claim_link_strength_input,
-                window_p_input,
-                window_f_input,
-                concept_refresh_enabled_input,
-                concept_refresh_manual_only_input,
-                concept_refresh_cron_input,
-                vault_sync_enabled_input,
-                vault_sync_manual_only_input,
-                vault_sync_cron_input,
-                top_concepts_metric_input,
-                top_concepts_count_input,
-                top_concepts_percent_input,
-                top_concepts_target_file_input,
-                trending_topics_window_days_input,
-                trending_topics_count_input,
-                trending_topics_percent_input,
-                trending_topics_min_mentions_input,
-                trending_topics_target_file_input,
-                subject_summary_similarity_threshold_input,
-                subject_summary_min_concepts_input,
-                subject_summary_max_concepts_input,
-                subject_summary_allow_web_search_input,
-                subject_summary_skip_if_incoherent_input,
-                concept_summary_max_examples_input,
-                concept_summary_skip_if_no_claims_input,
-                concept_summary_include_see_also_input,
-                save_status,
-            ],
+            outputs=all_inputs + [save_status],
         )
     if not isinstance(interface, gr.Blocks):
         interface = gr.Blocks()

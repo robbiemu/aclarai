@@ -7,6 +7,7 @@ from vault-watcher and updates graph nodes with proper version checking.
 import json
 import logging
 import os
+import threading
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,8 +45,10 @@ class DirtyBlockConsumer:
         self.graph_manager = Neo4jGraphManager(self.config)
         self.block_parser = BlockParser()
         self.concept_processor = ConceptProcessor(self.config)
-        self.rabbitmq_manager = RabbitMQManager(self.config, "aclarai-core")
-        self.queue_name = "aclarai_dirty_blocks"
+        self.rabbitmq_manager = RabbitMQManager(
+            config=self.config, service_name="aclarai-core"
+        )
+        self.queue_name = self.config.vault_watcher.queue_name
         self.vault_path = Path(self.config.vault_path)
 
         self.llm = self._initialize_llm()  # self.llm can be Optional[LlamaLLM]
@@ -104,12 +107,9 @@ class DirtyBlockConsumer:
         )
 
     def _initialize_llm(self) -> Optional[LlamaLLM]:
-        llm_model_name_entailment = self.config.llm.model_params.get(
-            "claimify", {}
-        ).get("entailment")
-        llm_model_name_default = self.config.llm.model_params.get("claimify", {}).get(
-            "default"
-        )
+        # Access the model configuration via the new, reliable nested structure
+        llm_model_name_entailment = self.config.model.claimify.entailment
+        llm_model_name_default = self.config.model.claimify.default
 
         llm_model_name = llm_model_name_entailment or llm_model_name_default
 
@@ -204,31 +204,55 @@ class DirtyBlockConsumer:
 
     def start_consuming(self):
         """Start consuming messages from the dirty blocks queue."""
-        if not self.rabbitmq_manager.is_connected():
-            self.connect()
-        channel = self.rabbitmq_manager.get_channel()
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(
-            queue=self.queue_name,
-            on_message_callback=self._on_message_received,
-            auto_ack=False,
-        )
-        logger.info(
-            "DirtyBlockConsumer: Starting to consume messages",
-            extra={
-                "service": "aclarai-core",
-                "filename.function_name": "dirty_block_consumer.start_consuming",
-                "queue_name": self.queue_name,
-            },
-        )
+        self._stop_consuming_event = threading.Event()
+
         try:
-            while self.rabbitmq_manager.is_connected():
+            if not self.rabbitmq_manager.is_connected():
+                self.connect()
+            channel = self.rabbitmq_manager.get_channel()
+            channel.basic_qos(prefetch_count=1)
+            channel.basic_consume(
+                queue=self.queue_name,
+                on_message_callback=self._on_message_received,
+                auto_ack=False,
+            )
+            logger.info(
+                "DirtyBlockConsumer: Starting to consume messages",
+                extra={
+                    "service": "aclarai-core",
+                    "filename.function_name": "dirty_block_consumer.start_consuming",
+                    "queue_name": self.queue_name,
+                },
+            )
+
+            while not self._stop_consuming_event.is_set():
+                # The time_limit=1 allows the loop to check the event every second.
                 self.rabbitmq_manager.process_data_events(time_limit=1)
+
         except KeyboardInterrupt:
-            logger.info("DirtyBlockConsumer: Stopping consumption due to interrupt")
-            if channel and channel.is_open:  # Check if channel is valid before closing
-                channel.close()
-            self.disconnect()
+            logger.info(
+                "DirtyBlockConsumer: Stopping consumption due to KeyboardInterrupt."
+            )
+        except Exception as e:
+            logger.error(
+                f"DirtyBlockConsumer: Unhandled exception in consuming loop: {e}",
+                exc_info=True,
+            )
+        finally:
+            logger.info("DirtyBlockConsumer: Shutting down connection.")
+            if self.rabbitmq_manager.is_connected():
+                self.disconnect()
+
+    def stop_consuming(self):
+        """
+        Signals the consumer to stop consuming messages after the current message is processed.
+        This method is thread-safe.
+        """
+        logger.info("DirtyBlockConsumer: Received stop signal.")
+        # Check if the event exists before trying to set it, making this safe
+        # to call even if the consumer hasn't started yet.
+        if hasattr(self, "_stop_consuming_event"):
+            self._stop_consuming_event.set()
 
     def _on_message_received(
         self, channel: Any, method: Any, _properties: Any, body: bytes

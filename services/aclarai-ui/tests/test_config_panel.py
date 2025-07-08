@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from aclarai_shared.config import aclaraiConfig
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from aclarai_ui.config_panel import (
     ConfigurationManager,
@@ -46,12 +48,13 @@ class TestConfigurationManager:
             manager.default_config_path = default_path
             config = manager.load_config()
             # Should merge user over default
-            assert config["model"]["claimify"]["default"] == "gpt-4"  # From user
-            assert config["model"]["fallback_plugin"] == "gpt-3.5-turbo"  # From default
-            assert config["threshold"]["concept_merge"] == 0.95  # From user
+            assert config.model.claimify.default == "gpt-4"  # From user
+            assert config.model.fallback_plugin == "gpt-3.5-turbo"  # From default
+            assert config.threshold.concept_merge == 0.95  # From user
 
     def test_load_config_default_only(self):
         """Test loading configuration when only default file exists."""
+
         default_config = {
             "model": {"claimify": {"default": "gpt-3.5-turbo"}},
             "threshold": {"concept_merge": 0.90},
@@ -66,11 +69,12 @@ class TestConfigurationManager:
             manager.default_config_path = default_path
             config = manager.load_config()
             # Should use defaults
-            assert config["model"]["claimify"]["default"] == "gpt-3.5-turbo"
-            assert config["threshold"]["concept_merge"] == 0.90
+            assert config.model.claimify.default == "gpt-3.5-turbo"
+            assert config.threshold.concept_merge == 0.90
 
     def test_save_config(self):
         """Test saving configuration to file."""
+
         test_config = {
             "model": {"claimify": {"default": "gpt-4"}},
             "threshold": {"concept_merge": 0.95},
@@ -90,7 +94,7 @@ class TestConfigurationManager:
         """Test the deep merge functionality."""
         default = {"a": {"b": {"c": 1, "d": 2}, "e": 3}, "f": 4}
         user = {"a": {"b": {"c": 10}, "g": 5}, "h": 6}
-        result = ConfigurationManager._deep_merge_configs(default, user)
+        result = aclaraiConfig._deep_merge_configs(default, user)
         expected = {"a": {"b": {"c": 10, "d": 2}, "e": 3, "g": 5}, "f": 4, "h": 6}
         assert result == expected
 

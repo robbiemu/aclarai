@@ -1,3 +1,5 @@
+# shared/aclarai_shared/config.py
+
 """
 Shared configuration system for aclarai services.
 This module provides environment variable injection from .env files with
@@ -6,7 +8,7 @@ fallback logic for external database connections using host.docker.internal.
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import IO, Any, Dict, List, Optional, Union
 
@@ -33,7 +35,27 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# In shared/aclarai_shared/config.py
+@dataclass
+class ClaimifyModelConfig:
+    """Configuration for Claimify-specific models."""
+
+    default: str = "gpt-3.5-turbo"
+    selection: Optional[str] = None
+    disambiguation: Optional[str] = None
+    decomposition: Optional[str] = None
+    entailment: Optional[str] = None
+
+
+@dataclass
+class ModelConfig:
+    """Configuration for all agent and LLM models."""
+
+    claimify: ClaimifyModelConfig = field(default_factory=ClaimifyModelConfig)
+    concept_linker: str = "gpt-3.5-turbo"
+    concept_summary: str = "gpt-4"
+    subject_summary: str = "gpt-3.5-turbo"
+    trending_concepts_agent: str = "gpt-4"
+    fallback_plugin: str = "gpt-3.5-turbo"
 
 
 @dataclass
@@ -66,6 +88,10 @@ class EmbeddingConfig:
 
     # Model settings
     default_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    utterance: Optional[str] = None
+    concept: Optional[str] = None
+    summary: Optional[str] = None
+    fallback: Optional[str] = None
     device: str = "auto"
     batch_size: int = 32
     # PGVector settings
@@ -135,14 +161,18 @@ class SubjectSummariesConfig:
 class ThresholdConfig:
     """Configuration for various similarity and processing thresholds."""
 
-    # Cosine similarity threshold for merging candidates
     concept_merge: float = 0.90
-    # Minimum link strength to create graph edge
     claim_link_strength: float = 0.60
-    # Cosine similarity for grouping utterances for Tier 2 summaries
     summary_grouping_similarity: float = 0.80
-    # Quality threshold for claim promotion and linking (geometric mean of evaluation scores)
     claim_quality: float = 0.70
+
+
+@dataclass
+class WindowConfig:
+    """Configuration for context windows."""
+
+    p: int = 3
+    f: int = 1
 
 
 @dataclass
@@ -168,20 +198,10 @@ class DatabaseConfig:
     database: str = ""
 
     def get_connection_url(self, scheme: str = "postgresql") -> str:
-        """Build database connection URL.
-
-        Returns a connection URL in the format:
-        postgresql://user:password@host:port/database
-
-        If POSTGRES_URL environment variable is set, it takes precedence over
-        individual connection parameters.
-        """
-        # If POSTGRES_URL is set in environment, use it directly
+        """Build database connection URL."""
         postgres_url = os.getenv("POSTGRES_URL")
         if postgres_url and scheme == "postgresql":
             return postgres_url
-
-        # Otherwise build from components
         if self.database:
             return f"{scheme}://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
         return f"{scheme}://{self.user}:{self.password}@{self.host}:{self.port}"
@@ -216,141 +236,62 @@ class JobConfig:
 class TopConceptsJobConfig(JobConfig):
     """Configuration for the Top Concepts job."""
 
-    metric: str = "pagerank"  # pagerank | degree
-    count: Optional[int] = 25  # number of top concepts (exclusive with percent)
-    percent: Optional[float] = None  # use top N% instead of fixed count
-    target_file: str = "Top Concepts.md"  # target file name in vault
+    metric: str = "pagerank"
+    count: Optional[int] = 25
+    percent: Optional[float] = None
+    target_file: str = "Top Concepts.md"
 
 
 @dataclass
 class TrendingTopicsJobConfig(JobConfig):
     """Configuration for the Trending Topics job."""
 
-    window_days: int = 7  # How far back to look for change
-    count: Optional[int] = None  # number of trending concepts (exclusive with percent)
-    percent: Optional[float] = 5  # use top N% instead of fixed count
-    min_mentions: int = 2  # minimum mentions required to be considered
-    target_file: str = (
-        "Trending Topics - {date}.md"  # target file name with date placeholder
-    )
+    window_days: int = 7
+    count: Optional[int] = None
+    percent: Optional[float] = 5
+    min_mentions: int = 2
+    target_file: str = "Trending Topics - {date}.md"
 
 
 @dataclass
 class ConceptClusteringJobConfig(JobConfig):
     """Configuration for the Concept Clustering job."""
 
-    similarity_threshold: float = 0.92  # Similarity threshold for clustering
-    min_concepts: int = 3  # Minimum concepts per cluster
-    max_concepts: int = 15  # Maximum concepts per cluster
-    algorithm: str = "dbscan"  # Clustering algorithm: "dbscan", "hierarchical"
-    cache_ttl: int = 3600  # Cache TTL in seconds (1 hour)
-    use_persistent_cache: bool = True  # Whether to use persistent cache
+    similarity_threshold: float = 0.92
+    min_concepts: int = 3
+    max_concepts: int = 15
+    algorithm: str = "dbscan"
+    cache_ttl: int = 3600
+    use_persistent_cache: bool = True
 
 
 @dataclass
 class ConceptSubjectLinkingJobConfig(JobConfig):
     """Configuration for the Concept Subject Linking job."""
 
-    create_neo4j_edges: bool = (
-        False  # Whether to create (:Concept)-[:PART_OF]->(:Subject) edges
-    )
-    batch_size: int = 50  # Number of concepts to process in one batch
-    footer_section_title: str = "Part of Subjects"  # Title for footer section
+    create_neo4j_edges: bool = False
+    batch_size: int = 50
+    footer_section_title: str = "Part of Subjects"
 
 
 @dataclass
 class SchedulerJobsConfig:
     """Configuration for all scheduled jobs."""
 
-    concept_embedding_refresh: JobConfig = field(
-        default_factory=lambda: JobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 3 * * *",
-            description="Refresh concept embeddings from Tier 3 pages",
-        )
-    )
-    vault_sync: JobConfig = field(
-        default_factory=lambda: JobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="*/30 * * * *",
-            description="Sync vault files with knowledge graph",
-        )
-    )
-    top_concepts: TopConceptsJobConfig = field(
-        default_factory=lambda: TopConceptsJobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 4 * * *",  # 4 AM daily
-            description="Generate Top Concepts.md from PageRank analysis",
-            metric="pagerank",
-            count=25,
-            percent=None,
-            target_file="Top Concepts.md",
-        )
-    )
+    concept_embedding_refresh: JobConfig = field(default_factory=JobConfig)
+    vault_sync: JobConfig = field(default_factory=JobConfig)
+    top_concepts: TopConceptsJobConfig = field(default_factory=TopConceptsJobConfig)
     trending_topics: TrendingTopicsJobConfig = field(
-        default_factory=lambda: TrendingTopicsJobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 5 * * *",  # 5 AM daily
-            description="Generate Trending Topics - <date>.md from concept mention deltas",
-            window_days=7,
-            count=None,
-            percent=5,
-            min_mentions=2,
-            target_file="Trending Topics - {date}.md",
-        )
+        default_factory=TrendingTopicsJobConfig
     )
-    concept_highlight_refresh: JobConfig = field(
-        default_factory=lambda: JobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 6 * * *",  # 6 AM daily
-            description="Generate both Top Concepts and Trending Topics highlight files",
-        )
-    )
-    concept_summary_refresh: JobConfig = field(
-        default_factory=lambda: JobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 7 * * *",  # 7 AM daily
-            description="Generate concept summary pages for all canonical concepts",
-        )
-    )
+    concept_highlight_refresh: JobConfig = field(default_factory=JobConfig)
+    concept_summary_refresh: JobConfig = field(default_factory=JobConfig)
     concept_clustering: ConceptClusteringJobConfig = field(
-        default_factory=lambda: ConceptClusteringJobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 2 * * *",  # 2 AM daily
-            description="Group related concepts into thematic clusters",
-            similarity_threshold=0.92,
-            min_concepts=3,
-            max_concepts=15,
-            algorithm="dbscan",
-            cache_ttl=3600,
-            use_persistent_cache=True,
-        )
+        default_factory=ConceptClusteringJobConfig
     )
-    subject_summary_refresh: JobConfig = field(
-        default_factory=lambda: JobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 6 * * *",  # 6 AM daily (after clustering at 2 AM)
-            description="Generate [[Subject:XYZ]] pages from concept clusters",
-        )
-    )
+    subject_summary_refresh: JobConfig = field(default_factory=JobConfig)
     concept_subject_linking: ConceptSubjectLinkingJobConfig = field(
-        default_factory=lambda: ConceptSubjectLinkingJobConfig(
-            enabled=True,
-            manual_only=False,
-            cron="0 8 * * *",  # 8 AM daily (after subject summary at 6 AM)
-            description="Link concepts to their subjects with footer links",
-            create_neo4j_edges=False,
-            batch_size=50,
-            footer_section_title="Part of Subjects",
-        )
+        default_factory=ConceptSubjectLinkingJobConfig
     )
 
 
@@ -375,17 +316,12 @@ class LLMConfig:
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
 
-    # LLM configuration
     llm: LLMConfig = field(default_factory=LLMConfig)
-
-    # Database configurations
-    postgres: DatabaseConfig = field(
-        default_factory=lambda: DatabaseConfig("", 0, "", "")
-    )
-    neo4j: DatabaseConfig = field(default_factory=lambda: DatabaseConfig("", 0, "", ""))
-    # New configuration sections
-    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
+    window: Dict[str, WindowConfig] = field(default_factory=dict)
     concepts: ConceptsConfig = field(default_factory=ConceptsConfig)
     noun_phrase_extraction: NounPhraseExtractionConfig = field(
         default_factory=NounPhraseExtractionConfig
@@ -396,44 +332,34 @@ class aclaraiConfig:
     subject_summaries: SubjectSummariesConfig = field(
         default_factory=SubjectSummariesConfig
     )
-    threshold: ThresholdConfig = field(default_factory=ThresholdConfig)
+    postgres: DatabaseConfig = field(
+        default_factory=lambda: DatabaseConfig("", 0, "", "")
+    )
+    neo4j: DatabaseConfig = field(default_factory=lambda: DatabaseConfig("", 0, "", ""))
     vault_watcher: VaultWatcherConfig = field(default_factory=VaultWatcherConfig)
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
-    # Message broker configuration
     rabbitmq_host: str = "rabbitmq"
     rabbitmq_port: int = 5672
     rabbitmq_user: str = "user"
     rabbitmq_password: str = ""
-    # Service configuration
-    vault_path: str = "/vault"
-    settings_path: str = "/settings"
+    paths: PathsConfig = field(default_factory=PathsConfig)
     log_level: str = "INFO"
     debug: bool = False
-    # AI/ML configuration
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
-    # Vault structure configuration
-    paths: PathsConfig = field(default_factory=PathsConfig)
-    # Feature flags
     features: Dict[str, Any] = field(default_factory=dict)
+    vault_path: str = "/vault"
+    settings_path: str = "/settings"
 
     @classmethod
     def from_env(
         cls, env_file: Optional[str] = None, config_file: Optional[str] = None
     ) -> "aclaraiConfig":
-        """
-        Create configuration from environment variables and YAML config file.
-        Args:
-            env_file: Path to .env file (optional, defaults to searching for .env)
-            config_file: Path to YAML config file (optional, defaults to settings/aclarai.config.yaml)
-        """
-        # Load YAML configuration first
+        """Create configuration from environment variables and YAML config file."""
         yaml_config = cls._load_yaml_config(config_file)
-        # Load .env file if specified or found
         if env_file:
             load_dotenv(env_file)
         else:
-            # Try to find .env file in current directory or parent directories
             current_path = Path.cwd()
             for path in [current_path] + list(current_path.parents):
                 env_path = path / ".env"
@@ -441,211 +367,212 @@ class aclaraiConfig:
                     logger.info(f"Loading environment variables from {env_path}")
                     load_dotenv(env_path)
                     break
-        # PostgreSQL configuration with fallback
-        postgres_config = yaml_config.get("databases", {}).get("postgres", {})
+
+        def filter_none(data: Dict) -> Dict:
+            return {k: v for k, v in data.items() if v is not None}
+
+        # --- Database Config ---
+        postgres_data = yaml_config.get("databases", {}).get("postgres", {})
         postgres_host = os.getenv(
-            "POSTGRES_HOST", postgres_config.get("host", "postgres")
+            "POSTGRES_HOST", postgres_data.get("host", "postgres")
         )
         postgres_host = cls._apply_host_fallback(postgres_host)
         postgres = DatabaseConfig(
             host=postgres_host,
-            port=int(os.getenv("POSTGRES_PORT", postgres_config.get("port", "5432"))),
+            port=int(os.getenv("POSTGRES_PORT", postgres_data.get("port", 5432))),
             user=os.getenv("POSTGRES_USER", "aclarai"),
             password=os.getenv("POSTGRES_PASSWORD", ""),
-            database=os.getenv(
-                "POSTGRES_DB", postgres_config.get("database", "aclarai")
-            ),
+            database=os.getenv("POSTGRES_DB", postgres_data.get("database", "aclarai")),
         )
-        # Neo4j configuration with fallback
-        neo4j_config = yaml_config.get("databases", {}).get("neo4j", {})
-        neo4j_host = os.getenv("NEO4J_HOST", neo4j_config.get("host", "neo4j"))
+        neo4j_data = yaml_config.get("databases", {}).get("neo4j", {})
+        neo4j_host = os.getenv("NEO4J_HOST", neo4j_data.get("host", "neo4j"))
         neo4j_host = cls._apply_host_fallback(neo4j_host)
         neo4j = DatabaseConfig(
             host=neo4j_host,
-            port=int(os.getenv("NEO4J_BOLT_PORT", neo4j_config.get("port", "7687"))),
+            port=int(os.getenv("NEO4J_BOLT_PORT", neo4j_data.get("port", 7687))),
             user=os.getenv("NEO4J_USER", "neo4j"),
             password=os.getenv("NEO4J_PASSWORD", ""),
         )
-        # Load embedding configuration from YAML
-        embedding_config = yaml_config.get("embedding", {})
+
+        # --- LLM & Model Config ---
+        llm_data = yaml_config.get("llm", {})
+        llm = LLMConfig(**filter_none(llm_data))
+
+        model_data = yaml_config.get("model", {})
+        claimify_data = model_data.get("claimify", {})
+        claimify_default = claimify_data.get("default", ClaimifyModelConfig.default)
+        claimify_config = ClaimifyModelConfig(
+            default=claimify_default,
+            selection=claimify_data.get("selection") or claimify_default,
+            disambiguation=claimify_data.get("disambiguation") or claimify_default,
+            decomposition=claimify_data.get("decomposition") or claimify_default,
+            entailment=claimify_data.get("entailment") or claimify_default,
+        )
+        model = ModelConfig(
+            claimify=claimify_config,
+            **filter_none({k: v for k, v in model_data.items() if k != "claimify"}),
+        )
+
+        # --- Embedding Config ---
+        embedding_data = yaml_config.get("embedding", {})
+        pgvector_data = embedding_data.get("pgvector", {})
+        chunking_data = embedding_data.get("chunking", {})
+        # Use the legacy 'models.default' if present, otherwise use dataclass default
+        default_embedding = embedding_data.get("models", {}).get(
+            "default", EmbeddingConfig.default_model
+        )
         embedding = EmbeddingConfig(
-            default_model=embedding_config.get("models", {}).get(
-                "default", "sentence-transformers/all-MiniLM-L6-v2"
-            ),
-            device=embedding_config.get("device", "auto"),
-            batch_size=embedding_config.get("batch_size", 32),
-            collection_name=embedding_config.get("pgvector", {}).get(
-                "collection_name", "utterances"
-            ),
-            embed_dim=embedding_config.get("pgvector", {}).get("embed_dim", 384),
-            index_type=embedding_config.get("pgvector", {}).get(
-                "index_type", "ivfflat"
-            ),
-            index_lists=embedding_config.get("pgvector", {}).get("index_lists", 100),
-            chunk_size=embedding_config.get("chunking", {}).get("chunk_size", 300),
-            chunk_overlap=embedding_config.get("chunking", {}).get("chunk_overlap", 30),
-            keep_separator=embedding_config.get("chunking", {}).get(
-                "keep_separator", True
-            ),
-            merge_colon_endings=embedding_config.get("chunking", {}).get(
-                "merge_colon_endings", True
-            ),
-            merge_short_prefixes=embedding_config.get("chunking", {}).get(
-                "merge_short_prefixes", True
-            ),
-            min_chunk_tokens=embedding_config.get("chunking", {}).get(
-                "min_chunk_tokens", 5
-            ),
+            default_model=default_embedding,
+            utterance=embedding_data.get("utterance") or default_embedding,
+            concept=embedding_data.get("concept") or default_embedding,
+            summary=embedding_data.get("summary") or default_embedding,
+            fallback=embedding_data.get("fallback") or default_embedding,
+            device=embedding_data.get("device"),
+            batch_size=embedding_data.get("batch_size"),
+            collection_name=pgvector_data.get("collection_name"),
+            embed_dim=pgvector_data.get("embed_dim"),
+            index_type=pgvector_data.get("index_type"),
+            index_lists=pgvector_data.get("index_lists"),
+            chunk_size=chunking_data.get("chunk_size"),
+            chunk_overlap=chunking_data.get("chunk_overlap"),
+            keep_separator=chunking_data.get("keep_separator"),
+            merge_colon_endings=chunking_data.get("merge_colon_endings"),
+            merge_short_prefixes=chunking_data.get("merge_short_prefixes"),
+            min_chunk_tokens=chunking_data.get("min_chunk_tokens"),
         )
-        # Load processing configuration from YAML
-        processing_config_data = yaml_config.get("processing", {})
-        processing = ProcessingConfig(
-            temperature=processing_config_data.get("temperature", 0.1),
-            max_tokens=processing_config_data.get("max_tokens", 1000),
-            timeout_seconds=processing_config_data.get("timeout_seconds", 30),
-            claimify=processing_config_data.get("claimify", {}),
-            batch_sizes=processing_config_data.get("batch_sizes", {}),
-            retries=processing_config_data.get("retries", {}),
-        )
-        # Load concepts configuration from YAML
-        concepts_config = yaml_config.get("concepts", {})
+        embedding = EmbeddingConfig(**filter_none(asdict(embedding)))
+
+        # --- Concepts Config (Handles nested structure) ---
+        concepts_data = yaml_config.get("concepts", {})
+        candidates_data = concepts_data.get("candidates", {})
+        canonical_data = concepts_data.get("canonical", {})
         concepts = ConceptsConfig(
-            candidates_collection=concepts_config.get("candidates", {}).get(
-                "collection_name", "concept_candidates"
-            ),
-            similarity_threshold=concepts_config.get("candidates", {}).get(
-                "similarity_threshold", 0.9
-            ),
-            canonical_collection=concepts_config.get("canonical", {}).get(
-                "collection_name", "concepts"
-            ),
-            merge_threshold=concepts_config.get("canonical", {}).get(
-                "similarity_threshold", 0.95
-            ),
+            candidates_collection=candidates_data.get("collection_name"),
+            similarity_threshold=candidates_data.get("similarity_threshold"),
+            canonical_collection=canonical_data.get("collection_name"),
+            merge_threshold=canonical_data.get("similarity_threshold"),
         )
-        # Load noun phrase extraction configuration from YAML
-        noun_phrase_config = yaml_config.get("noun_phrase_extraction", {})
+        concepts = ConceptsConfig(**filter_none(asdict(concepts)))
+
+        # --- Noun Phrase Extraction (Handles nested structure) ---
+        npe_data = yaml_config.get("noun_phrase_extraction", {})
+        npe_candidates_data = npe_data.get("concept_candidates", {})
         noun_phrase_extraction = NounPhraseExtractionConfig(
-            spacy_model=noun_phrase_config.get("spacy_model", "en_core_web_sm"),
-            min_phrase_length=noun_phrase_config.get("min_phrase_length", 2),
-            filter_digits_only=noun_phrase_config.get("filter_digits_only", True),
-            concept_candidates_collection=noun_phrase_config.get(
-                "concept_candidates", {}
-            ).get("collection_name", "concept_candidates"),
-            status_field=noun_phrase_config.get("concept_candidates", {}).get(
-                "status_field", "status"
-            ),
-            default_status=noun_phrase_config.get("concept_candidates", {}).get(
-                "default_status", "pending"
-            ),
+            spacy_model=npe_data.get("spacy_model"),
+            min_phrase_length=npe_data.get("min_phrase_length"),
+            filter_digits_only=npe_data.get("filter_digits_only"),
+            concept_candidates_collection=npe_candidates_data.get("collection_name"),
+            status_field=npe_candidates_data.get("status_field"),
+            default_status=npe_candidates_data.get("default_status"),
         )
-        # Load concept summaries configuration from YAML
-        concept_summaries_config = yaml_config.get("concept_summaries", {})
+        noun_phrase_extraction = NounPhraseExtractionConfig(
+            **filter_none(asdict(noun_phrase_extraction))
+        )
+
+        # --- Other Config Sections ---
+        processing = ProcessingConfig(**filter_none(yaml_config.get("processing", {})))
+        threshold = ThresholdConfig(**filter_none(yaml_config.get("threshold", {})))
         concept_summaries = ConceptSummariesConfig(
-            model=concept_summaries_config.get("model", "gpt-4"),
-            max_examples=concept_summaries_config.get("max_examples", 5),
-            skip_if_no_claims=concept_summaries_config.get("skip_if_no_claims", True),
-            include_see_also=concept_summaries_config.get("include_see_also", True),
+            **filter_none(yaml_config.get("concept_summaries", {}))
         )
-        # Load threshold configuration from YAML
-        threshold_config = yaml_config.get("threshold", {})
-        threshold = ThresholdConfig(
-            concept_merge=threshold_config.get("concept_merge", 0.90),
-            claim_link_strength=threshold_config.get("claim_link_strength", 0.60),
-            summary_grouping_similarity=threshold_config.get(
-                "summary_grouping_similarity", 0.80
-            ),
-            claim_quality=threshold_config.get("claim_quality", 0.70),
+        subject_summaries = SubjectSummariesConfig(
+            **filter_none(yaml_config.get("subject_summaries", {}))
         )
-        # Load paths configuration from YAML
-        paths_config = yaml_config.get("paths", {})
-        vault_path = os.getenv("VAULT_PATH", paths_config.get("vault", "/vault"))
+
+        vault_watcher_data = yaml_config.get("vault_watcher", {})
+        vault_watcher_rabbitmq_data = vault_watcher_data.get("rabbitmq", {})
+        vault_watcher = VaultWatcherConfig(
+            batch_interval=vault_watcher_data.get("batch_interval"),
+            max_batch_size=vault_watcher_data.get("max_batch_size"),
+            queue_name=vault_watcher_rabbitmq_data.get("queue_name"),
+            exchange=vault_watcher_rabbitmq_data.get("exchange"),
+            routing_key=vault_watcher_rabbitmq_data.get("routing_key"),
+        )
+        vault_watcher = VaultWatcherConfig(**filter_none(asdict(vault_watcher)))
+
+        window_data = yaml_config.get("window", {})
+        window = {
+            "claimify": WindowConfig(**filter_none(window_data.get("claimify", {})))
+        }
+
+        # --- Paths Config ---
+        paths_data = yaml_config.get("paths", {})
+        vault_path = os.getenv("VAULT_PATH", paths_data.get("vault", "/vault"))
         settings_path = os.getenv(
-            "SETTINGS_PATH", paths_config.get("settings", "/settings")
+            "SETTINGS_PATH", paths_data.get("settings", "/settings")
         )
-        # Vault paths configuration (from main branch)
         paths = PathsConfig(
             vault=vault_path,
             settings=settings_path,
-            tier1=os.getenv("VAULT_TIER1_PATH", paths_config.get("tier1", "tier1")),
-            tier2=os.getenv("VAULT_SUMMARIES_PATH", paths_config.get("summaries", ".")),
-            tier3=os.getenv("VAULT_CONCEPTS_PATH", paths_config.get("concepts", ".")),
-            logs=os.getenv(
-                "VAULT_LOGS_PATH", paths_config.get("logs", ".aclarai/import_logs")
-            ),
+            tier1=os.getenv("VAULT_TIER1_PATH", paths_data.get("tier1")),
+            tier2=os.getenv("VAULT_SUMMARIES_PATH", paths_data.get("tier2")),
+            tier3=os.getenv("VAULT_CONCEPTS_PATH", paths_data.get("tier3")),
+            logs=os.getenv("VAULT_LOGS_PATH", paths_data.get("logs")),
         )
-        # Load features configuration from YAML
-        features_config = yaml_config.get("features", {})
-        # Load vault watcher configuration from YAML
-        vault_watcher_config = yaml_config.get("vault_watcher", {})
-        vault_watcher = VaultWatcherConfig(
-            batch_interval=vault_watcher_config.get("batch_interval", 2.0),
-            max_batch_size=vault_watcher_config.get("max_batch_size", 50),
-            queue_name=vault_watcher_config.get("rabbitmq", {}).get(
-                "queue_name", "aclarai_dirty_blocks"
-            ),
-            exchange=vault_watcher_config.get("rabbitmq", {}).get("exchange", ""),
-            routing_key=vault_watcher_config.get("rabbitmq", {}).get(
-                "routing_key", "aclarai_dirty_blocks"
-            ),
-        )
-        # Load scheduler configuration from YAML
-        scheduler_config = yaml_config.get("scheduler", {})
-        jobs_config = scheduler_config.get("jobs", {})
+        paths = PathsConfig(**filter_none(asdict(paths)))
 
-        # Load concept embedding refresh job config
-        concept_refresh_config = jobs_config.get("concept_embedding_refresh", {})
-        concept_embedding_refresh = JobConfig(
-            enabled=concept_refresh_config.get("enabled", True),
-            manual_only=concept_refresh_config.get("manual_only", False),
-            cron=concept_refresh_config.get("cron", "0 3 * * *"),
-            description=concept_refresh_config.get(
-                "description", "Refresh concept embeddings from Tier 3 pages"
+        # --- Scheduler Config ---
+        scheduler_data = yaml_config.get("scheduler", {})
+        jobs_data = scheduler_data.get("jobs", {})
+
+        def load_job_config(job_key: str, config_cls):
+            job_data = jobs_data.get(job_key, {})
+            return config_cls(**filter_none(job_data))
+
+        scheduler_jobs = SchedulerJobsConfig(
+            concept_embedding_refresh=load_job_config(
+                "concept_embedding_refresh", JobConfig
+            ),
+            vault_sync=load_job_config("vault_sync", JobConfig),
+            top_concepts=load_job_config("top_concepts", TopConceptsJobConfig),
+            trending_topics=load_job_config("trending_topics", TrendingTopicsJobConfig),
+            concept_highlight_refresh=load_job_config(
+                "concept_highlight_refresh", JobConfig
+            ),
+            concept_summary_refresh=load_job_config(
+                "concept_summary_refresh", JobConfig
+            ),
+            concept_clustering=load_job_config(
+                "concept_clustering", ConceptClusteringJobConfig
+            ),
+            subject_summary_refresh=load_job_config(
+                "subject_summary_refresh", JobConfig
+            ),
+            concept_subject_linking=load_job_config(
+                "concept_subject_linking", ConceptSubjectLinkingJobConfig
             ),
         )
+        scheduler = SchedulerConfig(jobs=scheduler_jobs)
 
-        # Load vault sync job config
-        vault_sync_config = jobs_config.get("vault_sync", {})
-        vault_sync = JobConfig(
-            enabled=vault_sync_config.get("enabled", True),
-            manual_only=vault_sync_config.get("manual_only", False),
-            cron=vault_sync_config.get("cron", "*/30 * * * *"),
-            description=vault_sync_config.get(
-                "description", "Sync vault files with knowledge graph"
-            ),
-        )
-
-        scheduler = SchedulerConfig(
-            jobs=SchedulerJobsConfig(
-                concept_embedding_refresh=concept_embedding_refresh,
-                vault_sync=vault_sync,
-            )
-        )
         return cls(
-            postgres=postgres,
-            neo4j=neo4j,
-            embedding=embedding,
+            llm=llm,
+            model=model,
             processing=processing,
+            embedding=embedding,
+            threshold=threshold,
+            window=window,
             concepts=concepts,
             noun_phrase_extraction=noun_phrase_extraction,
             concept_summaries=concept_summaries,
-            threshold=threshold,
+            subject_summaries=subject_summaries,
+            postgres=postgres,
+            neo4j=neo4j,
             vault_watcher=vault_watcher,
             scheduler=scheduler,
             rabbitmq_host=os.getenv("RABBITMQ_HOST", "rabbitmq"),
-            rabbitmq_port=int(os.getenv("RABBITMQ_PORT", "5672")),
+            rabbitmq_port=int(os.getenv("RABBITMQ_PORT", 5672)),
             rabbitmq_user=os.getenv("RABBITMQ_USER", "user"),
             rabbitmq_password=os.getenv("RABBITMQ_PASSWORD", ""),
-            vault_path=vault_path,  # For backward compatibility
-            settings_path=settings_path,  # For backward compatibility
+            paths=paths,
             log_level=os.getenv(
                 "LOG_LEVEL", yaml_config.get("logging", {}).get("level", "INFO")
             ),
             debug=os.getenv("DEBUG", "false").lower() == "true",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            paths=paths,
-            features=features_config,
+            features=yaml_config.get("features", {}),
+            vault_path=vault_path,
+            settings_path=settings_path,
         )
 
     @classmethod
@@ -654,13 +581,8 @@ class aclaraiConfig:
         if yaml is None:
             logger.warning("PyYAML not available, skipping YAML config loading")
             return {}
-        # Load default configuration first
         default_config = cls._load_default_config()
-        # Find user configuration file
-        user_config_file = config_file
-        if user_config_file is None:
-            user_config_file = cls._find_user_config_file()
-        # Load user configuration if it exists
+        user_config_file = config_file or cls._find_user_config_file()
         user_config: Dict[str, Any] = {}
         if user_config_file and Path(user_config_file).exists():
             logger.info(f"Loading YAML configuration from {user_config_file}")
@@ -669,29 +591,20 @@ class aclaraiConfig:
                     user_config = yaml.safe_load(f) or {}
             except Exception as e:
                 logger.error(f"Failed to load YAML config from {user_config_file}: {e}")
-                user_config = {}
         else:
             logger.info("No user YAML configuration file found, using defaults only")
-        # Deep merge user config over default config
-        merged_config = cls._deep_merge_configs(default_config, user_config)
-        return merged_config
+        return cls._deep_merge_configs(default_config, user_config)
 
     @classmethod
     def _load_default_config(cls) -> Dict[str, Any]:
         """Load the default configuration file."""
         if yaml is None:
             return {}
-        # Look for aclarai.config.default.yaml in shared package directory
-        current_path = Path.cwd()
-        search_paths = []
-        # Priority 1: same directory as this module (shared package)
         module_path = Path(__file__).parent
-        search_paths.append(module_path / "aclarai.config.default.yaml")
-        # Priority 2: in shared/ directory relative to current working directory
-        for path in [current_path] + list(current_path.parents):
-            search_paths.append(
-                path / "shared" / "aclarai_shared" / "aclarai.config.default.yaml"
-            )
+        search_paths = [
+            module_path / "aclarai.config.default.yaml",
+            Path.cwd() / "shared" / "aclarai_shared" / "aclarai.config.default.yaml",
+        ]
         for config_path in search_paths:
             if config_path.exists():
                 logger.debug(f"Loading default configuration from {config_path}")
@@ -702,7 +615,6 @@ class aclaraiConfig:
                     logger.error(
                         f"Failed to load default config from {config_path}: {e}"
                     )
-                    continue
         logger.warning("No default configuration file found, using hardcoded defaults")
         return {}
 
@@ -710,13 +622,13 @@ class aclaraiConfig:
     def _find_user_config_file(cls) -> Optional[str]:
         """Find the user configuration file."""
         current_path = Path.cwd()
-        search_paths = []
-        # Priority 1: settings directory in current and parent directories
-        for path in [current_path] + list(current_path.parents):
-            search_paths.append(path / "settings" / "aclarai.config.yaml")
-        # Priority 2: root level in current and parent directories
-        for path in [current_path] + list(current_path.parents):
-            search_paths.append(path / "aclarai.config.yaml")
+        search_paths = [
+            path / "settings" / "aclarai.config.yaml"
+            for path in [current_path] + list(current_path.parents)
+        ] + [
+            path / "aclarai.config.yaml"
+            for path in [current_path] + list(current_path.parents)
+        ]
         for config_path in search_paths:
             if config_path.exists():
                 return str(config_path)
@@ -726,14 +638,7 @@ class aclaraiConfig:
     def _deep_merge_configs(
         default: Dict[str, Any], user: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Deep merge user configuration over default configuration.
-        Args:
-            default: Default configuration dictionary
-            user: User configuration dictionary
-        Returns:
-            Merged configuration dictionary
-        """
+        """Deep merge user configuration over default configuration."""
         import copy
 
         result = copy.deepcopy(default)
@@ -754,19 +659,12 @@ class aclaraiConfig:
 
     @staticmethod
     def _apply_host_fallback(host: str) -> str:
-        """
-        Apply host.docker.internal fallback for external database connections.
-        If the host appears to be external (not a Docker service name),
-        and we're running in a Docker container, use host.docker.internal.
-        """
-        # If explicitly set to host.docker.internal, keep it
+        """Apply host.docker.internal fallback for external database connections."""
         if host == "host.docker.internal":
             return host
-        # Check if we're running in Docker by looking for typical indicators
         running_in_docker = (
             os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER") == "true"
         )
-        # List of common Docker service names (internal services)
         docker_services = {
             "postgres",
             "neo4j",
@@ -775,7 +673,6 @@ class aclaraiConfig:
             "vault-watcher",
             "scheduler",
         }
-        # If running in Docker and host is not localhost/127.0.0.1, not a known service and if it's an IP address or external hostname
         if (
             running_in_docker
             and host not in docker_services
@@ -790,39 +687,23 @@ class aclaraiConfig:
         """Check if a host appears to be external (IP address or FQDN)."""
         import re
 
-        # Check if it's an IP address pattern
         ip_pattern = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
         if ip_pattern.match(host):
             return True
-        # Check if it contains dots (likely FQDN)
         return bool("." in host and not host.startswith("localhost"))
 
     def validate_required_vars(
         self, required_vars: Optional[List[str]] = None
     ) -> List[str]:
-        """
-        Validate that required environment variables are set.
-        Args:
-            required_vars: List of required variable names (optional)
-        Returns:
-            List of missing variables
-        """
+        """Validate that required environment variables are set."""
         if required_vars is None:
             required_vars = ["POSTGRES_PASSWORD", "NEO4J_PASSWORD"]
-        missing_vars = []
-        # Check environment variables directly
-        for var in required_vars:
-            value = os.getenv(var)
-            if not value:
-                missing_vars.append(var)
-        # Only check config if no direct env vars were specified
-        if not required_vars or len(missing_vars) == len(required_vars):
-            # Additional validation for database connections via config
-            if not self.postgres.password and "POSTGRES_PASSWORD" not in missing_vars:
-                missing_vars.append("POSTGRES_PASSWORD (via config)")
-            if not self.neo4j.password and "NEO4J_PASSWORD" not in missing_vars:
-                missing_vars.append("NEO4J_PASSWORD (via config)")
-        return list(set(missing_vars))  # Remove duplicates
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+        if not self.postgres.password and "POSTGRES_PASSWORD" not in missing_vars:
+            missing_vars.append("POSTGRES_PASSWORD (via config)")
+        if not self.neo4j.password and "NEO4J_PASSWORD" not in missing_vars:
+            missing_vars.append("NEO4J_PASSWORD (via config)")
+        return list(set(missing_vars))
 
     def setup_logging(self):
         """Configure logging based on the log level setting."""
@@ -841,30 +722,12 @@ def load_config(
     validate: bool = True,
     required_vars: Optional[List[str]] = None,
 ) -> aclaraiConfig:
-    """
-    Load aclarai configuration with validation.
-    Args:
-        env_file: Path to .env file (optional)
-        config_file: Path to YAML config file (optional)
-        validate: Whether to validate required variables
-        required_vars: List of required variables to validate
-    Returns:
-        aclaraiConfig instance
-    Raises:
-        ValueError: If required variables are missing
-    """
+    """Load aclarai configuration with validation."""
     config = aclaraiConfig.from_env(env_file, config_file)
-    # Validate required environment variables for security
     if validate:
-        # Check other required vars (this will include database passwords)
         missing_vars = config.validate_required_vars(required_vars)
         if missing_vars:
-            # Remove duplicates and sort for consistent output
-            missing_vars = sorted(set(missing_vars))
-            error_msg = (
-                f"Missing required environment variables: {', '.join(missing_vars)}. "
-                f"Please check your .env file or environment configuration."
-            )
+            error_msg = f"Missing required environment variables: {', '.join(sorted(missing_vars))}. Please check your .env file or environment configuration."
             logger.error(error_msg)
             raise ValueError(error_msg)
     config.setup_logging()

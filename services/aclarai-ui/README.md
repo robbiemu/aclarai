@@ -17,7 +17,7 @@ The `aclarai_ui/util/` directory contains standalone scripts for development and
 
 ### Import Panel Launcher
 
--   **Script:** `aclarai_ui/util/import_panel_launcher.py` (formerly `launch_ui_test.py`)
+-   **Script:** `aclarai_ui/util/import_panel_launcher.py` 
 -   **Purpose:** Launches the main Import Panel as a standalone Gradio application on `http://localhost:7860`. This allows for focused testing of the file import workflow.
 -   **Usage:**
     ```bash

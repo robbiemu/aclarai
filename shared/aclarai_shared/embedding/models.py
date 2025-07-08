@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, cast
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
-from ..config import aclaraiConfig
+from ..config import aclaraiConfig, load_config
 from .chunking import ChunkMetadata
 
 logger = logging.getLogger(__name__)
@@ -53,11 +53,9 @@ class EmbeddingGenerator:
             model_name: Override model name (uses config default if None)
         """
         if config is None:
-            from ..config import load_config
-
             config = load_config(validate=False)
         self.config = config
-        self.model_name = model_name or config.embedding.default_model
+        self.model_name = model_name or config.embedding.utterance
         # Initialize embedding model
         self.embedding_model = self._initialize_embedding_model()
         logger.info(
