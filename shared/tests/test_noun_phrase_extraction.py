@@ -14,6 +14,7 @@ import pytest
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from aclarai_shared.config import load_config
 from aclarai_shared.noun_phrase_extraction.extractor import NounPhraseExtractor
 from aclarai_shared.noun_phrase_extraction.models import (
     ExtractionResult,
@@ -245,11 +246,20 @@ class TestNounPhraseExtractionRealIntegration:
     @pytest.fixture(autouse=True)
     def setup_integration_environment(self):
         """Set up integration test environment."""
-        # Skip if required environment variables are not set
-        required_env_vars = ["NEO4J_URL", "POSTGRES_URL"]
-        for var in required_env_vars:
-            if not os.getenv(var):
-                pytest.skip(f"Integration test requires {var} environment variable")
+        try:
+            config = load_config()
+
+            postgres_url = config.postgres.get_connection_url()
+            neo4j_url = config.neo4j.get_neo4j_bolt_url()
+
+            if not postgres_url or not (config.postgres.host and config.postgres.port):
+                pytest.skip("Integration test requires valid PostgreSQL configuration")
+
+            if not config.neo4j.host or not config.neo4j.port:
+                pytest.skip("Integration test requires valid Neo4j configuration")
+
+        except Exception as e:
+            pytest.skip(f"Integration test requires valid configuration: {e}")
 
     def test_extractor_with_real_spacy_model(self):
         """Test that the extractor can work with a real spaCy model."""
@@ -263,7 +273,7 @@ class TestNounPhraseExtractionRealIntegration:
             test_text = (
                 "Machine learning algorithms process natural language efficiently."
             )
-            phrases = extractor._extract_noun_phrases_from_text(test_text)
+            phrases = extractor._extract_noun_phrases(test_text)
             # Should extract some phrases
             assert isinstance(phrases, list)
             # Verify structure if phrases found

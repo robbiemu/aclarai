@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, "services/aclarai-ui")
 
 
-def main():
+def main() -> int:
     """Launch the Gradio import panel for testing."""
     print("🚀 Launching Gradio Import Panel Test")
     print("=" * 50)

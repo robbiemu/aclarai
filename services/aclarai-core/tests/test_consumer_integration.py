@@ -4,7 +4,6 @@ Tests the complete flow from RabbitMQ message consumption to Neo4j database upda
 """
 
 import json
-import os
 import tempfile
 import threading
 import time
@@ -54,9 +53,8 @@ class TestConsumerIntegration:
                     host=config.rabbitmq_host,
                     port=config.rabbitmq_port,
                     credentials=pika.PlainCredentials(
-                        config.rabbitmq_user,
-                        config.rabbitmq_password
-                    )
+                        config.rabbitmq_user, config.rabbitmq_password
+                    ),
                 )
             )
             channel = connection.channel()
@@ -80,7 +78,7 @@ class TestConsumerIntegration:
             tier1_path = vault_path / "tier1"
             tier1_path.mkdir(parents=True)
 
-            # Create a test markdown file  
+            # Create a test markdown file
             test_file = tier1_path / "test_consumer_doc.md"
             test_content = """# Consumer Test Document
 
@@ -185,14 +183,19 @@ This is new content for a new block.
         with integration_neo4j_manager.session() as session:
             result = session.run("""
                 MATCH (b:Block {id: 'test_consumer_block_001'})
-                RETURN b.version as version, b.hash as hash, b.content as content
+                RETURN b.version as version, b.hash as hash, b.text as content
             """)
             record = result.single()
             assert record is not None
             assert record["version"] == 2  # Version should have been updated
-            assert record["hash"] == "updated_hash_456"  # Hash should match new content
+            # The hash is computed from the semantic content of the block
+            expected_hash = (
+                "74bfb41cd8981f4cb5aac33a1c67fd5a790daabfd72f538269cd56cd5fd843e2"
+            )
+            assert record["hash"] == expected_hash  # Hash should match computed content
+            # The content stored is the semantic text of the block
             assert (
-                "This is updated content that should be processed by the consumer"
+                "The version has been incremented to trigger an update."
                 in record["content"]
             )
 

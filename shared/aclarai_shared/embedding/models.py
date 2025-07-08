@@ -75,6 +75,9 @@ class EmbeddingGenerator:
         if not chunks:
             logger.warning("No chunks provided for embedding")
             return []
+        if not self.model_name:
+            logger.error("No model name configured for embedding")
+            raise ValueError("Model name must be specified in configuration")
         logger.info(
             f"Generating embeddings for {len(chunks)} chunks using {self.model_name}"
         )
@@ -146,6 +149,9 @@ class EmbeddingGenerator:
         Returns:
             Initialized embedding model
         """
+        if not self.model_name:
+            logger.error("No model name specified for embedding initialization")
+            raise ValueError("Model name must be specified in configuration")
         try:
             # Determine device
             device = self._get_device()

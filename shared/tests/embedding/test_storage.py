@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from aclarai_shared import load_config
-from aclarai_shared.config import DatabaseConfig, aclaraiConfig
 from aclarai_shared.embedding.chunking import ChunkMetadata
 from aclarai_shared.embedding.models import EmbeddedChunk
 from aclarai_shared.embedding.storage import VectorStoreMetrics, aclaraiVectorStore

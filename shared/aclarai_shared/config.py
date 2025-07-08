@@ -10,7 +10,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import IO, Any, Dict, List, Optional, Union
+from typing import IO, Any, Dict, List, Optional, Type, TypeVar, Union
 
 import yaml
 
@@ -230,6 +230,9 @@ class JobConfig:
     manual_only: bool = False
     cron: str = "0 3 * * *"
     description: str = ""
+
+
+T = TypeVar("T", bound=JobConfig)
 
 
 @dataclass
@@ -515,7 +518,7 @@ class aclaraiConfig:
         scheduler_data = yaml_config.get("scheduler", {})
         jobs_data = scheduler_data.get("jobs", {})
 
-        def load_job_config(job_key: str, config_cls):
+        def load_job_config(job_key: str, config_cls: Type[T]) -> T:
             job_data = jobs_data.get(job_key, {})
             return config_cls(**filter_none(job_data))
 

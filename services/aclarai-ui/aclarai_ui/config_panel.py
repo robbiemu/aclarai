@@ -7,7 +7,6 @@ This module implements the configuration panel that allows users to:
 Follows the design specification from docs/arch/design_config_panel.md
 """
 
-import copy
 import logging
 import re
 from dataclasses import asdict, dataclass
@@ -16,7 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import gradio as gr
 import yaml
-
 from aclarai_shared.config import aclaraiConfig
 
 logger = logging.getLogger("aclarai-ui.config_panel")
@@ -355,10 +353,10 @@ def create_configuration_panel() -> gr.Blocks:
             subject_summary=model.subject_summary,
             trending_concepts_agent=model.trending_concepts_agent,
             fallback_plugin=model.fallback_plugin,
-            utterance_embedding=embedding.utterance,
-            concept_embedding=embedding.concept,
-            summary_embedding=embedding.summary,
-            fallback_embedding=embedding.fallback,
+            utterance_embedding=embedding.utterance or "",
+            concept_embedding=embedding.concept or "",
+            summary_embedding=embedding.summary or "",
+            fallback_embedding=embedding.fallback or "",
             # Thresholds & Parameters
             concept_merge=threshold.concept_merge,
             claim_link_strength=threshold.claim_link_strength,
@@ -598,7 +596,15 @@ def create_configuration_panel() -> gr.Blocks:
                 return "✅ **Configuration saved successfully!**"
             return "❌ **Failed to save configuration.** Please check the logs for details."
         except Exception as e:
-            logger.error("Failed to save configuration", error=str(e))
+            logger.error(
+                f"Failed to save configuration: {str(e)}",
+                extra={
+                    "service": "aclarai-ui",
+                    "component": "config_panel",
+                    "action": "save_configuration",
+                    "error": str(e),
+                },
+            )
             return f"❌ **Error saving configuration:** {str(e)}"
 
     # Create the Gradio interface
@@ -1004,7 +1010,15 @@ def create_configuration_panel() -> gr.Blocks:
                 gr.Info("Configuration reloaded")
                 return (*asdict(config).values(), status_message)
             except Exception as e:
-                logger.error("Failed to reload configuration", error=str(e))
+                logger.error(
+                    "Failed to reload configuration",
+                    extra={
+                        "service": "aclarai-ui",
+                        "component": "config_panel",
+                        "action": "reload_configuration",
+                        "error": str(e),
+                    },
+                )
                 config = initial_config
                 status_message = f"❌ **Error reloading configuration:** {str(e)}"
                 gr.Error("Error reloading configuration")

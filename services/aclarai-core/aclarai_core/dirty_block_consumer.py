@@ -60,11 +60,14 @@ class DirtyBlockConsumer:
         if is_dataclass(self.config):
             tool_factory_config = asdict(self.config)
         else:
-            tool_factory_config = (
-                self.config.dict()
-                if hasattr(self.config, "dict") and callable(self.config.dict)
-                else {}
-            )
+            # Use model_dump() for Pydantic v2 compatibility
+            if hasattr(self.config, "model_dump") and callable(self.config.model_dump):
+                tool_factory_config = self.config.model_dump()
+            elif hasattr(self.config, "dict") and callable(self.config.dict):
+                # Fallback for Pydantic v1 compatibility
+                tool_factory_config = self.config.dict()
+            else:
+                tool_factory_config = {}
         self.tool_factory = ToolFactory(tool_factory_config, self.vector_store_manager)
 
         if self.llm:  # Only initialize agents if LLM loaded successfully

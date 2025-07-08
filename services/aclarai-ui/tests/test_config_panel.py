@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from aclarai_shared.config import aclaraiConfig
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

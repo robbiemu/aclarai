@@ -1,39 +1,23 @@
-from dataclasses import asdict
 import json
 import os
 import tempfile
-import time
 import threading
+import time
+from dataclasses import asdict
 from pathlib import Path
-import pika
-import pytest
 from unittest.mock import MagicMock, patch
 
-
-from aclarai_shared import load_config
+import pika
+import pytest
+import yaml
 from aclarai_core.dirty_block_consumer import DirtyBlockConsumer
+from aclarai_shared import load_config
 from aclarai_shared.config import (
     aclaraiConfig,
-    ModelConfig,
-    ClaimifyModelConfig,
-    ProcessingConfig,
-    EmbeddingConfig,
-    VaultWatcherConfig,
-    DatabaseConfig,
-    LLMConfig,
-    PathsConfig,
-    SchedulerConfig,
-    ThresholdConfig,
-    ConceptsConfig,
-    NounPhraseExtractionConfig,
-    ConceptSummariesConfig,
-    SubjectSummariesConfig,
-    WindowConfig,
 )
 from aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
 from aclarai_shared.tools.factory import ToolFactory
 from llama_index.core.llms.llm import LLM as LlamaLLM
-import yaml
 
 
 @pytest.fixture

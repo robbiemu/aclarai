@@ -12,6 +12,7 @@ import pytest
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from aclarai_shared.config import load_config
 from aclarai_shared.noun_phrase_extraction import (
     NounPhraseCandidate,
     NounPhraseExtractor,
@@ -251,11 +252,20 @@ class TestRealNounPhraseExtractionIntegration:
     @pytest.fixture(autouse=True)
     def setup_integration_environment(self):
         """Set up integration test environment."""
-        # Skip if required environment variables are not set
-        required_env_vars = ["NEO4J_URL", "POSTGRES_URL"]
-        for var in required_env_vars:
-            if not os.getenv(var):
-                pytest.skip(f"Integration test requires {var} environment variable")
+        try:
+            config = load_config()
+
+            postgres_url = config.postgres.get_connection_url()
+            neo4j_url = config.neo4j.get_neo4j_bolt_url()
+
+            if not postgres_url or not (config.postgres.host and config.postgres.port):
+                pytest.skip("Integration test requires valid PostgreSQL configuration")
+
+            if not config.neo4j.host or not config.neo4j.port:
+                pytest.skip("Integration test requires valid Neo4j configuration")
+
+        except Exception as e:
+            pytest.skip(f"Integration test requires valid configuration: {e}")
 
     def test_full_extraction_pipeline_integration(self):
         """Test the complete extraction pipeline with real services."""
@@ -285,12 +295,14 @@ class TestRealNounPhraseExtractionIntegration:
 
             config = load_config()
             extractor = NounPhraseExtractor(config)
-            # Test Neo4j connectivity by attempting to fetch nodes
-            nodes = extractor.neo4j_manager.fetch_claim_and_summary_nodes()
-            assert isinstance(nodes, list)
-            # Test PostgreSQL connectivity through vector store
+            # Test Neo4j connectivity by attempting to fetch nodes using the same pattern as the extractor
+            claims = extractor._fetch_claim_nodes()
+            summaries = extractor._fetch_summary_nodes()
+            assert isinstance(claims, list)
+            assert isinstance(summaries, list)
+            # Test PostgreSQL connectivity through concept candidates store
             # This will create tables if they don't exist
-            store = extractor.vector_store
+            store = extractor.concept_candidates_store
             assert store is not None
         except Exception as e:
             pytest.fail(f"Database connectivity test failed: {e}")
@@ -306,7 +318,7 @@ class TestRealNounPhraseExtractionIntegration:
             test_text = (
                 "Machine learning algorithms analyze large datasets efficiently."
             )
-            phrases = extractor._extract_noun_phrases_from_text(test_text)
+            phrases = extractor._extract_noun_phrases(test_text)
             assert isinstance(phrases, list)
             # May be empty if no noun phrases found, that's ok
             # Verify phrases are strings if any found
@@ -324,8 +336,17 @@ class TestRealConceptCandidatesStoreIntegration:
     @pytest.fixture(autouse=True)
     def setup_integration_environment(self):
         """Set up integration test environment."""
-        if not os.getenv("POSTGRES_URL"):
-            pytest.skip("Integration test requires POSTGRES_URL environment variable")
+        try:
+            from aclarai_shared.config import load_config
+
+            # Assert configuration for database connection
+            config = load_config()
+            postgres_url = config.postgres.get_connection_url()
+            # Use POSTGRES_URL if set, otherwise check each parameter
+            if not postgres_url or not (config.postgres.host and config.postgres.port):
+                pytest.skip("Integration test requires valid PostgreSQL configuration")
+        except Exception as e:
+            pytest.skip(f"Integration test requires valid configuration: {e}")
 
     def test_vector_store_operations_integration(self):
         """Test vector store operations with real PostgreSQL."""
@@ -369,10 +390,10 @@ class TestRealConceptCandidatesStoreIntegration:
             store = ConceptCandidatesVectorStore(config)
             # Test embedding generation
             test_text = "natural language processing"
-            embedding = store.embedding_generator.get_embeddings([test_text])
-            assert len(embedding) == 1
-            assert len(embedding[0]) == store.embed_dim
-            assert all(isinstance(x, (float, int)) for x in embedding[0])
+            embedding = store.embedding_generator.embed_text(test_text)
+            assert isinstance(embedding, list)
+            assert len(embedding) == store.embed_dim
+            assert all(isinstance(x, (float, int)) for x in embedding)
         except Exception as e:
             pytest.fail(f"Embedding generation integration test failed: {e}")
 

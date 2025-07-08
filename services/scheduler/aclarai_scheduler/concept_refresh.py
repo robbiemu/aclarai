@@ -64,6 +64,8 @@ class ConceptEmbeddingRefreshJob:
         self.embedding_generator = embedding_generator or EmbeddingGenerator(
             self.config
         )
+        if not self.embedding_generator.model_name:
+            raise ValueError("Embedding model name must be specified in configuration")
         self.vector_store = vector_store or aclaraiVectorStore(self.config)
 
     def run_job(self) -> JobStatsTypedDict:
@@ -376,7 +378,7 @@ class ConceptEmbeddingRefreshJob:
             embedded_chunk = EmbeddedChunk(
                 chunk_metadata=chunk_meta,
                 embedding=embedding,
-                model_name=self.embedding_generator.model_name,
+                model_name=self.embedding_generator.model_name,  # type: ignore[arg-type]
                 embedding_dim=len(embedding),
             )
             # 3. Store the new embedding.
