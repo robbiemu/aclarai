@@ -365,12 +365,14 @@ class TestRealConceptCandidatesStoreIntegration:
                     normalized_text="machine learning",
                     source_node_id="test_integration_1",
                     source_node_type="Claim",
+                    aclarai_id="test_integration_1",
                 ),
                 NounPhraseCandidate(
                     text="artificial intelligence",
                     normalized_text="artificial intelligence",
                     source_node_id="test_integration_2",
                     source_node_type="Summary",
+                    aclarai_id="test_integration_2",
                 ),
             ]
             # Test storage - this will create tables if needed

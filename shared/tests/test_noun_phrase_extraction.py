@@ -293,7 +293,7 @@ class TestNounPhraseExtractionRealIntegration:
             extractor = NounPhraseExtractor(config)
             # Verify components initialized
             assert extractor.neo4j_manager is not None
-            assert extractor.vector_store is not None
+            assert extractor.concept_candidates_store is not None
             # Test basic operations don't crash
             result = extractor.extract_from_all_nodes()
             assert hasattr(result, "total_nodes_processed")
