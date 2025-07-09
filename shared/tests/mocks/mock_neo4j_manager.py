@@ -209,6 +209,16 @@ class MockNeo4jGraphManager:
             "summary_text": f"Summary for {claim_id}",
         }
 
+    def get_claims_source_files(self, claim_ids: List[str]) -> Dict[str, str]:
+        """Return mock source file mapping for claims."""
+        # Return a mock mapping from claim_id to aclarai_id
+        file_mapping = {}
+        for claim_id in claim_ids:
+            # Mock aclarai_id based on claim_id
+            aclarai_id = f"file_{claim_id.replace('claim_', '')}"
+            file_mapping[claim_id] = aclarai_id
+        return file_mapping
+
     def create_claim_concept_relationship(self, _link_result: Any) -> bool:
         """Mock relationship creation - always succeeds."""
         return True
