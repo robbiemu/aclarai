@@ -79,11 +79,15 @@ def test_real_plugin_integration():
         print(f"   Clear result: {queue_display}")
 
         print("\n✅ Integration test completed successfully!")
-        
+
         # Add assertions to verify the test actually passed
         assert len(results) == 3, f"Expected 3 results, got {len(results)}"
-        assert tracker.orchestrator.plugin_manager.get_plugin_count() >= 1, "Should have at least one plugin"
-        assert "**Total Files Processed:** 3" in final_summary, "Should have processed 3 files"
+        assert tracker.orchestrator.plugin_manager.get_plugin_count() >= 1, (
+            "Should have at least one plugin"
+        )
+        assert "**Total Files Processed:** 3" in final_summary, (
+            "Should have processed 3 files"
+        )
         assert "Import queue cleared" in queue_display, "Queue should be cleared"
 
     except Exception as e:

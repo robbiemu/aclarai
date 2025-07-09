@@ -4,7 +4,7 @@ This module tests the main ClaimConceptLinker orchestrator class that coordinate
 the full end-to-end process from fetching claims to updating Markdown files.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from aclarai_shared.claim_concept_linking.models import (
@@ -18,6 +18,12 @@ from aclarai_shared.claim_concept_linking.orchestrator import ClaimConceptLinker
 
 from shared.tests.mocks import MockNeo4jGraphManager
 from shared.tests.utils import get_seeded_mock_services
+
+
+@pytest.fixture
+def mock_agent_class():
+    """Fixture to provide a mock agent class for testing."""
+    return MagicMock()
 
 
 class TestClaimConceptLinkerOrchestrator:
@@ -249,13 +255,16 @@ class TestClaimConceptLinkerOrchestrator:
     def test_link_claims_to_concepts_full_process(self, mock_agent_class):
         """Integration test for the full claim-concept linking process."""
         neo4j_manager, vector_store = get_seeded_mock_services()
-        mock_claim_concept_manager = MockNeo4jGraphManager()
+        # Use the seeded manager that has concepts and claims
+        mock_claim_concept_manager = neo4j_manager
 
         # Mock the agent and its response
         mock_agent_instance = mock_agent_class.return_value
         mock_classification_result = AgentClassificationResult(
             relation="SUPPORTS_CONCEPT", strength=0.8
         )
+        # The orchestrator expects the classification result to have a relationship attribute
+        mock_classification_result.relationship = RelationshipType.SUPPORTS_CONCEPT
         mock_agent_instance.classify_relationship.return_value = (
             mock_classification_result
         )

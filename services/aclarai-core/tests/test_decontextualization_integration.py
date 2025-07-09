@@ -16,14 +16,13 @@ from aclarai_core.graph.claim_evaluation_graph_service import (
     ClaimEvaluationGraphService,
 )
 from aclarai_core.markdown.markdown_updater_service import MarkdownUpdaterService
-from aclarai_shared.config import aclaraiConfig, load_config
+from aclarai_shared.config import load_config
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.tools.vector_store_manager import VectorStore, VectorStoreManager
 from llama_index.core.base.response.schema import Response
 from llama_index.core.llms import LLM
 from llama_index.core.vector_stores.types import VectorStoreQueryResult
 from neo4j import GraphDatabase
-
 
 # --- Mock Objects for Dependencies ---
 # Using MagicMock with proper LLM spec
@@ -57,10 +56,11 @@ def integration_neo4j_driver():
     """Fixture to set up a connection to a real Neo4j database for testing."""
     try:
         from aclarai_shared.config import load_config
+
         config = load_config(validate=False)
     except ValueError as e:
         pytest.skip(f"Required configuration missing for integration tests: {e}")
-    
+
     if not config.neo4j.password:
         pytest.skip("NEO4J_PASSWORD not configured for integration tests.")
 
@@ -146,12 +146,14 @@ class TestDecontextualizationWorkflowIntegration:
         mock_tool_factory = ToolFactory(config={}, vector_store_manager=mock_vsm)
 
         # 2. Instantiate the services with a mix of real and mock components
-        with patch("aclarai_core.agents.decontextualization_agent.ReActAgent") as MockReActAgent:
+        with patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent"
+        ) as MockReActAgent:
             mock_response = MagicMock(spec=Response)
             mock_response.response = "0.85"
             mock_agent_instance = MockReActAgent.return_value
             mock_agent_instance.run.return_value = mock_response
-            
+
             agent = DecontextualizationAgent(
                 llm=mock_llm, tool_factory=mock_tool_factory, config=mock_config
             )

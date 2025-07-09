@@ -418,10 +418,121 @@ class TestClaimifyGraphIntegration:
         assert claim_input.id.startswith("claim_")
 
     @pytest.mark.integration
-    def test_create_claim_input_integration(self, _integration, _test_chunk):
-        """Integration test for claim input creation."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+    def test_create_claim_input_integration(
+        self, integration_instance, integration_graph_manager
+    ):
+        """Integration test for claim input creation focusing on downstream consequences."""
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_004'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="The database connection was successfully established.",
+            source_id="test_blk_004",
+            chunk_id="test_chunk_004",
+            sentence_index=0,
+        )
+
+        # Test Case 1: High-quality claim candidate (should be suitable for strong concept relationships)
+        high_quality_candidate = ClaimCandidate(
+            text="The database connection was successfully established.",
+            is_atomic=True,
+            is_self_contained=True,  # This drives context_complete=True
+            is_verifiable=True,
+            confidence=0.95,
+        )
+
+        # Create claim input using the integration method
+        claim_input = integration_instance._create_claim_input(
+            high_quality_candidate, test_chunk
+        )
+
+        # Verify the intermediate properties are correctly set from the ClaimCandidate
+        assert isinstance(claim_input, ClaimInput)
+        assert (
+            claim_input.text == "The database connection was successfully established."
+        )
+        assert claim_input.block_id == "test_blk_004"
+        assert claim_input.verifiable == high_quality_candidate.is_verifiable
+        assert claim_input.self_contained == high_quality_candidate.is_self_contained
+        assert (
+            claim_input.context_complete == high_quality_candidate.is_self_contained
+        )  # Uses self_contained per integration code
+        assert claim_input.entailed_score is None  # Not set by pipeline
+        assert claim_input.coverage_score is None
+        assert claim_input.decontextualization_score is None
+        assert claim_input.id.startswith("claim_")
+
+        # Test Case 2: Low-quality claim candidate (should only be suitable for weak concept relationships)
+        low_quality_candidate = ClaimCandidate(
+            text="It was problematic.",
+            is_atomic=True,
+            is_self_contained=False,  # This drives context_complete=False
+            is_verifiable=True,
+            confidence=0.3,
+        )
+
+        low_quality_input = integration_instance._create_claim_input(
+            low_quality_candidate, test_chunk
+        )
+
+        # Verify the intermediate properties reflect the low quality
+        assert low_quality_input.verifiable == low_quality_candidate.is_verifiable
+        assert (
+            low_quality_input.self_contained == low_quality_candidate.is_self_contained
+        )
+        assert (
+            low_quality_input.context_complete
+            == low_quality_candidate.is_self_contained
+        )  # False
+
+        # Test persistence to Neo4j
+        created_claims = integration_graph_manager.create_claims(
+            [claim_input, low_quality_input]
+        )
+        assert len(created_claims) == 2
+
+        # Verify the claims were persisted correctly
+        with integration_graph_manager.session() as session:
+            claim_result = session.run(
+                "MATCH (c:Claim)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_004'}) RETURN c ORDER BY c.text"
+            )
+            claims = list(claim_result)
+            assert len(claims) == 2
+
+            # The intermediate properties are not persisted to Neo4j (they are processing decisions)
+            # The downstream consequence is in the claim-concept linking logic, not Neo4j persistence
+            for claim_record in claims:
+                assert "verifiable" not in claim_record["c"]  # Not persisted
+                assert "self_contained" not in claim_record["c"]  # Not persisted
+                assert "context_complete" not in claim_record["c"]  # Not persisted
+                assert claim_record["c"]["version"] == 1
+                assert (
+                    claim_record["c"].get("entailed_score") is None
+                )  # Not set by pipeline
+                assert claim_record["c"].get("coverage_score") is None
+                assert claim_record["c"].get("decontextualization_score") is None
+
+        # The real downstream consequence: these intermediate properties would be used by
+        # the claim-concept linking system to determine relationship types:
+        # - High quality claims (verifiable=True, self_contained=True, context_complete=True)
+        #   would be eligible for SUPPORTS_CONCEPT/CONTRADICTS_CONCEPT relationships
+        # - Low quality claims (verifiable=True, self_contained=False, context_complete=False)
+        #   would only be eligible for MENTIONS_CONCEPT relationships
+
+        # Since we can't test the full claim-concept linking in this integration test,
+        # we verify that the intermediate properties are correctly transferred
+        assert (
+            claim_input.verifiable
+            and claim_input.self_contained
+            and claim_input.context_complete
+        )  # High quality
+        assert (
+            low_quality_input.verifiable
+            and not low_quality_input.self_contained
+            and not low_quality_input.context_complete
+        )  # Low quality
 
     def test_create_sentence_input(self, integration, test_chunk):
         """Test creation of SentenceInput from ClaimCandidate."""
@@ -445,10 +556,63 @@ class TestClaimifyGraphIntegration:
         assert sentence_input.id.startswith("sentence_")
 
     @pytest.mark.integration
-    def test_create_sentence_input_integration(self, _integration, _test_chunk):
+    def test_create_sentence_input_integration(
+        self, integration_instance, integration_graph_manager
+    ):
         """Integration test for sentence input creation."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_005'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="It was problematic and unclear.",
+            source_id="test_blk_005",
+            chunk_id="test_chunk_005",
+            sentence_index=0,
+        )
+
+        # Create a sentence candidate that fails some criteria
+        sentence_candidate = ClaimCandidate(
+            text="It was problematic and unclear.",
+            is_atomic=True,
+            is_self_contained=False,  # Ambiguous
+            is_verifiable=True,
+            confidence=0.6,
+        )
+
+        # Create sentence input using the integration method
+        sentence_input = integration_instance._create_sentence_input(
+            sentence_candidate, test_chunk, rejection_reason="Ambiguous pronoun"
+        )
+
+        # Verify the sentence input properties
+        assert isinstance(sentence_input, SentenceInput)
+        assert sentence_input.text == "It was problematic and unclear."
+        assert sentence_input.block_id == "test_blk_005"
+        assert sentence_input.ambiguous  # Because not self-contained
+        assert sentence_input.verifiable
+        assert not sentence_input.failed_decomposition  # Was atomic
+        assert sentence_input.rejection_reason == "Ambiguous pronoun"
+        assert sentence_input.id.startswith("sentence_")
+
+        # Test persistence to Neo4j
+        created_sentences = integration_graph_manager.create_sentences([sentence_input])
+        assert len(created_sentences) == 1
+
+        # Verify the sentence was persisted correctly
+        with integration_graph_manager.session() as session:
+            sentence_result = session.run(
+                "MATCH (s:Sentence)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_005'}) RETURN s"
+            )
+            sentences = list(sentence_result)
+            assert len(sentences) == 1
+            sentence_record = sentences[0]["s"]
+            assert sentence_record["text"] == "It was problematic and unclear."
+            assert sentence_record["ambiguous"]
+            assert sentence_record["verifiable"]
+            assert not sentence_record["failed_decomposition"]
+            assert sentence_record["rejection_reason"] == "Ambiguous pronoun"
 
     def test_create_sentence_input_from_chunk(self, integration, test_chunk):
         """Test creation of SentenceInput directly from chunk."""
@@ -466,11 +630,58 @@ class TestClaimifyGraphIntegration:
 
     @pytest.mark.integration
     def test_create_sentence_input_from_chunk_integration(
-        self, _integration, _test_chunk
+        self, integration_instance, integration_graph_manager
     ):
         """Integration test for sentence input creation from chunk."""
-        # Integration test - requires real Neo4j service
-        pytest.skip("Integration tests require real database setup")
+        # Create test block first
+        with integration_graph_manager.session() as session:
+            session.run("CREATE (:Block {id: 'test_blk_006'})")
+
+        # Create test data
+        test_chunk = SentenceChunk(
+            text="This sentence was rejected during selection.",
+            source_id="test_blk_006",
+            chunk_id="test_chunk_006",
+            sentence_index=0,
+        )
+
+        # Create sentence input directly from chunk
+        sentence_input = integration_instance._create_sentence_input_from_chunk(
+            test_chunk, rejection_reason="Failed selection"
+        )
+
+        # Verify the sentence input properties
+        assert isinstance(sentence_input, SentenceInput)
+        assert sentence_input.text == "This sentence was rejected during selection."
+        assert sentence_input.block_id == "test_blk_006"
+        assert sentence_input.ambiguous  # Assumed ambiguous since not selected
+        assert (
+            not sentence_input.verifiable
+        )  # Assumed not verifiable since not selected
+        assert not sentence_input.failed_decomposition  # Wasn't decomposed
+        assert sentence_input.rejection_reason == "Failed selection"
+        assert sentence_input.id.startswith("sentence_")
+
+        # Test persistence to Neo4j
+        created_sentences = integration_graph_manager.create_sentences([sentence_input])
+        assert len(created_sentences) == 1
+
+        # Verify the sentence was persisted correctly
+        with integration_graph_manager.session() as session:
+            sentence_result = session.run(
+                "MATCH (s:Sentence)-[:ORIGINATES_FROM]->(b:Block {id: 'test_blk_006'}) RETURN s"
+            )
+            sentences = list(sentence_result)
+            assert len(sentences) == 1
+            sentence_record = sentences[0]["s"]
+            assert (
+                sentence_record["text"]
+                == "This sentence was rejected during selection."
+            )
+            assert sentence_record["ambiguous"]
+            assert not sentence_record["verifiable"]
+            assert not sentence_record["failed_decomposition"]
+            assert sentence_record["rejection_reason"] == "Failed selection"
 
 
 class TestCreateGraphManagerFromConfigStructure:
