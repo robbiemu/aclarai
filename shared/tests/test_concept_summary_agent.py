@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from aclarai_shared.concept_summary_agent.agent import ConceptSummaryAgent
 from llama_index.core.base.response.schema import Response
@@ -48,15 +48,19 @@ class TestConceptSummaryAgent(unittest.TestCase):
         self.mock_openai = self.patcher_openai.start()
         self.mock_write_atomic = self.patcher_write_atomic.start()
 
-        # Mock the sub-agents
+        # Mock the sub-agents with proper async mocking
         self.mock_claim_agent = MagicMock()
-        self.mock_claim_agent.chat.return_value = Response(
-            response=["claim 1 ^id1", "claim 2 ^id2"]
-        )
+        claim_result = MagicMock()
+        claim_result.response = MagicMock(content="claim 1 ^id1\nclaim 2 ^id2")
+        self.mock_claim_agent.run = AsyncMock(return_value=claim_result)
+
         self.mock_related_concepts_agent = MagicMock()
-        self.mock_related_concepts_agent.chat.return_value = Response(
-            response=["related concept 1", "related concept 2"]
+        concepts_result = MagicMock()
+        concepts_result.response = MagicMock(
+            content="related concept 1\nrelated concept 2"
         )
+        self.mock_related_concepts_agent.run = AsyncMock(return_value=concepts_result)
+
         self.mock_create_retrieval_agent.side_effect = [
             self.mock_claim_agent,
             self.mock_related_concepts_agent,
@@ -94,12 +98,6 @@ class TestConceptSummaryAgent(unittest.TestCase):
     def test_generate_concept_page_with_sub_agents(self):
         """Test that generate_concept_page correctly calls the sub-agents."""
         # Arrange
-        self.mock_claim_agent.chat.return_value = Response(
-            response=["claim 1 ^id1", "claim 2 ^id2"]
-        )
-        self.mock_related_concepts_agent.chat.return_value = Response(
-            response=["related concept 1", "related concept 2"]
-        )
         self.agent.llm.complete.return_value = Response(response="Generated content")
         concept = {"id": "1", "text": "Test Concept"}
 
@@ -107,22 +105,26 @@ class TestConceptSummaryAgent(unittest.TestCase):
         self.agent.generate_concept_page(concept)
 
         # Assert
-        self.mock_claim_agent.chat.assert_called_once_with(
-            'Find all claims related to the concept: "Test Concept"'
+        self.mock_claim_agent.run.assert_called_once_with(
+            user_msg='Find all claims related to the concept: "Test Concept"'
         )
-        self.mock_related_concepts_agent.chat.assert_called_once_with(
-            'Find concepts semantically similar to: "Test Concept"'
+        self.mock_related_concepts_agent.run.assert_called_once_with(
+            user_msg='Find concepts semantically similar to: "Test Concept"'
         )
         self.agent.llm.complete.assert_called_once()
         self.mock_write_atomic.assert_called_once()
 
     def test_template_fallback_on_llm_failure(self):
         """Test that the agent falls back to template generation if the LLM fails."""
-        # Arrange
-        self.mock_claim_agent.chat.return_value = Response(response=["claim 1 ^id1"])
-        self.mock_related_concepts_agent.chat.return_value = Response(
-            response=["related concept 1"]
-        )
+        # Arrange - update the mock responses for new format
+        claim_result = MagicMock()
+        claim_result.response = MagicMock(content="claim 1 ^id1")
+        self.mock_claim_agent.run = AsyncMock(return_value=claim_result)
+
+        concepts_result = MagicMock()
+        concepts_result.response = MagicMock(content="related concept 1")
+        self.mock_related_concepts_agent.run = AsyncMock(return_value=concepts_result)
+
         self.agent.llm.complete.side_effect = Exception("LLM is down")
         concept = {"id": "1", "text": "Test Concept"}
 
@@ -140,10 +142,17 @@ class TestConceptSummaryAgent(unittest.TestCase):
         """Test that a concept is skipped if skip_if_no_claims is True and no claims are found."""
         # Arrange
         self.agent.skip_if_no_claims = True
-        self.mock_claim_agent.chat.return_value = Response(response=[])
-        self.mock_related_concepts_agent.chat.return_value = Response(
-            response=["related concept 1"]
-        )
+
+        # Mock empty claims response
+        empty_claim_result = MagicMock()
+        empty_claim_result.response = MagicMock(content="")
+        self.mock_claim_agent.run = AsyncMock(return_value=empty_claim_result)
+
+        # Mock related concepts response
+        concepts_result = MagicMock()
+        concepts_result.response = MagicMock(content="related concept 1")
+        self.mock_related_concepts_agent.run = AsyncMock(return_value=concepts_result)
+
         concept = {"id": "1", "text": "Test Concept"}
 
         # Act
@@ -159,10 +168,17 @@ class TestConceptSummaryAgent(unittest.TestCase):
         # Arrange
         concepts = [{"id": "1", "text": "Concept 1"}, {"id": "2", "text": "Concept 2"}]
         self.agent.get_canonical_concepts = MagicMock(return_value=concepts)
-        self.mock_claim_agent.chat.return_value = Response(response=["claim 1 ^id1"])
-        self.mock_related_concepts_agent.chat.return_value = Response(
-            response=["related 1"]
-        )
+
+        # Mock claim agent responses
+        claim_result = MagicMock()
+        claim_result.response = MagicMock(content="claim 1 ^id1")
+        self.mock_claim_agent.run = AsyncMock(return_value=claim_result)
+
+        # Mock related concepts agent responses
+        concepts_result = MagicMock()
+        concepts_result.response = MagicMock(content="related 1")
+        self.mock_related_concepts_agent.run = AsyncMock(return_value=concepts_result)
+
         self.agent.llm.complete.return_value = Response(response="LLM content")
 
         # Act

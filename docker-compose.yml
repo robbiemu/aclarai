@@ -15,12 +15,16 @@ services:
       - "5432:5432"
     networks:
       - aclarai_net
+    profiles:
+      - postgres
+      - default
 
   neo4j:  # Knowledge graph for claims, summaries, and concepts
     image: neo4j:5
     restart: unless-stopped
     environment:
       NEO4J_AUTH: ${NEO4J_USER}/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["graph-data-science"]'
     volumes:
       - neo4j_data:/data
     ports:
@@ -28,18 +32,24 @@ services:
       - "7687:7687"
     networks:
       - aclarai_net
+    profiles:
+      - neo4j
+      - default
 
   rabbitmq: # Message broker for inter-service communication (e.g., vault-watcher -> aclarai-core)
     image: rabbitmq:3-management # Includes management UI on port 15672
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: user # Replace with environment variables or Docker secrets
-      RABBITMQ_DEFAULT_PASS: password # Replace with environment variables or Docker secrets
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
       - "5672:5672" # Standard AMQP port
       - "15672:15672" # Management UI
     networks:
       - aclarai_net
+    profiles:
+      - rabbitmq
+      - default
     healthcheck: # Basic health check
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s
@@ -51,37 +61,42 @@ services:
       context: .  # Set build context to the project root
       dockerfile: ./services/aclarai-core/Dockerfile
     depends_on:
-      - postgres
-      - neo4j
+      postgres:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
-      - RABBITMQ_HOST=rabbitmq 
+    profiles:
+      - aclarai-core
+      - default
 
   vault-watcher:  # Watches vault for Markdown edits and emits dirty blocks
     build:
       context: .  
       dockerfile: ./services/vault-watcher/Dockerfile
     depends_on:
-      - aclarai-core
+      rabbitmq:
+        condition: service_healthy
+      aclarai-core:
+        condition: service_started
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
-      - RABBITMQ_HOST=rabbitmq 
+    profiles:
+      - vault-watcher
+      - default
 
   scheduler:  # Runs periodic jobs: concept hygiene, vault sync, reprocessing
     build:
@@ -90,15 +105,15 @@ services:
     depends_on:
       - aclarai-core
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
+    profiles:
+      - scheduler
+      - default
 
   aclarai-ui:  # Web interface for aclarai
     build:
@@ -107,7 +122,7 @@ services:
     depends_on:
       - aclarai-core
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
@@ -115,9 +130,9 @@ services:
       - "7860:7860"
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
+    profiles:
+      - aclarai-ui
+      - default
 
 volumes:
   pg_data:

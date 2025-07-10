@@ -6,12 +6,13 @@ docs/arch/on-writing_vault_documents.md and using the RAG workflow from
 docs/arch/on-RAG_workflow.md.
 """
 
+import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from llama_index.core.agent import AgentRunner
+from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.core.tools import BaseTool
 from llama_index.llms.openai import OpenAI
 
@@ -101,21 +102,30 @@ class ConceptSummaryAgent:
             self.model_name = "template-fallback"
 
         # Initialize sub-agents
-        self.claim_retrieval_agent: Optional[AgentRunner] = None
-        self.related_concepts_agent: Optional[AgentRunner] = None
+        self.claim_retrieval_agent: Optional[FunctionAgent] = None
+        self.related_concepts_agent: Optional[FunctionAgent] = None
 
         if self.llm and vector_store_manager:
             try:
+                # Use model_dump() for Pydantic v2 compatibility
+                config_dict = {}
+                if hasattr(config, "model_dump") and callable(config.model_dump):
+                    config_dict = config.model_dump()
+                elif hasattr(config, "dict") and callable(config.dict):
+                    # Fallback for Pydantic v1 compatibility
+                    config_dict = config.dict()
+
                 tool_factory = ToolFactory(
-                    config.model_dump() if hasattr(config, "model_dump") else {},
+                    config_dict,
                     vector_store_manager,
                     self.neo4j_manager,
                 )
 
                 claim_tools_raw = tool_factory.get_tools_for_agent("claim_retrieval")
-                claim_tools: List[BaseTool] = [
-                    tool for tool in claim_tools_raw if isinstance(tool, BaseTool)
-                ]
+                claim_tools: List[Union[BaseTool, Callable[..., Any]]] = cast(
+                    List[Union[BaseTool, Callable[..., Any]]],
+                    [tool for tool in claim_tools_raw if isinstance(tool, BaseTool)],
+                )
                 self.claim_retrieval_agent = create_retrieval_agent(
                     tools=claim_tools,
                     llm=self.llm,
@@ -127,11 +137,16 @@ class ConceptSummaryAgent:
                 related_concepts_tools_raw = tool_factory.get_tools_for_agent(
                     "related_concepts"
                 )
-                related_concepts_tools: List[BaseTool] = [
-                    tool
-                    for tool in related_concepts_tools_raw
-                    if isinstance(tool, BaseTool)
-                ]
+                related_concepts_tools: List[Union[BaseTool, Callable[..., Any]]] = (
+                    cast(
+                        List[Union[BaseTool, Callable[..., Any]]],
+                        [
+                            tool
+                            for tool in related_concepts_tools_raw
+                            if isinstance(tool, BaseTool)
+                        ],
+                    )
+                )
                 self.related_concepts_agent = create_retrieval_agent(
                     tools=related_concepts_tools,
                     llm=self.llm,
@@ -307,7 +322,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         self.generate_concept_slug(concept_text)
-        concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         if self.llm:
             # Use LLM to generate intelligent concept content
@@ -344,7 +361,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         concept_slug = self.generate_concept_slug(concept_text)
-        version = concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         # Build the prompt with RAG context
         prompt_parts = [
@@ -418,8 +437,8 @@ class ConceptSummaryAgent:
         try:
             if self.llm is None:
                 return None
-            response = self.llm.complete(prompt)
-            content = str(response.response).strip()
+            completion = self.llm.complete(prompt)
+            content = str(completion.text).strip()
 
             # Ensure proper metadata is included
             aclarai_id = concept.get("aclarai_id") or f"concept_{concept_slug}"
@@ -467,7 +486,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         concept_slug = self.generate_concept_slug(concept_text)
-        version = concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         lines = [
             f"## Concept: {concept_text}",
@@ -565,9 +586,111 @@ class ConceptSummaryAgent:
 
         return False
 
+    def _run_agent_sync(self, agent, message: str) -> Optional[str]:
+        """
+        Synchronously run an async agent by managing the event loop.
+
+        Args:
+            agent: The FunctionAgent to run
+            message: The message to send to the agent
+
+        Returns:
+            The agent's response as a string, or None if failed
+        """
+        try:
+            # Check if there's already a running event loop
+            try:
+                asyncio.get_running_loop()
+                # If we're already in an async context, we need to run in a thread
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        self._run_agent_in_new_loop, agent, message
+                    )
+                    return future.result()
+            except RuntimeError:
+                # No running loop, we can create our own
+                return asyncio.run(self._run_agent_async(agent, message))
+        except Exception as e:
+            logger.error(
+                f"Failed to run agent synchronously: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent._run_agent_sync",
+                    "error": str(e),
+                },
+            )
+            return None
+
+    def _run_agent_in_new_loop(self, agent, message: str) -> Optional[str]:
+        """Run agent in a new event loop (for thread execution)."""
+        return asyncio.run(self._run_agent_async(agent, message))
+
+    async def _run_agent_async(self, agent, message: str) -> Optional[str]:
+        """
+        Async wrapper for agent execution.
+
+        Args:
+            agent: The FunctionAgent to run
+            message: The message to send to the agent
+
+        Returns:
+            The agent's response as a string, or None if failed
+        """
+        try:
+            # FunctionAgent.run() returns a WorkflowHandler (which is an asyncio.Future)
+            # We can await it directly to get the AgentOutput result
+            result = await agent.run(user_msg=message)
+
+            # Extract the response from the AgentOutput
+            if result and hasattr(result, "response"):
+                if hasattr(result.response, "content"):
+                    return str(result.response.content)
+                else:
+                    return str(result.response)
+
+            return None
+        except Exception as e:
+            logger.error(
+                f"Agent execution failed: {e}",
+                extra={
+                    "service": "aclarai",
+                    "filename.function_name": "concept_summary_agent.ConceptSummaryAgent._run_agent_async",
+                    "error": str(e),
+                },
+            )
+            return None
+
+    def _parse_agent_response(self, response: Optional[str]) -> List[str]:
+        """
+        Parse agent response into a list of items.
+
+        Args:
+            response: The raw response from the agent
+
+        Returns:
+            List of parsed items
+        """
+        if not response:
+            return []
+
+        # Handle different response formats
+        if isinstance(response, str):
+            # Split on newlines and clean up
+            items = [line.strip() for line in response.split("\n") if line.strip()]
+            # Remove common prefixes like "- " or "* "
+            items = [item.lstrip("- *") for item in items]
+            return items
+        elif isinstance(response, list):
+            return response
+        else:
+            return []
+
     def generate_concept_page(self, concept: Dict[str, Any]) -> bool:
         """
         Generate a complete concept page for a single concept.
+        Updated to handle async agents synchronously.
 
         Args:
             concept: The concept dictionary with id, text, etc.
@@ -589,20 +712,22 @@ class ConceptSummaryAgent:
                 },
             )
 
-            # Retrieve context using RAG workflow
+            # Retrieve context using RAG workflow with sync agent handling
             claims: List[str] = []
             if self.claim_retrieval_agent:
-                response = self.claim_retrieval_agent.chat(
-                    f'Find all claims related to the concept: "{concept_text}"'
+                response = self._run_agent_sync(
+                    self.claim_retrieval_agent,
+                    f'Find all claims related to the concept: "{concept_text}"',
                 )
-                claims = response.response if response else []
+                claims = self._parse_agent_response(response)
 
             related_concepts: List[str] = []
             if self.related_concepts_agent:
-                response = self.related_concepts_agent.chat(
-                    f'Find concepts semantically similar to: "{concept_text}"'
+                response = self._run_agent_sync(
+                    self.related_concepts_agent,
+                    f'Find concepts semantically similar to: "{concept_text}"',
                 )
-                related_concepts = response.response if response else []
+                related_concepts = self._parse_agent_response(response)
 
             context = {
                 "claims": claims,
@@ -627,9 +752,8 @@ class ConceptSummaryAgent:
             write_file_atomically(file_path, content)
 
             # Count items safely for logging
-            claims_count = len(cast(List[Any], context.get("claims", [])))
-            summaries_count = len(cast(List[Any], context.get("summaries", [])))
-            concepts_count = len(cast(List[Any], context.get("related_concepts", [])))
+            claims_count = len(claims)
+            concepts_count = len(related_concepts)
 
             logger.info(
                 f"Successfully generated concept page: {filename}",
@@ -640,7 +764,6 @@ class ConceptSummaryAgent:
                     "concept_text": concept_text,
                     "file_path": str(file_path),
                     "claims_found": claims_count,
-                    "summaries_found": summaries_count,
                     "related_concepts_found": concepts_count,
                 },
             )

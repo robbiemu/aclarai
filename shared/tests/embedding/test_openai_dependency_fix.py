@@ -27,6 +27,7 @@ class TestOpenAIDependencyFix:
             password="test_pass",
             database="test_db",
         )
+        config.embedding_model = "test-model"
         # Mock external dependencies to focus on the OpenAI import issue
         with (
             patch("aclarai_shared.embedding.storage.create_engine") as mock_engine,
@@ -34,6 +35,9 @@ class TestOpenAIDependencyFix:
             patch(
                 "aclarai_shared.embedding.models.HuggingFaceEmbedding"
             ) as mock_hf_embedding,
+            patch(
+                "aclarai_shared.embedding.models.EmbeddingGenerator._initialize_embedding_model"
+            ) as mock_init_model,
         ):
             # Setup mocks
             mock_engine.return_value = MagicMock()
@@ -54,6 +58,7 @@ class TestOpenAIDependencyFix:
                     return [0.1, 0.2, 0.3]
 
             mock_embedding_instance = MockEmbedding()
+            mock_init_model.return_value = mock_embedding_instance
             mock_hf_embedding.return_value = mock_embedding_instance
             # Mock the database connection methods
             mock_connection = MagicMock()
@@ -78,6 +83,7 @@ class TestOpenAIDependencyFix:
             password="test_pass",
             database="test_db",
         )
+        config.embedding_model = "test-model"
         # Create test embedded chunks as in the failing test
         chunk_metadata = ChunkMetadata(
             aclarai_block_id="blk_store_test",
@@ -100,6 +106,9 @@ class TestOpenAIDependencyFix:
             patch(
                 "aclarai_shared.embedding.models.HuggingFaceEmbedding"
             ) as mock_hf_embedding,
+            patch(
+                "aclarai_shared.embedding.models.EmbeddingGenerator._initialize_embedding_model"
+            ) as mock_init_model,
         ):
             # Setup mocks
             mock_engine.return_value = MagicMock()
@@ -120,6 +129,7 @@ class TestOpenAIDependencyFix:
                     return [0.1, 0.2, 0.3]
 
             mock_embedding_instance = MockEmbedding()
+            mock_init_model.return_value = mock_embedding_instance
             mock_hf_embedding.return_value = mock_embedding_instance
             # Mock the database connection methods
             mock_connection = MagicMock()

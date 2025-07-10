@@ -26,11 +26,18 @@ from llama_index.core.vector_stores.types import (
 )
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import (
+    Column,
+    MetaData,
+    String,
+    Table,
     create_engine,
+    func,
+    select,
     text,
 )
 
 from ..config import aclaraiConfig
+from .chunking import UtteranceChunker
 from .models import EmbeddedChunk, EmbeddingGenerator
 
 logger = logging.getLogger(__name__)
@@ -75,6 +82,12 @@ class aclaraiVectorStore(VectorStore):
             pool_pre_ping=True,
             pool_recycle=3600,
             echo=config.debug,
+            connect_args={
+                "host": config.postgres.host,
+                "port": config.postgres.port,
+                "user": config.postgres.user,
+                "password": config.postgres.password,
+            },
         )
         # Initialize PGVectorStore
         self.vector_store = self._initialize_pgvector_store()
@@ -84,6 +97,8 @@ class aclaraiVectorStore(VectorStore):
         self._client = self.vector_store.client
         # Initialize embedding generator with configured model
         self.embedding_generator = EmbeddingGenerator(config=config)
+        # Initialize chunker for compatibility with tests
+        self.chunker = UtteranceChunker(config=config)
         # Set LlamaIndex global embedding model IMMEDIATELY to prevent default OpenAI dependency
         # This ensures VectorStoreIndex doesn't try to import llama-index-embeddings-openai
         # We set this as early as possible to prevent any race conditions
@@ -93,6 +108,10 @@ class aclaraiVectorStore(VectorStore):
         self.vector_index = VectorStoreIndex.from_vector_store(
             self.vector_store, embed_model=self.embedding_generator.embedding_model
         )
+
+        # Initialize SQLAlchemy metadata for safe table operations
+        self.metadata = MetaData()
+
         logger.info(
             f"Initialized aclaraiVectorStore with collection: {config.embedding.collection_name}, "
             f"dimension: {config.embedding.embed_dim}"
@@ -139,6 +158,31 @@ class aclaraiVectorStore(VectorStore):
         if len(table_name) > 63:  # PostgreSQL identifier limit
             raise ValueError(f"Table name too long: {table_name} (max 63 characters)")
         return table_name
+
+    def _get_table_reference(self, table_name: str) -> Table:
+        """
+        Get a SQLAlchemy Table reference for safe SQL operations.
+        Args:
+            table_name: The validated table name
+        Returns:
+            SQLAlchemy Table object
+        """
+        validated_name = self._validate_table_name(table_name)
+
+        # Create a Table object with the necessary columns for our queries
+        # This provides a safe way to reference the table without string formatting
+        table = Table(
+            validated_name,
+            self.metadata,
+            Column("id", String, primary_key=True),
+            Column("text", String),
+            Column(
+                "embedding", String
+            ),  # or appropriate type for your embedding storage
+            autoload_with=self.engine,
+            extend_existing=True,
+        )
+        return table
 
     def store_embeddings(
         self, embedded_chunks: List[EmbeddedChunk]
@@ -315,6 +359,90 @@ class aclaraiVectorStore(VectorStore):
             logger.error(f"Failed to delete chunks for block {aclarai_block_id}: {e}")
             return 0
 
+    def get_embeddings_for_concepts(
+        self, concept_names: List[str]
+    ) -> Dict[str, List[float]]:
+        """
+        Retrieve embeddings for a specific list of concept names using bulk retrieval.
+
+        This method implements the "Bulk Embedding Retrieval" access pattern defined in
+        docs/arch/on-vector_stores.md. It performs a single, efficient SQL query to
+        retrieve embeddings for a large, known set of concepts, avoiding the N+1 query
+        problem that would occur if similarity_search was used in a loop.
+
+        **Use Cases:**
+        - Concept clustering jobs that need embeddings for all canonical concepts
+        - Analytics and batch processing operations
+        - Any scenario where you need embeddings for a predetermined set of items
+
+        **Performance Benefits:**
+        - Single database query instead of N queries (one per concept)
+        - Reduced network overhead and connection usage
+        - Consistent performance regardless of concept count
+        - Avoids the overhead of similarity calculations when exact matches are needed
+
+        **Difference from similarity_search:**
+        - similarity_search: "one-to-few" discovery pattern for finding similar items
+        - get_embeddings_for_concepts: "many-to-many" bulk retrieval for known items
+
+        Args:
+            concept_names: A list of concept names to retrieve embeddings for.
+
+        Returns:
+            A dictionary mapping concept names to their embedding vectors.
+            Only concepts that exist in the vector store will be included.
+        """
+        if not concept_names:
+            return {}
+
+        logger.debug(
+            f"Retrieving embeddings for {len(concept_names)} concepts.",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "aclaraiVectorStore.get_embeddings_for_concepts",
+                "concept_count": len(concept_names),
+            },
+        )
+
+        # Get table reference using safe SQLAlchemy approach
+        actual_table_name = f"data_{self.config.embedding.collection_name}"
+        table = self._get_table_reference(actual_table_name)
+
+        # Use SQLAlchemy's select() for safe query construction
+        query = select(table.c.text.label("name"), table.c.embedding).where(
+            table.c.text.in_(concept_names)
+        )
+
+        embeddings_map: Dict[str, List[float]] = {}
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(query)
+                for row in result:
+                    # The embedding is returned as a string representation of a list, e.g., '[0.1, 0.2, ...]'
+                    # We need to parse it back into a list of floats.
+                    embedding_str = row.embedding
+                    if isinstance(embedding_str, str):
+                        # Strip brackets and split by comma
+                        embedding_list = [
+                            float(val) for val in embedding_str.strip("[]").split(",")
+                        ]
+                        embeddings_map[row.name] = embedding_list
+                    elif isinstance(
+                        embedding_str, list
+                    ):  # If the driver already parses it
+                        embeddings_map[row.name] = embedding_str
+
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve embeddings for concepts: {e}",
+                exc_info=True,
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "aclaraiVectorStore.get_embeddings_for_concepts",
+                },
+            )
+        return embeddings_map
+
     def get_store_metrics(self) -> VectorStoreMetrics:
         """
         Get metrics about the vector store.
@@ -322,27 +450,24 @@ class aclaraiVectorStore(VectorStore):
             VectorStoreMetrics with current statistics
         """
         try:
+            # Get table reference using safe SQLAlchemy approach
+            actual_table_name = f"data_{self.config.embedding.collection_name}"
+            table = self._get_table_reference(actual_table_name)
+
             with self.engine.connect() as conn:
-                # Validate table name to prevent SQL injection
-                table_name = self._validate_table_name(
-                    self.config.embedding.collection_name
-                )
-                # Get total count
-                # Table name is validated above to prevent SQL injection
-                count_query = text(f"""
-                    SELECT COUNT(*) as total_vectors
-                    FROM {table_name}
-                """)  # nosec B608
+                # Get total count using SQLAlchemy
+                count_query = select(func.count()).select_from(table)
                 result = conn.execute(count_query)
-                count_row = result.fetchone()
-                total_vectors = count_row[0] if count_row else 0
-                # Get table size
+                total_vectors = result.scalar() or 0
+
+                # Get table size using parameterized query
                 size_query = text("""
                     SELECT pg_size_pretty(pg_total_relation_size(:table_name))
                 """)
-                size_result = conn.execute(size_query, {"table_name": table_name})
+                size_result = conn.execute(size_query, {"table_name": table.name})
                 size_row = size_result.fetchone()
                 size_str = size_row[0] if size_row else None
+
                 return VectorStoreMetrics(
                     total_vectors=total_vectors,
                     successful_inserts=total_vectors,  # Approximate

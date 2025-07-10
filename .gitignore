@@ -240,6 +240,7 @@ demo_*.py
 project_bundle.zip
 pr-*-summary.md
 combined.md
+vault/concepts/
 
 # Gemini
 GEMINI.md

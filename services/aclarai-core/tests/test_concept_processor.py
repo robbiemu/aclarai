@@ -14,7 +14,7 @@ from aclarai_shared.concept_detection.models import (
     ConceptDetectionBatch,
     ConceptDetectionResult,
 )
-from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.config import aclaraiConfig, load_config
 from aclarai_shared.noun_phrase_extraction.models import (
     ExtractionResult,
     NounPhraseCandidate,
@@ -308,21 +308,10 @@ class TestConceptProcessor:
 class TestConceptProcessorIntegration:
     """Integration tests for ConceptProcessor with real services."""
 
-    @pytest.fixture(autouse=True)
-    def setup_integration_environment(self):
-        """Setup integration test environment."""
-        # Check if we're in a CI/test environment that supports integration tests
-        import os
-
-        if not os.getenv("RUN_INTEGRATION_TESTS"):
-            pytest.skip(
-                "Integration tests require RUN_INTEGRATION_TESTS environment variable"
-            )
-
     @pytest.mark.integration
     def test_concept_processing_integration(self):
         """Test the complete concept processing workflow with real services."""
-        from aclarai_shared.config import load_config
+        # Move imports to top of file
 
         # Load real configuration
         config = load_config(validate=False)
@@ -351,7 +340,7 @@ class TestConceptProcessorIntegration:
     @pytest.mark.integration
     def test_concept_index_building_integration(self):
         """Test concept index building with real services."""
-        from aclarai_shared.config import load_config
+        # Move imports to top of file
 
         # Load real configuration
         config = load_config(validate=False)
@@ -366,13 +355,6 @@ class TestConceptProcessorIntegration:
     @pytest.mark.integration
     def test_status_persistence_integration(self):
         """Test that candidate status updates are properly persisted."""
-        from aclarai_shared.concept_detection.models import (
-            ConceptAction,
-            ConceptDetectionBatch,
-            ConceptDetectionResult,
-        )
-        from aclarai_shared.config import load_config
-        from aclarai_shared.noun_phrase_extraction.models import NounPhraseCandidate
 
         # Load real configuration
         config = load_config(validate=False)

@@ -1,4 +1,3 @@
-import os
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -79,13 +78,17 @@ class TestNeo4jManagerIntegration:
     @pytest.fixture(scope="class")
     def integration_manager(self):
         """Fixture to set up a connection to a real Neo4j database for testing."""
-        if not os.getenv("NEO4J_PASSWORD"):
-            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
+        try:
+            config = load_config(validate=True)
+        except ValueError as e:
+            pytest.skip(f"Required configuration missing for integration tests: {e}")
 
-        config = load_config(validate=True)
+        if not config.neo4j.password:
+            pytest.skip("NEO4J_PASSWORD not configured for integration tests.")
+
         manager = Neo4jGraphManager(config=config)
         with manager.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
+            session.run("MATCH (n) DETACH DELETE n", allow_dangerous_operations=True)
         yield manager
         manager.close()
 

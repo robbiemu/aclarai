@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from aclarai_core.agents.decontextualization_agent import DecontextualizationAgent
@@ -16,35 +16,17 @@ from aclarai_core.graph.claim_evaluation_graph_service import (
     ClaimEvaluationGraphService,
 )
 from aclarai_core.markdown.markdown_updater_service import MarkdownUpdaterService
-from aclarai_shared.config import aclaraiConfig
+from aclarai_shared.config import load_config
 from aclarai_shared.tools.factory import ToolFactory
 from aclarai_shared.tools.vector_store_manager import VectorStore, VectorStoreManager
-from llama_index.core.base.llms.types import ChatResponse
+from llama_index.core.base.response.schema import Response
+from llama_index.core.llms import LLM
 from llama_index.core.vector_stores.types import VectorStoreQueryResult
 from neo4j import GraphDatabase
 
-
 # --- Mock Objects for Dependencies ---
-class MockLLM:
-    """Mocks the LlamaIndex LLM for predictable responses."""
-
-    def __init__(self, response_text: str = "0.85"):
-        self.response_text = response_text
-        self.chat_messages = []
-
-    async def achat(self, messages, **kwargs):  # noqa: ARG002
-        self.chat_messages.append(messages)
-        return ChatResponse(
-            message=MagicMock(content=self.response_text),
-            raw={"response": self.response_text},
-        )  # type: ignore
-
-    def chat(self, messages, **kwargs):  # noqa: ARG002
-        self.chat_messages.append(messages)
-        return ChatResponse(
-            message=MagicMock(content=self.response_text),
-            raw={"response": self.response_text},
-        )  # type: ignore
+# Using MagicMock with proper LLM spec
+mock_llm = MagicMock(spec=LLM)
 
 
 class MockVectorStoreManager(VectorStoreManager):
@@ -72,30 +54,45 @@ def event_loop():
 @pytest.fixture(scope="class")
 def integration_neo4j_driver():
     """Fixture to set up a connection to a real Neo4j database for testing."""
-    if not os.getenv("NEO4J_PASSWORD"):
-        pytest.skip("NEO4J_PASSWORD not set for integration tests.")
+    try:
+        from aclarai_shared.config import load_config
 
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = os.getenv("NEO4J_USER", "neo4j")
-    password = os.getenv("NEO4J_PASSWORD")
+        config = load_config(validate=False)
+    except ValueError as e:
+        pytest.skip(f"Required configuration missing for integration tests: {e}")
+
+    if not config.neo4j.password:
+        pytest.skip("NEO4J_PASSWORD not configured for integration tests.")
+
+    uri = config.neo4j.get_neo4j_bolt_url()
+    user = config.neo4j.user
+    password = config.neo4j.password
 
     driver = GraphDatabase.driver(uri, auth=(user, password))
     driver.verify_connectivity()
 
     # Clean up before tests
     with driver.session() as session:
-        session.run("MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n")
         session.run(
-            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n"
+            "MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
+        )
+        session.run(
+            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
         )
 
     yield driver
 
     # Clean up after tests
     with driver.session() as session:
-        session.run("MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n")
         session.run(
-            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n"
+            "MATCH (n) WHERE n.id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
+        )
+        session.run(
+            "MATCH (n) WHERE n.claim_id STARTS WITH 'integ_test_' DETACH DELETE n",
+            allow_dangerous_operations=True,
         )
     driver.close()
 
@@ -140,19 +137,30 @@ class TestDecontextualizationWorkflowIntegration:
         """
         # --- ARRANGE ---
         # 1. Mock dependencies that are not under test (LLM, Config, VectorStore)
-        mock_llm = MockLLM(response_text="0.85")
-        mock_config = aclaraiConfig
+        mock_llm = MagicMock(spec=LLM)
+        try:
+            mock_config = load_config(validate=False)
+        except ValueError as e:
+            pytest.skip(f"Required configuration missing for integration tests: {e}")
         mock_vsm = MockVectorStoreManager()
         mock_tool_factory = ToolFactory(config={}, vector_store_manager=mock_vsm)
 
         # 2. Instantiate the services with a mix of real and mock components
-        agent = DecontextualizationAgent(
-            llm=mock_llm, tool_factory=mock_tool_factory, config=mock_config
-        )
-        graph_service = ClaimEvaluationGraphService(
-            neo4j_driver=integration_neo4j_driver, config=mock_config
-        )
-        markdown_service = MarkdownUpdaterService()
+        with patch(
+            "aclarai_core.agents.decontextualization_agent.ReActAgent"
+        ) as MockReActAgent:
+            mock_response = MagicMock(spec=Response)
+            mock_response.response = "0.85"
+            mock_agent_instance = MockReActAgent.return_value
+            mock_agent_instance.run.return_value = mock_response
+
+            agent = DecontextualizationAgent(
+                llm=mock_llm, tool_factory=mock_tool_factory, config=mock_config
+            )
+            graph_service = ClaimEvaluationGraphService(
+                neo4j_driver=integration_neo4j_driver, config=mock_config
+            )
+            markdown_service = MarkdownUpdaterService()
 
         # 3. Prepare test data and pre-populate the real Neo4j DB
         claim_id = "integ_test_claim_1"
@@ -174,7 +182,7 @@ class TestDecontextualizationWorkflowIntegration:
 
         # --- ACT ---
         # 1. Run the agent evaluation
-        score, message = await agent.evaluate_claim_decontextualization(
+        score, message = agent.evaluate_claim_decontextualization(
             claim_id=claim_id,
             claim_text=claim_text,
             source_id=block_id,

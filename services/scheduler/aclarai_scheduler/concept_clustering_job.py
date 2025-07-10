@@ -106,8 +106,8 @@ class ConceptClusteringJob:
         """
         query = """
         MATCH (c:Concept)
-        RETURN c.name as name
-        ORDER BY c.name
+        RETURN c.text as name
+        ORDER BY c.text
         """
 
         try:
@@ -150,88 +150,65 @@ class ConceptClusteringJob:
         self, concept_names: List[str]
     ) -> Tuple[np.ndarray, List[str]]:
         """
-        Retrieve embeddings for the given concepts from the vector store.
+        Retrieve embeddings for the given concepts from the vector store using bulk retrieval.
+
+        This method uses the efficient `get_embeddings_for_concepts` method which performs
+        a single database query to retrieve all embeddings, avoiding the N+1 query problem
+        that would occur if similarity_search was used in a loop for each concept.
 
         Args:
             concept_names: List of concept names to get embeddings for
 
         Returns:
-            Tuple of (embeddings_matrix, valid_concept_names)
+            Tuple of (embeddings_matrix, valid_concept_names) where the order
+            of embeddings in the matrix corresponds to the order of names.
         """
-        embeddings = []
-        valid_concepts = []
+        if not concept_names:
+            return np.array([]), []
 
-        for concept_name in concept_names:
-            try:
-                # Search for the concept in the vector store
-                # We use similarity search with the concept name itself to find the embedding
-                results = self.vector_store.similarity_search(
-                    query_text=concept_name,
-                    top_k=1,
-                    similarity_threshold=0.9,  # High threshold to find exact matches
-                    filter_metadata={
-                        "collection": "concepts"
-                    },  # Filter to concepts collection
-                )
+        # Use the new, efficient method to get all embeddings in one call
+        embeddings_map = self.vector_store.get_embeddings_for_concepts(concept_names)
 
-                if results and len(results) > 0:
-                    # Extract embedding from the result
-                    chunk_data, similarity = results[0]
-                    if "embedding" in chunk_data:
-                        embedding = np.array(chunk_data["embedding"])
-                        embeddings.append(embedding)
-                        valid_concepts.append(concept_name)
-                    else:
-                        logger.warning(
-                            f"concept_clustering_job._get_concept_embeddings: No embedding found for concept: {concept_name}",
-                            extra={
-                                "service": "aclarai-scheduler",
-                                "filename.function_name": "concept_clustering_job._get_concept_embeddings",
-                                "concept_name": concept_name,
-                            },
-                        )
-                else:
-                    logger.warning(
-                        f"concept_clustering_job._get_concept_embeddings: Concept not found in vector store: {concept_name}",
-                        extra={
-                            "service": "aclarai-scheduler",
-                            "filename.function_name": "concept_clustering_job._get_concept_embeddings",
-                            "concept_name": concept_name,
-                        },
-                    )
-
-            except Exception as e:
-                logger.error(
-                    f"concept_clustering_job._get_concept_embeddings: Failed to get embedding for concept {concept_name}: {e}",
-                    extra={
-                        "service": "aclarai-scheduler",
-                        "filename.function_name": "concept_clustering_job._get_concept_embeddings",
-                        "concept_name": concept_name,
-                        "error": str(e),
-                    },
-                )
-
-        if embeddings:
-            embeddings_matrix = np.vstack(embeddings)
-            logger.info(
-                f"concept_clustering_job._get_concept_embeddings: Retrieved embeddings for {len(valid_concepts)} concepts",
-                extra={
-                    "service": "aclarai-scheduler",
-                    "filename.function_name": "concept_clustering_job._get_concept_embeddings",
-                    "valid_concepts_count": len(valid_concepts),
-                    "embedding_dimension": embeddings_matrix.shape[1],
-                },
-            )
-            return embeddings_matrix, valid_concepts
-        else:
+        if not embeddings_map:
             logger.warning(
-                "concept_clustering_job._get_concept_embeddings: No valid embeddings retrieved",
+                "concept_clustering_job._get_concept_embeddings: No valid embeddings retrieved for any concepts.",
                 extra={
                     "service": "aclarai-scheduler",
                     "filename.function_name": "concept_clustering_job._get_concept_embeddings",
                 },
             )
             return np.array([]), []
+
+        # Ensure the order of embeddings matches the order of concept_names
+        # for consistent input into the clustering algorithm.
+        valid_concepts = []
+        embeddings_list = []
+        for name in concept_names:
+            if name in embeddings_map:
+                valid_concepts.append(name)
+                embeddings_list.append(embeddings_map[name])
+
+        if not embeddings_list:
+            logger.warning(
+                "concept_clustering_job._get_concept_embeddings: No embeddings found for the provided list of concepts.",
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "concept_clustering_job._get_concept_embeddings",
+                },
+            )
+            return np.array([]), []
+
+        embeddings_matrix = np.array(embeddings_list, dtype=np.float32)
+        logger.info(
+            f"concept_clustering_job._get_concept_embeddings: Retrieved embeddings for {len(valid_concepts)} concepts",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "concept_clustering_job._get_concept_embeddings",
+                "valid_concepts_count": len(valid_concepts),
+                "embedding_dimension": embeddings_matrix.shape[1],
+            },
+        )
+        return embeddings_matrix, valid_concepts
 
     def _perform_clustering(
         self, embeddings: np.ndarray, concept_names: List[str]

@@ -2,7 +2,9 @@
 Tests for embedding models module.
 """
 
-from aclarai_shared.config import EmbeddingConfig, aclaraiConfig
+from unittest.mock import patch
+
+from aclarai_shared import load_config
 from aclarai_shared.embedding.chunking import ChunkMetadata
 from aclarai_shared.embedding.models import EmbeddedChunk, EmbeddingGenerator
 
@@ -10,33 +12,46 @@ from aclarai_shared.embedding.models import EmbeddedChunk, EmbeddingGenerator
 class TestEmbeddingGenerator:
     """Test cases for EmbeddingGenerator."""
 
-    def test_embedding_generator_init_with_config(self):
-        """Test EmbeddingGenerator initialization with config."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(
-            default_model="sentence-transformers/all-MiniLM-L6-v2",
-            device="cpu",
-            batch_size=8,
-            embed_dim=384,
-        )
+    @patch(
+        "aclarai_shared.embedding.models.EmbeddingGenerator._initialize_embedding_model"
+    )
+    def test_embedding_generator_init_with_config(self, mock_init_model):
+        """
+        Test that EmbeddingGenerator correctly uses the `utterance` model
+        from a properly loaded configuration.
+        """
+        # The _initialize_embedding_model is mocked to prevent network calls.
+        mock_init_model.return_value = None  # Return a dummy value
+
+        # Use the proper config loader to get a valid config object
+        config = load_config(validate=False)
+
+        # Modify the config to set specific models for the test
+        # This simulates a user's custom configuration
+        config.embedding.utterance = "model-for-utterance"
+        config.embedding.default_model = "different-default-model"
+
+        # Initialize the generator with the modified, but valid, config
         generator = EmbeddingGenerator(config=config)
-        assert generator.config == config
-        assert generator.model_name == "sentence-transformers/all-MiniLM-L6-v2"
+
+        # Assert that the generator picked the specific 'utterance' model,
+        # not the default one. This is its correct behavior.
+        assert generator.model_name == "model-for-utterance"
+        # Assert that the mocked initialization was called
+        mock_init_model.assert_called_once()
 
     def test_embedding_generator_init_with_model_override(self):
         """Test EmbeddingGenerator initialization with model override."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(
-            default_model="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        # Use the proper config loader
+        config = load_config(validate=False)
+        config.embedding.default_model = "sentence-transformers/all-MiniLM-L6-v2"
         custom_model = "sentence-transformers/all-mpnet-base-v2"
         generator = EmbeddingGenerator(config=config, model_name=custom_model)
         assert generator.model_name == custom_model
 
     def test_embed_chunks(self):
         """Test embedding multiple chunks."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig()
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         chunks = [
             ChunkMetadata(
@@ -60,8 +75,7 @@ class TestEmbeddingGenerator:
 
     def test_embed_single_chunk(self):
         """Test embedding a single chunk."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig()
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         chunk = ChunkMetadata(
             aclarai_block_id="blk_single",
@@ -75,8 +89,7 @@ class TestEmbeddingGenerator:
 
     def test_embed_text(self):
         """Test embedding raw text."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig()
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         embedding = generator.embed_text("Test text for embedding")
         assert isinstance(embedding, list)
@@ -84,8 +97,7 @@ class TestEmbeddingGenerator:
 
     def test_get_embedding_dimension(self):
         """Test getting embedding dimension."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(embed_dim=512)
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         dim = generator.get_embedding_dimension()
         assert isinstance(dim, int)
@@ -93,8 +105,7 @@ class TestEmbeddingGenerator:
 
     def test_validate_embeddings(self):
         """Test embedding validation."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(embed_dim=384)
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         # Create mock embedded chunks
         chunk_metadata = ChunkMetadata(
@@ -119,8 +130,7 @@ class TestEmbeddingGenerator:
 
     def test_validate_embeddings_empty(self):
         """Test validation with empty list."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig()
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         validation_report = generator.validate_embeddings([])
         assert validation_report["status"] == "error"
@@ -128,8 +138,7 @@ class TestEmbeddingGenerator:
 
     def test_initialize_embedding_model(self):
         """Test embedding model initialization."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig()
+        config = load_config(validate=False)
         generator = EmbeddingGenerator(config=config)
         model = generator._initialize_embedding_model()
         # Should be a BaseEmbedding instance
@@ -137,8 +146,8 @@ class TestEmbeddingGenerator:
 
     def test_get_device(self):
         """Test device detection."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(device="cpu")
+        config = load_config(validate=False)
+        config.embedding.device = "cpu"
         generator = EmbeddingGenerator(config=config)
         device = generator._get_device()
         assert isinstance(device, str)
@@ -146,8 +155,8 @@ class TestEmbeddingGenerator:
 
     def test_get_device_auto(self):
         """Test automatic device detection."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(device="auto")
+        config = load_config(validate=False)
+        config.embedding.device = "auto"
         generator = EmbeddingGenerator(config=config)
         device = generator._get_device()
         assert isinstance(device, str)
@@ -155,8 +164,8 @@ class TestEmbeddingGenerator:
 
     def test_embed_texts_batch(self):
         """Test batch text embedding."""
-        config = aclaraiConfig()
-        config.embedding = EmbeddingConfig(batch_size=2)
+        config = load_config(validate=False)
+        config.embedding.batch_size = 2
         generator = EmbeddingGenerator(config=config)
         texts = ["Text 1", "Text 2", "Text 3"]
         embeddings = generator._embed_texts_batch(texts)

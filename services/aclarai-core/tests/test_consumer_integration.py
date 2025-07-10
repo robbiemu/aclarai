@@ -4,7 +4,6 @@ Tests the complete flow from RabbitMQ message consumption to Neo4j database upda
 """
 
 import json
-import os
 import tempfile
 import threading
 import time
@@ -25,22 +24,21 @@ class TestConsumerIntegration:
     @pytest.fixture(scope="class")
     def integration_neo4j_manager(self):
         """Fixture to set up a connection to a real Neo4j database for testing."""
-        if not os.getenv("NEO4J_PASSWORD"):
-            pytest.skip("NEO4J_PASSWORD not set for integration tests.")
-
         config = load_config(validate=True)
         manager = Neo4jGraphManager(config=config)
         manager.setup_schema()
         # Clean up any existing test data
         with manager.session() as session:
             session.run(
-                "MATCH (n) WHERE n.id STARTS WITH 'test_consumer_' DETACH DELETE n"
+                "MATCH (n) WHERE n.id STARTS WITH 'test_consumer_' DETACH DELETE n",
+                allow_dangerous_operations=True,
             )
         yield manager
         # Clean up after tests
         with manager.session() as session:
             session.run(
-                "MATCH (n) WHERE n.id STARTS WITH 'test_consumer_' DETACH DELETE n"
+                "MATCH (n) WHERE n.id STARTS WITH 'test_consumer_' DETACH DELETE n",
+                allow_dangerous_operations=True,
             )
         manager.close()
 
@@ -48,8 +46,16 @@ class TestConsumerIntegration:
     def rabbitmq_connection(self):
         """Fixture for RabbitMQ connection - requires live RabbitMQ instance."""
         try:
+            # Get RabbitMQ credentials from config
+            config = load_config(validate=True)
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host="localhost", port=5672)
+                pika.ConnectionParameters(
+                    host=config.rabbitmq_host,
+                    port=config.rabbitmq_port,
+                    credentials=pika.PlainCredentials(
+                        config.rabbitmq_user, config.rabbitmq_password
+                    ),
+                )
             )
             channel = connection.channel()
             # Ensure the test queue exists
@@ -76,11 +82,14 @@ class TestConsumerIntegration:
             test_file = tier1_path / "test_consumer_doc.md"
             test_content = """# Consumer Test Document
 
-## Test Block
-aclarai:id=test_consumer_block_001 ver=2 hash=updated_hash_456
-
+## Test Block 001
 This is updated content that should be processed by the consumer.
 The version has been incremented to trigger an update.
+<!-- aclarai:id=test_consumer_block_001 ver=2 -->
+
+## Test Block 003
+This is new content for a new block.
+<!-- aclarai:id=test_consumer_block_003 ver=1 -->
 """
             test_file.write_text(test_content)
 
@@ -144,18 +153,18 @@ The version has been incremented to trigger an update.
 
             # Track if message was processed
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             # Start consumer in a separate thread
             consumer_thread = threading.Thread(target=consumer.start_consuming)
@@ -174,14 +183,19 @@ The version has been incremented to trigger an update.
         with integration_neo4j_manager.session() as session:
             result = session.run("""
                 MATCH (b:Block {id: 'test_consumer_block_001'})
-                RETURN b.version as version, b.hash as hash, b.content as content
+                RETURN b.version as version, b.hash as hash, b.text as content
             """)
             record = result.single()
             assert record is not None
             assert record["version"] == 2  # Version should have been updated
-            assert record["hash"] == "updated_hash_456"  # Hash should match new content
+            # The hash is computed from the semantic content of the block
+            expected_hash = (
+                "74bfb41cd8981f4cb5aac33a1c67fd5a790daabfd72f538269cd56cd5fd843e2"
+            )
+            assert record["hash"] == expected_hash  # Hash should match computed content
+            # The content stored is the semantic text of the block
             assert (
-                "This is updated content that should be processed by the consumer"
+                "The version has been incremented to trigger an update."
                 in record["content"]
             )
 
@@ -240,18 +254,18 @@ The version has been incremented to trigger an update.
 
             # Process one message and then stop
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             consumer_thread = threading.Thread(target=consumer.start_consuming)
             consumer_thread.daemon = True
@@ -319,18 +333,18 @@ The version has been incremented to trigger an update.
             consumer = DirtyBlockConsumer(config=config)
 
             processed = threading.Event()
-            original_process_message = consumer.process_message
+            original_process_dirty_block = consumer._process_dirty_block
 
-            def mock_process_message(*args, **kwargs):
+            def mock_process_dirty_block(*args, **kwargs):
                 try:
-                    result = original_process_message(*args, **kwargs)
+                    result = original_process_dirty_block(*args, **kwargs)
                     processed.set()
                     return result
                 except Exception as e:
                     processed.set()
                     raise e
 
-            consumer.process_message = mock_process_message
+            consumer._process_dirty_block = mock_process_dirty_block
 
             consumer_thread = threading.Thread(target=consumer.start_consuming)
             consumer_thread.daemon = True
@@ -346,9 +360,10 @@ The version has been incremented to trigger an update.
         with integration_neo4j_manager.session() as session:
             result = session.run("""
                 MATCH (b:Block {id: 'test_consumer_block_003'})
-                RETURN b.version as version, b.hash as hash, b.aclarai_id as aclarai_id
+                RETURN b.id as id, b.version as version, b.hash as hash, b.text as text
             """)
             record = result.single()
             assert record is not None
+            assert record["id"] == "test_consumer_block_003"
             assert record["version"] == 1
-            assert record["aclarai_id"] == "test_consumer_block_003"
+            assert "This is new content for a new block" in record["text"]

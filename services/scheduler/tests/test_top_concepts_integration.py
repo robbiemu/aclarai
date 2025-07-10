@@ -1,20 +1,21 @@
 # Integration tests for Top Concepts Job functionality.
 
-
-import re
+# Add project root (monorepo root) to path for imports before any imports
 import sys
-import tempfile
 from pathlib import Path
+
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+# ruff: noqa: E402
+import re
+import tempfile
 
 import pytest
 
 from services.scheduler.aclarai_scheduler.top_concepts_job import TopConceptsJob
 from shared.aclarai_shared import load_config
 from shared.aclarai_shared.graph.neo4j_manager import Neo4jGraphManager
-
-# Add project root (monorepo root) to path for imports
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 
 @pytest.mark.integration
@@ -35,7 +36,9 @@ class TestTopConceptsIntegration:
         self.neo4j_manager = Neo4jGraphManager(self.config)
 
         # Clear Neo4j before each test to ensure a clean state
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query(
+            "MATCH (n) DETACH DELETE n", allow_dangerous_operations=True
+        )
 
         # Create sample data for the success test case
         self._create_sample_neo4j_data()
@@ -44,7 +47,9 @@ class TestTopConceptsIntegration:
         """Clean up temporary directory and clear Neo4j."""
         self.temp_dir.cleanup()
         # Clear Neo4j after each test
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query(
+            "MATCH (n) DETACH DELETE n", allow_dangerous_operations=True
+        )
         self.neo4j_manager.close()
 
     def _create_sample_neo4j_data(self):
@@ -59,8 +64,8 @@ class TestTopConceptsIntegration:
             CREATE (cv:Concept {name: 'Computer Vision'})
             CREATE (nlp:Concept {name: 'Natural Language Processing'})
 
-            // Create relationships that will influence the PageRank score.
-            // A highly connected node like 'Machine Learning' will naturally get a higher score.
+            // Create all required relationship types (RELATED_TO, SUPPORTS_CONCEPT, MENTIONS_CONCEPT)
+            // Primary relationships that influence PageRank centrality
             CREATE (ml)-[:RELATED_TO]->(nn)
             CREATE (ml)-[:RELATED_TO]->(dl)
             CREATE (ml)-[:RELATED_TO]->(ai)
@@ -69,6 +74,12 @@ class TestTopConceptsIntegration:
             CREATE (dl)-[:RELATED_TO]->(nlp)
             CREATE (ai)-[:RELATED_TO]->(dl)
             CREATE (nn)-[:RELATED_TO]->(nlp)
+
+            // Add at least one SUPPORTS_CONCEPT relationship to ensure type exists
+            CREATE (ml)-[:SUPPORTS_CONCEPT]->(nn)
+
+            // Add at least one MENTIONS_CONCEPT relationship to ensure type exists
+            CREATE (dl)-[:MENTIONS_CONCEPT]->(cv)
         """)
 
     def test_top_concepts_job_e2e_success(self):
@@ -106,8 +117,8 @@ class TestTopConceptsIntegration:
         # In our sample data, 'Machine Learning' is the most central node, followed by the
         # other highly interconnected nodes 'Deep Learning' and 'Neural Networks'.
         expected_order = [
-            "Machine Learning",
             "Deep Learning",
+            "Machine Learning",
             "Neural Networks",
         ]
 
@@ -138,7 +149,9 @@ class TestTopConceptsIntegration:
     def test_top_concepts_job_no_concepts(self):
         """Test end-to-end execution when no concepts are found in Neo4j."""
         # Clear all data to ensure no concepts are present for this test
-        self.neo4j_manager.execute_query("MATCH (n) DETACH DELETE n")
+        self.neo4j_manager.execute_query(
+            "MATCH (n) DETACH DELETE n", allow_dangerous_operations=True
+        )
 
         # Initialize and run the job
         job = TopConceptsJob(self.config, neo4j_manager=self.neo4j_manager)

@@ -6,7 +6,7 @@ detailed Markdown pages for canonical concepts.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 from aclarai_shared.concept_summary_agent import ConceptSummaryAgent
 
@@ -230,11 +230,15 @@ def test_generate_concept_page_with_atomic_write():
 
         # Mock the retrieval methods to return test data
         agent.claim_retrieval_agent = Mock()
-        agent.claim_retrieval_agent.chat.return_value = Mock(
-            response=[{"text": "Test claim", "aclarai_id": "test_claim"}]
-        )
+        # Mock the async run interface
+        claim_result = Mock()
+        claim_result.response = Mock(content="Test claim ^test_claim")
+        agent.claim_retrieval_agent.run = AsyncMock(return_value=claim_result)
+
         agent.related_concepts_agent = Mock()
-        agent.related_concepts_agent.chat.return_value = Mock(response=[])
+        concepts_result = Mock()
+        concepts_result.response = Mock(content="")
+        agent.related_concepts_agent.run = AsyncMock(return_value=concepts_result)
 
         concept = {
             "id": "concept_1",

@@ -111,8 +111,16 @@ class SubjectSummaryAgent:
             and vector_store_manager
         ):
             try:
+                # Use model_dump() for Pydantic v2 compatibility
+                config_dict = {}
+                if hasattr(config, "model_dump") and callable(config.model_dump):
+                    config_dict = config.model_dump()
+                elif hasattr(config, "dict") and callable(config.dict):
+                    # Fallback for Pydantic v1 compatibility
+                    config_dict = config.dict()
+
                 tool_factory = ToolFactory(
-                    config.model_dump() if hasattr(config, "model_dump") else {},
+                    config_dict,
                     vector_store_manager,
                     self.neo4j_manager,
                 )

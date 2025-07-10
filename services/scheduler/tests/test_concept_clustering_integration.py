@@ -69,7 +69,9 @@ class TestConceptClusteringIntegration:
 
         # --- Clean and Populate Neo4j and Vector Store ---
         # 1. Clear previous test data
-        neo4j_manager.execute_query("MATCH (n:Concept) DETACH DELETE n")
+        neo4j_manager.execute_query(
+            "MATCH (n:Concept) DETACH DELETE n", allow_dangerous_operations=True
+        )
         vector_store.delete_chunks_by_block_id(
             "concept_GPU Error"
         )  # Example delete to clear old data
@@ -111,7 +113,9 @@ class TestConceptClusteringIntegration:
         yield config, neo4j_manager, vector_store
 
         # --- Teardown ---
-        neo4j_manager.execute_query("MATCH (n:Concept) DETACH DELETE n")
+        neo4j_manager.execute_query(
+            "MATCH (n:Concept) DETACH DELETE n", allow_dangerous_operations=True
+        )
         neo4j_manager.close()
 
     def test_concept_clustering_job_e2e(self, live_services):

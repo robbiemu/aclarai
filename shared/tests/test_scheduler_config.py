@@ -39,17 +39,18 @@ class TestSchedulerConfigClasses:
         assert jobs.concept_embedding_refresh.enabled is True
         assert jobs.concept_embedding_refresh.manual_only is False
         assert jobs.concept_embedding_refresh.cron == "0 3 * * *"
-        assert (
-            "Refresh concept embeddings" in jobs.concept_embedding_refresh.description
-        )
+        assert jobs.concept_embedding_refresh.description == ""
 
         # Test vault_sync defaults
         assert jobs.vault_sync.enabled is True
         assert jobs.vault_sync.manual_only is False
-        assert jobs.vault_sync.cron == "*/30 * * * *"
-        assert "Sync vault files" in jobs.vault_sync.description
+        assert (
+            jobs.vault_sync.cron == "0 3 * * *"
+        )  # This also uses the JobConfig default now
+        assert jobs.vault_sync.description == ""
 
     def test_scheduler_config_defaults(self):
+        """Test SchedulerConfig default values."""
         """Test SchedulerConfig default values."""
         scheduler = SchedulerConfig()
 

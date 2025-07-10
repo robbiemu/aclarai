@@ -333,11 +333,11 @@ class TestConceptClusteringJob:
             {"name": "concept2"},
         ]
 
-        # Mock vector store response
-        mock_vector_store.similarity_search.side_effect = [
-            [({"embedding": [1.0, 0.0, 0.0]}, 0.95)],
-            [({"embedding": [0.0, 1.0, 0.0]}, 0.95)],
-        ]
+        # Mock vector store response - get_embeddings_for_concepts returns a dict mapping names to embeddings
+        mock_vector_store.get_embeddings_for_concepts.return_value = {
+            "concept1": [1.0, 0.0, 0.0],
+            "concept2": [0.0, 1.0, 0.0],
+        }
 
         job = ConceptClusteringJob(
             config=mock_config,

@@ -72,6 +72,12 @@ tools:
 version: "0.1.0"
 config_version: 1
 
+# Service discovery and connection preferences
+service_discovery:
+  # Whether to prefer Docker service names over user-configured external hosts
+  # Set to false when using external services
+  prefer_docker_services: true
+
 # Database configurations
 databases:
   postgres:

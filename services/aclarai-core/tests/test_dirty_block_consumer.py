@@ -27,10 +27,10 @@ class TestDirtyBlockConsumer:
         config.rabbitmq_user = None
         config.rabbitmq_password = None
         config.vault_path = "/test/vault"
-        # Provide a dictionary for the ToolFactory via the mocked .dict() method
-        config.dict = Mock(
-            return_value={"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
-        )
+        # Provide a dictionary for the ToolFactory via mocked methods for both Pydantic v1 and v2
+        tools_dict = {"tools": {"agent_tool_mappings": {"entailment_agent": []}}}
+        config.dict = Mock(return_value=tools_dict)
+        config.model_dump = Mock(return_value=tools_dict)
         return config
 
     @pytest.fixture

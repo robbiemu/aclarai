@@ -205,7 +205,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}
@@ -247,7 +247,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}
@@ -258,7 +258,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}
@@ -489,7 +489,9 @@ class TopConceptsJob:
             # 1. Clean up the temporary property written to the persistent graph
             try:
                 cleanup_prop_query = "MATCH (c:Concept) WHERE c.pagerank_score IS NOT NULL REMOVE c.pagerank_score"
-                self.neo4j_manager.execute_query(cleanup_prop_query)
+                self.neo4j_manager.execute_query(
+                    cleanup_prop_query, allow_dangerous_operations=True
+                )
                 logger.info(
                     "top_concepts_job.run_job: Cleaned up pagerank_score property from nodes."
                 )
