@@ -99,6 +99,10 @@ class Neo4jGraphManager:
         """Context manager exit - ensures driver is closed."""
         self.close()
 
+    def __del__(self):
+        """Destructor - ensures driver is closed when object is garbage collected."""
+        self.close()
+
     @contextmanager
     def session(self):
         """Context manager for Neo4j sessions."""

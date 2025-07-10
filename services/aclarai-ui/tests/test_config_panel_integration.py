@@ -2,7 +2,6 @@
 
 import os
 import sys
-from datetime import date
 from typing import Generator
 
 import pytest
@@ -216,8 +215,11 @@ class TestConfigurationPanelIntegration:
         # Verify the date pattern was replaced with an actual date (YYYY-MM-DD format)
         preview_text = preview_element.text_content()
         import re
+
         date_pattern = r"My-Topics-(\d{4}-\d{2}-\d{2})\.md"
-        assert re.search(date_pattern, preview_text), f"Expected date pattern in preview text: {preview_text}"
+        assert re.search(date_pattern, preview_text), (
+            f"Expected date pattern in preview text: {preview_text}"
+        )
 
     @pytest.mark.integration
     def test_subject_summary_validation(self, reset_to_default_config: Page):

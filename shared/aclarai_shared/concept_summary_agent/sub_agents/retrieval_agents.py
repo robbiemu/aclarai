@@ -1,50 +1,39 @@
-"""
-This module defines the specialized sub-agents responsible for retrieving context
-for the ConceptSummaryAgent.
-"""
-
 import logging
-from typing import List, Optional
+from typing import Any, Callable, List, Optional, Union
 
-from llama_index.core.agent import AgentRunner
+from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.core.tools import BaseTool
-from llama_index.llms.openai import OpenAI
+from llama_index.llms.openai import OpenAI  # or the LLM class you're using
 
 logger = logging.getLogger(__name__)
 
 
 def create_retrieval_agent(
-    tools: List[BaseTool],
+    tools: List[Union[BaseTool, Callable[..., Any]]],
     llm: OpenAI,
     system_prompt: str,
     verbose: bool = False,
-) -> Optional[AgentRunner]:
+) -> Optional[FunctionAgent]:
     """
-    Creates a LlamaIndex agent for a specific retrieval task.
+    Create a FunctionAgent for retrieval tasks.
 
     Args:
-        tools: A list of tools for the agent to use.
-        llm: The OpenAI LLM instance.
-        system_prompt: The system prompt to guide the agent's behavior.
-        verbose: Whether to enable verbose logging for the agent.
+      tools: List of tool objects for the agent
+      llm: LLM instance (e.g. OpenAI) implementing BaseLLM
+      system_prompt: Instructions guiding the agent’s behavior
+      verbose: Whether to enable debug logging
 
     Returns:
-        An AgentRunner instance or None if creation fails.
+      A configured FunctionAgent, or None on failure
     """
     try:
-        return AgentRunner.from_llm(
+        return FunctionAgent(
             tools=tools,
             llm=llm,
             system_prompt=system_prompt,
             verbose=verbose,
         )
     except Exception as e:
-        logger.error(
-            f"Failed to create retrieval agent: {e}",
-            extra={
-                "service": "aclarai",
-                "filename.function_name": "sub_agents.retrieval_agents.create_retrieval_agent",
-                "error": str(e),
-            },
-        )
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create retrieval agent: {e}", exc_info=True)
         return None
