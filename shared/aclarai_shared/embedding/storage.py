@@ -26,7 +26,13 @@ from llama_index.core.vector_stores.types import (
 )
 from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import (
+    Column,
+    MetaData,
+    String,
+    Table,
     create_engine,
+    func,
+    select,
     text,
 )
 
@@ -102,6 +108,10 @@ class aclaraiVectorStore(VectorStore):
         self.vector_index = VectorStoreIndex.from_vector_store(
             self.vector_store, embed_model=self.embedding_generator.embedding_model
         )
+
+        # Initialize SQLAlchemy metadata for safe table operations
+        self.metadata = MetaData()
+
         logger.info(
             f"Initialized aclaraiVectorStore with collection: {config.embedding.collection_name}, "
             f"dimension: {config.embedding.embed_dim}"
@@ -148,6 +158,31 @@ class aclaraiVectorStore(VectorStore):
         if len(table_name) > 63:  # PostgreSQL identifier limit
             raise ValueError(f"Table name too long: {table_name} (max 63 characters)")
         return table_name
+
+    def _get_table_reference(self, table_name: str) -> Table:
+        """
+        Get a SQLAlchemy Table reference for safe SQL operations.
+        Args:
+            table_name: The validated table name
+        Returns:
+            SQLAlchemy Table object
+        """
+        validated_name = self._validate_table_name(table_name)
+
+        # Create a Table object with the necessary columns for our queries
+        # This provides a safe way to reference the table without string formatting
+        table = Table(
+            validated_name,
+            self.metadata,
+            Column("id", String, primary_key=True),
+            Column("text", String),
+            Column(
+                "embedding", String
+            ),  # or appropriate type for your embedding storage
+            autoload_with=self.engine,
+            extend_existing=True,
+        )
+        return table
 
     def store_embeddings(
         self, embedded_chunks: List[EmbeddedChunk]
@@ -369,39 +404,33 @@ class aclaraiVectorStore(VectorStore):
             },
         )
 
-        # Sanitize table name to prevent SQL injection
-        # Note: LlamaIndex PGVectorStore automatically prepends 'data_' to the table name
+        # Get table reference using safe SQLAlchemy approach
         actual_table_name = f"data_{self.config.embedding.collection_name}"
-        table_name = self._validate_table_name(actual_table_name)
+        table = self._get_table_reference(actual_table_name)
 
-        # Use a parameterized query for safety and efficiency
-        # The text field contains the concept name, not the metadata
-        query = text(f"""
-            SELECT
-                text as name,
-                embedding
-            FROM {table_name}
-            WHERE text IN :concept_names
-        """)
+        # Use SQLAlchemy's select() for safe query construction
+        query = select(table.c.text.label("name"), table.c.embedding).where(
+            table.c.text.in_(concept_names)
+        )
 
         embeddings_map: Dict[str, List[float]] = {}
         try:
             with self.engine.connect() as conn:
-                result = conn.execute(query, {"concept_names": tuple(concept_names)})
+                result = conn.execute(query)
                 for row in result:
                     # The embedding is returned as a string representation of a list, e.g., '[0.1, 0.2, ...]'
                     # We need to parse it back into a list of floats.
-                    embedding_str = row[1]
+                    embedding_str = row.embedding
                     if isinstance(embedding_str, str):
                         # Strip brackets and split by comma
                         embedding_list = [
                             float(val) for val in embedding_str.strip("[]").split(",")
                         ]
-                        embeddings_map[row[0]] = embedding_list
+                        embeddings_map[row.name] = embedding_list
                     elif isinstance(
                         embedding_str, list
                     ):  # If the driver already parses it
-                        embeddings_map[row[0]] = embedding_str
+                        embeddings_map[row.name] = embedding_str
 
         except Exception as e:
             logger.error(
@@ -421,27 +450,24 @@ class aclaraiVectorStore(VectorStore):
             VectorStoreMetrics with current statistics
         """
         try:
+            # Get table reference using safe SQLAlchemy approach
+            actual_table_name = f"data_{self.config.embedding.collection_name}"
+            table = self._get_table_reference(actual_table_name)
+
             with self.engine.connect() as conn:
-                # Validate table name to prevent SQL injection
-                # Note: LlamaIndex PGVectorStore automatically prepends 'data_' to the table name
-                actual_table_name = f"data_{self.config.embedding.collection_name}"
-                table_name = self._validate_table_name(actual_table_name)
-                # Get total count
-                # Table name is validated above to prevent SQL injection
-                count_query = text(f"""
-                    SELECT COUNT(*) as total_vectors
-                    FROM {table_name}
-                """)  # nosec B608
+                # Get total count using SQLAlchemy
+                count_query = select(func.count()).select_from(table)
                 result = conn.execute(count_query)
-                count_row = result.fetchone()
-                total_vectors = count_row[0] if count_row else 0
-                # Get table size
+                total_vectors = result.scalar() or 0
+
+                # Get table size using parameterized query
                 size_query = text("""
                     SELECT pg_size_pretty(pg_total_relation_size(:table_name))
                 """)
-                size_result = conn.execute(size_query, {"table_name": table_name})
+                size_result = conn.execute(size_query, {"table_name": table.name})
                 size_row = size_result.fetchone()
                 size_str = size_row[0] if size_row else None
+
                 return VectorStoreMetrics(
                     total_vectors=total_vectors,
                     successful_inserts=total_vectors,  # Approximate
