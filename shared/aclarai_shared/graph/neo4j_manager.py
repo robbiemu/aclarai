@@ -91,6 +91,14 @@ class Neo4jGraphManager:
                 },
             )
 
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures driver is closed."""
+        self.close()
+
     @contextmanager
     def session(self):
         """Context manager for Neo4j sessions."""
@@ -881,11 +889,3 @@ class Neo4jGraphManager:
                 return concepts
 
         return self._retry_with_backoff(_execute_concept_creation)
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()

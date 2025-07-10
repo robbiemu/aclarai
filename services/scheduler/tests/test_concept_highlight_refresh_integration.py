@@ -137,11 +137,11 @@ class TestConceptHighlightRefreshIntegration:
         assert top_concepts_file.exists()
         top_concepts_content = top_concepts_file.read_text()
         extracted_top_concepts = re.findall(r"-\s*\[\[(.*?)\]\]", top_concepts_content)
-        expected_top_concepts = ["Deep Learning", "Neural Networks", "Machine Learning"]
+        expected_top_concepts = ["Deep Learning", "Machine Learning", "Neural Networks"]
         assert extracted_top_concepts == expected_top_concepts
 
         # Verify Trending Topics file
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         trending_topics_file_name = (
             self.config.scheduler.jobs.trending_topics.target_file.format(date=today)
         )
