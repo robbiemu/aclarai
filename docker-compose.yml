@@ -68,16 +68,15 @@ services:
       rabbitmq:
         condition: service_healthy
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
-      - RABBITMQ_HOST=rabbitmq 
+    profiles:
+      - aclarai-core
+      - default
 
   vault-watcher:  # Watches vault for Markdown edits and emits dirty blocks
     build:
@@ -89,16 +88,15 @@ services:
       aclarai-core:
         condition: service_started
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
-      - RABBITMQ_HOST=rabbitmq 
+    profiles:
+      - vault-watcher
+      - default
 
   scheduler:  # Runs periodic jobs: concept hygiene, vault sync, reprocessing
     build:
@@ -107,15 +105,15 @@ services:
     depends_on:
       - aclarai-core
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
+    profiles:
+      - scheduler
+      - default
 
   aclarai-ui:  # Web interface for aclarai
     build:
@@ -124,7 +122,7 @@ services:
     depends_on:
       - aclarai-core
     volumes:
-      - ./vault:/vault
+      - ${VAULT_PATH:-./vault}:/vault
       - ./settings:/settings
     env_file:
       - .env
@@ -132,9 +130,9 @@ services:
       - "7860:7860"
     networks:
       - aclarai_net
-    environment:
-      - VAULT_PATH=/vault
-      - SETTINGS_PATH=/settings
+    profiles:
+      - aclarai-ui
+      - default
 
 volumes:
   pg_data:
