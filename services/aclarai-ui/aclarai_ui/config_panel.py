@@ -10,6 +10,7 @@ Follows the design specification from docs/arch/design_config_panel.md
 import logging
 import re
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -845,6 +846,9 @@ def create_configuration_panel() -> gr.Blocks:
                         info="Output filename for the top concepts page",
                         lines=1,
                     )
+                top_concepts_preview = gr.Markdown(
+                    value=f"Preview: `{initial_config.top_concepts_target_file}`"
+                )
 
             with gr.Group():
                 gr.Markdown("### 📈 Trending Topics")
@@ -881,6 +885,9 @@ def create_configuration_panel() -> gr.Blocks:
                     placeholder="Trending Topics - {date}.md",
                     info="Output filename pattern for trending topics (use {date} for current date)",
                     lines=1,
+                )
+                trending_topics_preview = gr.Markdown(
+                    value=f"Preview: `{initial_config.trending_topics_target_file.replace('{date}', date.today().strftime('%Y-%m-%d'))}`"
                 )
 
             with gr.Group():
@@ -1008,7 +1015,16 @@ def create_configuration_panel() -> gr.Blocks:
                 config = load_current_config()
                 status_message = "🔄 **Configuration reloaded.**"
                 gr.Info("Configuration reloaded")
-                return (*asdict(config).values(), status_message)
+                # Also update the preview markdown components
+                top_preview = f"Preview: `{config.top_concepts_target_file}`"
+                trending_preview = f"Preview: `{config.trending_topics_target_file.replace('{date}', date.today().strftime('%Y-%m-%d'))}`"
+
+                return (
+                    *asdict(config).values(),
+                    top_preview,
+                    trending_preview,
+                    status_message,
+                )
             except Exception as e:
                 logger.error(
                     "Failed to reload configuration",
@@ -1022,17 +1038,49 @@ def create_configuration_panel() -> gr.Blocks:
                 config = initial_config
                 status_message = f"❌ **Error reloading configuration:** {str(e)}"
                 gr.Error("Error reloading configuration")
-                return (*asdict(config).values(), status_message)
+                top_preview = f"Preview: `{config.top_concepts_target_file}`"
+                trending_preview = f"Preview: `{config.trending_topics_target_file.replace('{date}', date.today().strftime('%Y-%m-%d'))}`"
+                return (
+                    *asdict(config).values(),
+                    top_preview,
+                    trending_preview,
+                    status_message,
+                )
 
         save_btn.click(
             fn=save_configuration,
             inputs=all_inputs,
             outputs=[save_status],
         )
+
         reload_btn.click(
             fn=reload_configuration,
-            outputs=all_inputs + [save_status],
+            outputs=all_inputs
+            + [top_concepts_preview, trending_topics_preview, save_status],
         )
+
+        # --- Functions and Handlers for Live Previews ---
+        def update_top_concepts_preview(filename: str) -> str:
+            return f"Preview: `{filename}`"
+
+        def update_trending_topics_preview(filename: str) -> str:
+            preview_filename = filename.replace(
+                "{date}", date.today().strftime("%Y-%m-%d")
+            )
+            return f"Preview: `{preview_filename}`"
+
+        top_concepts_target_file_input.change(
+            fn=update_top_concepts_preview,
+            inputs=[top_concepts_target_file_input],
+            outputs=[top_concepts_preview],
+        )
+
+        trending_topics_target_file_input.change(
+            fn=update_trending_topics_preview,
+            inputs=[trending_topics_target_file_input],
+            outputs=[trending_topics_preview],
+        )
+
     if not isinstance(interface, gr.Blocks):
         interface = gr.Blocks()
     return interface

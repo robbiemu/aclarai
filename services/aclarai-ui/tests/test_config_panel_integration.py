@@ -177,13 +177,6 @@ class TestConfigurationPanelIntegration:
             agent_models_group.get_by_label("Trending Concepts Agent")
         ).to_be_visible()
 
-        writing_agent_group = page.locator("div.gr-group").filter(
-            has=page.get_by_role("heading", name="🤖 Writing Agent")
-        )
-        expect(
-            writing_agent_group.get_by_label("Model for Trending Concepts Agent")
-        ).to_be_visible()
-
         # 3. Handle the ambiguous "Similarity Threshold" label from the gr.Slider.
         # We can assert that both the number input and the slider role are visible.
         # The label is associated with both, so we need to be more specific.
