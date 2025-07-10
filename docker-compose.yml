@@ -15,6 +15,9 @@ services:
       - "5432:5432"
     networks:
       - aclarai_net
+    profiles:
+      - postgres
+      - default
 
   neo4j:  # Knowledge graph for claims, summaries, and concepts
     image: neo4j:5
@@ -29,6 +32,9 @@ services:
       - "7687:7687"
     networks:
       - aclarai_net
+    profiles:
+      - neo4j
+      - default
 
   rabbitmq: # Message broker for inter-service communication (e.g., vault-watcher -> aclarai-core)
     image: rabbitmq:3-management # Includes management UI on port 15672
@@ -41,6 +47,9 @@ services:
       - "15672:15672" # Management UI
     networks:
       - aclarai_net
+    profiles:
+      - rabbitmq
+      - default
     healthcheck: # Basic health check
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s
