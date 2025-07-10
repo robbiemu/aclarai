@@ -326,7 +326,9 @@ class ServiceDiscoveryConfig:
 class aclaraiConfig:
     """Main configuration class for aclarai services."""
 
-    service_discovery: ServiceDiscoveryConfig = field(default_factory=ServiceDiscoveryConfig)
+    service_discovery: ServiceDiscoveryConfig = field(
+        default_factory=ServiceDiscoveryConfig
+    )
     llm: LLMConfig = field(default_factory=LLMConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
@@ -384,14 +386,18 @@ class aclaraiConfig:
 
         # Load service discovery config first to apply it to database config
         service_discovery_data = yaml_config.get("service_discovery", {})
-        prefer_docker_services = service_discovery_data.get("prefer_docker_services", True)
+        prefer_docker_services = service_discovery_data.get(
+            "prefer_docker_services", True
+        )
 
         # --- Database Config ---
         postgres_data = yaml_config.get("databases", {}).get("postgres", {})
         postgres_host = os.getenv(
             "POSTGRES_HOST", postgres_data.get("host", "postgres")
         )
-        postgres_host = cls._apply_service_host_fallback(postgres_host, "postgres", prefer_docker_services)
+        postgres_host = cls._apply_service_host_fallback(
+            postgres_host, "postgres", prefer_docker_services
+        )
         postgres = DatabaseConfig(
             host=postgres_host,
             port=int(os.getenv("POSTGRES_PORT", postgres_data.get("port", 5432))),
@@ -401,7 +407,9 @@ class aclaraiConfig:
         )
         neo4j_data = yaml_config.get("databases", {}).get("neo4j", {})
         neo4j_host = os.getenv("NEO4J_HOST", neo4j_data.get("host", "neo4j"))
-        neo4j_host = cls._apply_service_host_fallback(neo4j_host, "neo4j", prefer_docker_services)
+        neo4j_host = cls._apply_service_host_fallback(
+            neo4j_host, "neo4j", prefer_docker_services
+        )
         neo4j = DatabaseConfig(
             host=neo4j_host,
             port=int(os.getenv("NEO4J_BOLT_PORT", neo4j_data.get("port", 7687))),
@@ -410,7 +418,9 @@ class aclaraiConfig:
         )
 
         # --- Service Discovery Config ---
-        service_discovery = ServiceDiscoveryConfig(**filter_none(service_discovery_data))
+        service_discovery = ServiceDiscoveryConfig(
+            **filter_none(service_discovery_data)
+        )
 
         # --- LLM & Model Config ---
         llm_data = yaml_config.get("llm", {})
@@ -579,7 +589,9 @@ class aclaraiConfig:
             vault_watcher=vault_watcher,
             scheduler=scheduler,
             rabbitmq_host=cls._apply_service_host_fallback(
-                os.getenv("RABBITMQ_HOST", "rabbitmq"), "rabbitmq", prefer_docker_services
+                os.getenv("RABBITMQ_HOST", "rabbitmq"),
+                "rabbitmq",
+                prefer_docker_services,
             ),
             rabbitmq_port=int(os.getenv("RABBITMQ_PORT", 5672)),
             rabbitmq_user=os.getenv("RABBITMQ_USER", "user"),
@@ -679,44 +691,46 @@ class aclaraiConfig:
         return result
 
     @staticmethod
-    def _apply_service_host_fallback(host: str, service_name: str, prefer_docker_services: bool = True) -> str:
+    def _apply_service_host_fallback(
+        host: str, service_name: str, prefer_docker_services: bool = True
+    ) -> str:
         """Apply Docker service name fallback for a specific service when running in containers."""
         if host == "host.docker.internal":
             return host
-        
+
         running_in_docker = (
             os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER") == "true"
         )
-        
+
         if not running_in_docker:
             return host
-            
+
         # If prefer_docker_services is False, respect user configuration
         if not prefer_docker_services:
             if aclaraiConfig._is_external_host(host):
                 return "host.docker.internal"
             return host
-            
+
         # Handle localhost/127.0.0.1 mapping to specific service names
         localhost_aliases = {"localhost", "127.0.0.1"}
         if host in localhost_aliases:
             return service_name
-        
+
         docker_services = {
             "postgres",
-            "neo4j", 
+            "neo4j",
             "rabbitmq",
             "aclarai-core",
             "vault-watcher",
             "scheduler",
         }
-        
+
         if host in docker_services:
             return host
-            
+
         if aclaraiConfig._is_external_host(host):
             return "host.docker.internal"
-            
+
         return host
 
     @staticmethod
@@ -724,42 +738,42 @@ class aclaraiConfig:
         """Apply Docker service name fallback when running in containers."""
         if host == "host.docker.internal":
             return host
-        
+
         running_in_docker = (
             os.path.exists("/.dockerenv") or os.getenv("DOCKER_CONTAINER") == "true"
         )
-        
+
         if not running_in_docker:
             return host
-            
+
         # If prefer_docker_services is False, respect user configuration
         if not prefer_docker_services:
             if aclaraiConfig._is_external_host(host):
                 return "host.docker.internal"
             return host
-            
+
         # Handle localhost/127.0.0.1 mapping - return as-is for now
         # The service-specific mapping will be handled by individual calls
         localhost_aliases = {"localhost", "127.0.0.1"}
         if host in localhost_aliases:
             # Return localhost for further processing by caller
             return host
-        
+
         docker_services = {
             "postgres",
-            "neo4j", 
+            "neo4j",
             "rabbitmq",
             "aclarai-core",
             "vault-watcher",
             "scheduler",
         }
-        
+
         if host in docker_services:
             return host
-            
+
         if aclaraiConfig._is_external_host(host):
             return "host.docker.internal"
-            
+
         return host
 
     @staticmethod
