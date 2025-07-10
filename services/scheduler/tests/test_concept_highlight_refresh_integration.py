@@ -94,6 +94,8 @@ class TestConceptHighlightRefreshIntegration:
         CREATE (nn)-[:RELATED_TO]->(nlp)
         CREATE (nn)-[:RELATED_TO]->(ai)
         CREATE (ai)-[:RELATED_TO]->(ml)
+        // Add an extra connection to strengthen Machine Learning's PageRank
+        CREATE (ml)-[:RELATED_TO]->(cv)
 
         // Create Relationships for Trending Topics
         // NLP: 2 recent mentions, 1 old mention for trending growth

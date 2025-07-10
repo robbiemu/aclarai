@@ -37,11 +37,20 @@ This document summarizes the vector tables we’ve committed to implementing, th
 **Used In:**
 - 🟣 Sprint 4 — *"Link claims to concepts"*
 - 🔵 Sprint 5+ — Similarity-based exploration and disambiguation
+- 🟡 Sprint 10 — *"Implement Concept clustering job"*
 
 **Purpose:**
 - Detect semantic duplicates
 - Enable concept-to-concept similarity
 - Assist in onboarding new claims or summaries
+- Support efficient bulk retrieval for clustering and analytics
+
+#### **Access Patterns**
+
+The `concepts` vector store supports two primary access patterns:
+
+-   **Similarity Search (`similarity_search`):** Used for discovery, such as finding a few concepts semantically similar to a new claim or another concept. This is a "one-to-few" operation.
+-   **Bulk Embedding Retrieval (`get_embeddings_for_concepts`):** Used for data-intensive tasks like clustering, where the embeddings for a large, known set of concepts are required. This is a "many-to-many" operation performed in a single, efficient database query. **This pattern should be used by the Concept Clustering Job to avoid N+1 query performance issues.**
 
 ---
 

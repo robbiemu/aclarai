@@ -31,6 +31,7 @@ from sqlalchemy import (
 )
 
 from ..config import aclaraiConfig
+from .chunking import UtteranceChunker
 from .models import EmbeddedChunk, EmbeddingGenerator
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,8 @@ class aclaraiVectorStore(VectorStore):
         self._client = self.vector_store.client
         # Initialize embedding generator with configured model
         self.embedding_generator = EmbeddingGenerator(config=config)
+        # Initialize chunker for compatibility with tests
+        self.chunker = UtteranceChunker(config=config)
         # Set LlamaIndex global embedding model IMMEDIATELY to prevent default OpenAI dependency
         # This ensures VectorStoreIndex doesn't try to import llama-index-embeddings-openai
         # We set this as early as possible to prevent any race conditions
@@ -321,6 +324,96 @@ class aclaraiVectorStore(VectorStore):
             logger.error(f"Failed to delete chunks for block {aclarai_block_id}: {e}")
             return 0
 
+    def get_embeddings_for_concepts(
+        self, concept_names: List[str]
+    ) -> Dict[str, List[float]]:
+        """
+        Retrieve embeddings for a specific list of concept names using bulk retrieval.
+
+        This method implements the "Bulk Embedding Retrieval" access pattern defined in
+        docs/arch/on-vector_stores.md. It performs a single, efficient SQL query to
+        retrieve embeddings for a large, known set of concepts, avoiding the N+1 query
+        problem that would occur if similarity_search was used in a loop.
+
+        **Use Cases:**
+        - Concept clustering jobs that need embeddings for all canonical concepts
+        - Analytics and batch processing operations
+        - Any scenario where you need embeddings for a predetermined set of items
+
+        **Performance Benefits:**
+        - Single database query instead of N queries (one per concept)
+        - Reduced network overhead and connection usage
+        - Consistent performance regardless of concept count
+        - Avoids the overhead of similarity calculations when exact matches are needed
+
+        **Difference from similarity_search:**
+        - similarity_search: "one-to-few" discovery pattern for finding similar items
+        - get_embeddings_for_concepts: "many-to-many" bulk retrieval for known items
+
+        Args:
+            concept_names: A list of concept names to retrieve embeddings for.
+
+        Returns:
+            A dictionary mapping concept names to their embedding vectors.
+            Only concepts that exist in the vector store will be included.
+        """
+        if not concept_names:
+            return {}
+
+        logger.debug(
+            f"Retrieving embeddings for {len(concept_names)} concepts.",
+            extra={
+                "service": "aclarai-scheduler",
+                "filename.function_name": "aclaraiVectorStore.get_embeddings_for_concepts",
+                "concept_count": len(concept_names),
+            },
+        )
+
+        # Sanitize table name to prevent SQL injection
+        # Note: LlamaIndex PGVectorStore automatically prepends 'data_' to the table name
+        actual_table_name = f"data_{self.config.embedding.collection_name}"
+        table_name = self._validate_table_name(actual_table_name)
+
+        # Use a parameterized query for safety and efficiency
+        # The text field contains the concept name, not the metadata
+        query = text(f"""
+            SELECT
+                text as name,
+                embedding
+            FROM {table_name}
+            WHERE text IN :concept_names
+        """)
+
+        embeddings_map: Dict[str, List[float]] = {}
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(query, {"concept_names": tuple(concept_names)})
+                for row in result:
+                    # The embedding is returned as a string representation of a list, e.g., '[0.1, 0.2, ...]'
+                    # We need to parse it back into a list of floats.
+                    embedding_str = row[1]
+                    if isinstance(embedding_str, str):
+                        # Strip brackets and split by comma
+                        embedding_list = [
+                            float(val) for val in embedding_str.strip("[]").split(",")
+                        ]
+                        embeddings_map[row[0]] = embedding_list
+                    elif isinstance(
+                        embedding_str, list
+                    ):  # If the driver already parses it
+                        embeddings_map[row[0]] = embedding_str
+
+        except Exception as e:
+            logger.error(
+                f"Failed to retrieve embeddings for concepts: {e}",
+                exc_info=True,
+                extra={
+                    "service": "aclarai-scheduler",
+                    "filename.function_name": "aclaraiVectorStore.get_embeddings_for_concepts",
+                },
+            )
+        return embeddings_map
+
     def get_store_metrics(self) -> VectorStoreMetrics:
         """
         Get metrics about the vector store.
@@ -330,9 +423,9 @@ class aclaraiVectorStore(VectorStore):
         try:
             with self.engine.connect() as conn:
                 # Validate table name to prevent SQL injection
-                table_name = self._validate_table_name(
-                    self.config.embedding.collection_name
-                )
+                # Note: LlamaIndex PGVectorStore automatically prepends 'data_' to the table name
+                actual_table_name = f"data_{self.config.embedding.collection_name}"
+                table_name = self._validate_table_name(actual_table_name)
                 # Get total count
                 # Table name is validated above to prevent SQL injection
                 count_query = text(f"""

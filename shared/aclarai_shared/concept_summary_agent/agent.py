@@ -315,7 +315,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         self.generate_concept_slug(concept_text)
-        concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         if self.llm:
             # Use LLM to generate intelligent concept content
@@ -352,7 +354,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         concept_slug = self.generate_concept_slug(concept_text)
-        version = concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         # Build the prompt with RAG context
         prompt_parts = [
@@ -426,8 +430,8 @@ class ConceptSummaryAgent:
         try:
             if self.llm is None:
                 return None
-            response = self.llm.complete(prompt)
-            content = str(response.response).strip()
+            completion = self.llm.complete(prompt)
+            content = str(completion.text).strip()
 
             # Ensure proper metadata is included
             aclarai_id = concept.get("aclarai_id") or f"concept_{concept_slug}"
@@ -475,7 +479,9 @@ class ConceptSummaryAgent:
         """
         concept_text = concept["text"]
         concept_slug = self.generate_concept_slug(concept_text)
-        version = concept.get("version", 1)
+        version = concept.get("version")
+        if version is None:
+            version = 1
 
         lines = [
             f"## Concept: {concept_text}",
@@ -600,17 +606,43 @@ class ConceptSummaryAgent:
             # Retrieve context using RAG workflow
             claims: List[str] = []
             if self.claim_retrieval_agent:
-                response = self.claim_retrieval_agent.chat(
+                response_obj = self.claim_retrieval_agent.chat(
                     f'Find all claims related to the concept: "{concept_text}"'
                 )
-                claims = response.response if response else []
+                if response_obj and hasattr(response_obj, "response"):
+                    # Handle multiple response formats for flexibility
+                    if isinstance(response_obj.response, str):
+                        # Agent returns a string, split it into a list of claims
+                        claims = [
+                            line.strip()
+                            for line in response_obj.response.split("\n")
+                            if line.strip()
+                        ]
+                    elif isinstance(response_obj.response, list):
+                        # Agent returns a list (structured output, tests, etc.)
+                        claims = response_obj.response
+                    else:
+                        claims = []
 
             related_concepts: List[str] = []
             if self.related_concepts_agent:
-                response = self.related_concepts_agent.chat(
+                response_obj = self.related_concepts_agent.chat(
                     f'Find concepts semantically similar to: "{concept_text}"'
                 )
-                related_concepts = response.response if response else []
+                if response_obj and hasattr(response_obj, "response"):
+                    # Handle multiple response formats for flexibility
+                    if isinstance(response_obj.response, str):
+                        # Agent returns a string, split it into a list of concepts
+                        related_concepts = [
+                            line.strip()
+                            for line in response_obj.response.split("\n")
+                            if line.strip()
+                        ]
+                    elif isinstance(response_obj.response, list):
+                        # Agent returns a list (structured output, tests, etc.)
+                        related_concepts = response_obj.response
+                    else:
+                        related_concepts = []
 
             context = {
                 "claims": claims,

@@ -116,16 +116,17 @@ Retrieves all canonical concepts from Neo4j in alphabetical order.
 
 ### 2. Embedding Retrieval
 
-For each concept, searches the vector store using similarity search:
+**The job retrieves the embeddings for all canonical concepts in a single, efficient batch operation by calling the `aclaraiVectorStore.get_embeddings_for_concepts` method. This approach is critical for performance and avoids the anti-pattern of running a similarity search for each individual concept.**
 
 ```python
-results = vector_store.similarity_search(
-    query_text=concept_name,
-    top_k=1,
-    similarity_threshold=0.9,
-    filter_metadata={"collection": "concepts"}
-)
+embeddings_map = vector_store.get_embeddings_for_concepts(concept_names)
 ```
+
+This bulk retrieval pattern:
+- Executes a single database query instead of N queries
+- Significantly reduces database load and network overhead
+- Provides consistent performance regardless of concept count
+- Follows the architectural pattern defined in `docs/arch/on-vector_stores.md`
 
 ### 3. Clustering
 

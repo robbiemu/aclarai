@@ -205,7 +205,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}
@@ -247,7 +247,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}
@@ -258,7 +258,7 @@ class TopConceptsJob:
             MATCH (c:Concept)
             WHERE c.pagerank_score IS NOT NULL
             RETURN c.name as name, c.pagerank_score as score
-            ORDER BY c.pagerank_score DESC
+            ORDER BY c.pagerank_score DESC, c.name ASC
             LIMIT $limit
             """
             query_params = {"limit": limit}

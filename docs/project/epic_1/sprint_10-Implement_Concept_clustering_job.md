@@ -63,3 +63,5 @@ Desenvolver e implementar um job agendado para agrupar `(:Concept)` nodes relaci
 - O sistema de cache para atribuições de grupo deve ser projetado para permitir rápida recuperação e atualização incremental de associações de conceitos a clusters. Pode ser um simples dicionário em memória para o MVP, mas com consideração para persistência em caso de reinício.
 - O job deve lidar com conceitos outliers que não se encaixam bem em nenhum cluster, garantindo que eles não sejam perdidos no processo, embora não formem um "assunto" por si só.
 - Este job é um pré-requisito direto para a tarefa "Implementar Subject Summary Agent" de Sprint 10, que consumirá esses clusters.
+
+**Nota Técnica:** A implementação deste job deve recuperar os embeddings de todos os conceitos canônicos de uma só vez, utilizando um método de recuperação em lote (`get_embeddings_for_concepts`) do vector store. O uso de `similarity_search` em um loop para cada conceito é um anti-padrão que deve ser evitado para garantir o desempenho.
