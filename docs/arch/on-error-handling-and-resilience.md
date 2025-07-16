@@ -18,10 +18,8 @@ The following table summarizes the core resilience techniques used across the sy
 | Retry + Backoff              | Transient API/db errors           | LLM agents, Neo4j, Postgres        |
 | Atomic File Writes           | Config and Markdown updates       | `aclarai-core`, Obsidian outputs  |
 | Graceful Degradation         | Low-quality or invalid data       | Plugins, Evaluation Agents         |
-| Circuit Breakers *(planned)* | Persistent service failures       | External APIs (LLMs, databases)    |
+| Circuit Breakers | Persistent service failures       | External APIs (LLMs, databases)    |
 | Idempotency & Deduplication  | Reprocessing, sync jobs           | `vault-to-graph`, scheduler        |
-
----
 
 ## I. Guiding Principles
 
@@ -98,7 +96,7 @@ The following table summarizes the core resilience techniques used across the sy
 
 ---
 
-### 5. **Circuit Breakers** *(Planned)*
+### 5. **Circuit Breakers)*
 
 * **Use:** Repeated failures from external services.
 * **How:** Trip after failure threshold, test periodically for recovery.

@@ -84,4 +84,4 @@ Generate a Markdown page that defines this concept, explains its usage, and link
 - Graph + 3 vector stores support rich, document-quality generation
 - Fully agent-compatible
 
-Supports Sprint 4 task: **Generate Tier 3 summaries with links back to Tier 1**
+

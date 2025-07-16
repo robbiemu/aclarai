@@ -86,7 +86,7 @@ The following jobs are included with aclarai by default.
 ### Trending Topics Job
 
 -   **ID:** `trending_topics`
--   **Description:** This job analyzes the creation timestamps of claim-concept relationships to identify concepts with the highest growth in mentions over a recent period. It writes the results to a `Trending Topics - <date>.md` file.
+-   **Description:** This job analyzes the creation timestamps of claim-concept relationships to identify concepts with the highest growth in mentions over a recent period. It writes the results to a `Trending Topics - <date>.md` file. For detailed implementation information, see [Trending Topics Job](../components/trending_topics_job.md).
 -   **Default `cron`:** `"0 5 * * *"` (Daily at 5:00 AM)
 
 ### Concept Highlight Refresh Job
