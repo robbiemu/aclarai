@@ -14,7 +14,7 @@ To provide clear guidelines for prompt management, response handling, and resour
 
 aclarai's agents are designed to dynamically select which LLM to use based on centralized configuration, decoupling model choice from agent code.
 
-*   **How it works:** Each agent specifies a model "role" (e.g., `claimify.selection`, `concept_linker`, `trending_concepts_agent`). The `settings/aclarai.config.yaml` (`docs/arch/design_config_panel.md`) maps these roles to specific LLM providers and models (e.g., `gpt-4`, `claude-3-opus`, `openrouter:gemma-2b`, `ollama:mistral`). Agents then instantiate their assigned LLM using LlamaIndex's `llm` abstractions.
+*   **How it works:** Each agent specifies a model "role" (e.g., `claimify.selection`, `concept_linker`, `trending_concepts_agent`). The `settings/aclarai.config.yaml` maps these roles to specific LLM providers and models (e.g., `gpt-4`, `claude-3-opus`, `openrouter:gemma-2b`, `ollama:mistral`). Agents then instantiate their assigned LLM using LlamaIndex's `llm` abstractions.
 *   **Benefit:** This approach provides flexibility to tune processing quality and cost globally without modifying individual agent code.
 
 ---
@@ -30,7 +30,9 @@ All LLM prompts, including system instructions, few-shot examples, and output fo
 
 ## III. Agentic Workflows for Structured Data Generation
 
-aclarai's agents are designed as intelligent orchestrators that can reason, gather information using tools, and then provide structured data as their final output. This section details how agents achieve this, focusing on the `EntailmentAgent` (`sprint_7-Implement_entailment_evaluation.md`) as a concrete example.
+aclarai's agents are designed as intelligent orchestrators that can reason, gather information using tools, and then provide structured data as their final output. This section details how agents achieve this, focusing on the `EntailmentAgent` as a concrete example.
+
+**EntailmentAgent Overview:** The EntailmentAgent analyzes the logical relationship between claims (`(:Claim)` nodes) and their sources (`(:Block)` nodes), producing an `entailed_score` (float between 0.0 and 1.0) that indicates the degree of logical support the source provides for the claim. This score is stored both as a property on the `[:ORIGINATES_FROM]` relationship in Neo4j and as metadata in the Markdown Tier 1 files. The agent implements robust retry mechanisms and error handling, setting scores to `null` when evaluation fails after all retries.
 
 ### A. Developing Tools for Agents
 
@@ -111,7 +113,7 @@ Agents manage LLM context by constructing relevant and concise inputs, building 
 For agents processing sequential data, such as the Claimify pipeline's steps (Selection, Disambiguation, Decomposition), aclarai employs a configurable "sliding window" to provide local context.
 
 *   **How it works:** When processing a focal sentence (`sentence_i`), the agent dynamically extracts `p` previous sentences and `f` following sentences from the ordered sequence of a Tier 1 document. This precisely constructed `window_context_string` is then injected into the LLM prompt template.
-*   **Benefit:** This custom context construction, defined by `window.claimify.p` and `window.claimify.f` in `settings/aclarai.config.yaml` (`docs/arch/design_config_panel.md`), ensures that LLM agents receive the optimal semantic window for their specific analytical tasks, leading to higher quality claim extraction and evaluation. It's a deliberate choice to enhance LLM performance for conversational analysis beyond generic document chunking.
+*   **Benefit:** This custom context construction, defined by `window.claimify.p` and `window.claimify.f` in `settings/aclarai.config.yaml`, ensures that LLM agents receive the optimal semantic window for their specific analytical tasks, leading to higher quality claim extraction and evaluation. It's a deliberate choice to enhance LLM performance for conversational analysis beyond generic document chunking.
 
 ### B. Semantic Context from Vector Database
 

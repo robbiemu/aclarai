@@ -1,5 +1,4 @@
-# 🧠 Concept Creation and Drift Handling (Initial Strategy)
-
+# 🧠 Concept Creation and Drift Handling
 aclarai extracts, organizes, and updates concepts in a lightweight but effective way that suits individual users and small teams. This approach builds on the existing block-level processing and nightly maintenance workflows.
 
 ---

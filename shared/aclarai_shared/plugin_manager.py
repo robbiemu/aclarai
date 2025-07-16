@@ -1,8 +1,7 @@
 """
 Plugin manager and import orchestrator for aclarai.
 
-This module implements the centralized plugin manager and import orchestrator
-as specified in docs/project/epic_1/sprint_8-Create_plugin_manager.md.
+This module implements the centralized plugin manager and import orchestrator.
 
 Key Features:
 - Centralized plugin discovery and management

@@ -4,7 +4,7 @@ This document describes the centralized plugin manager and import orchestrator i
 
 ## Overview
 
-The plugin manager and import orchestrator provide a centralized approach to discovering, managing, and executing format conversion plugins. They implement the requirements from `docs/project/epic_1/sprint_8-Create_plugin_manager.md` while maintaining compatibility with the existing plugin system.
+The plugin manager and import orchestrator provide a centralized approach to discovering, managing, and executing format conversion plugins.
 
 ## Architecture
 

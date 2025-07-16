@@ -60,7 +60,7 @@ A dedicated job (`aclarai_scheduler.concept_refresh`) for maintaining the concep
 A combined job (`aclarai_scheduler.concept_highlight_refresh`) that executes both top concepts and trending topics analysis in a single scheduled execution.
 
 -   **Top Concepts Generation**: Runs PageRank analysis to identify the most important concepts and generates `Top Concepts.md`.
--   **Trending Topics Generation**: Analyzes claim-concept relationships to identify concepts with high growth in mentions and generates `Trending Topics - <date>.md`.
+-   **Trending Topics Generation**: Analyzes claim-concept relationships to identify concepts with high growth in mentions and generates `Trending Topics - <date>.md`. For detailed implementation information, see [Trending Topics Job](trending_topics_job.md).
 -   **Atomic Writes**: Ensures both files are written atomically to prevent corruption.
 -   **Vault Sync Support**: Generated files include proper `aclarai:id` and `ver=` markers for sync detection.
 

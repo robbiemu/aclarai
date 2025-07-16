@@ -1,6 +1,6 @@
 # Claim-Concept Linking System
 
-This document describes the implementation of the claim-concept linking system for aclarai, following the requirements in `docs/project/epic_1/sprint_5-Link_claims_to_concepts.md` and the architecture defined in `docs/arch/on-linking_claims_to_concepts.md`.
+This document describes the implementation of the claim-concept linking system for aclarai, following the architecture defined in `docs/arch/on-linking_claims_to_concepts.md`.
 
 ## Overview
 

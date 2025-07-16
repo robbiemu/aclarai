@@ -1,101 +1,98 @@
-# 📚 aclarai Project Documentation: Your Compass
+## 📚 ClarifAI Project Documentation: Your Compass
 
-Welcome to the aclarai documentation hub! This file serves as your central point of orientation, guiding you through the various architectural decisions, technical specifications, and project plans that define aclarai.
+Welcome to the ClarifAI documentation hub! This file serves as your central point of orientation, guiding you through the various architectural decisions, technical specifications, and project plans that define ClarifAI.
 
 Whether you're a new team member, a seasoned contributor, or just exploring the project, this guide will help you find the information you need quickly.
 
----
-
 ## 📖 Documentation Philosophy: Finding the Right Document
 
-To help you find information efficiently, our documentation is organized into distinct categories. Understanding their purpose will help you locate the right document for your needs.
+Many of our technical documents have been migrated to the [project wiki](https://github.com/robbiemu/aclarai/wiki). The wiki serves as our primary documentation repository following the completion of Epic 1.
+
+Some documentation, particularly documentation of actually implemented structures in the codebase, are maintained in the codebase. Of note, this particularly includes some overlapping documentating in the `docs/arch` folder.
 
 | Category | Purpose | Answers the Question... | Example |
 | :--- | :--- | :--- | :--- |
-| **`docs/arch`** | **Why?** (Architectural Decisions) | "Why was it built this way?" | [`on-vector_stores.md`](./arch/on-vector_stores.md) explains the rationale for our vector database choices. |
-| **`docs/components`**| **What?** (System Overviews) | "What does this system do?" | [`embedding_system.md`](./components/embedding_system.md) provides a high-level summary of the embedding pipeline. |
-| **`docs/guides`** | **How does it work?** (Reference) | "What are my options for X?" | [`embedding_models_guide.md`](./guides/embedding_models_guide.md) is a reference for all supported embedding models. |
-| **`docs/tutorials`**| **How do I do it?** (Instruction) | "How do I use X to achieve a goal?" | [`embedding_system_tutorial.md`](./tutorials/embedding_system_tutorial.md) is a step-by-step recipe for embedding a document. |
-
----
+| **Architecture** | **Why?** (Architectural Decisions) | "Why was it built this way?" | [On Vector Stores](https://github.com/robbiemu/aclarai/wiki/On-Vector-Stores) explains the rationale for our vector database choices. |
+| **Components**| **What?** (System Overviews) | "What does this system do?" | Component overviews provide high-level summaries of major systems. |
+| **Guides** | **How does it work?** (Reference) | "What are my options for X?" | Reference guides for supported configurations and options. |
+| **Tutorials**| **How do I do it?** (Instruction) | "How do I use X to achieve a goal?" | Step-by-step recipes for common tasks. |
 
 ## 📝 Documentation Categories
 
 ### 🚀 1. Project Vision & Product
 
-These documents articulate the core purpose, user value, and high-level technical direction of aclarai.
+These documents articulate the core purpose, user value, and high-level technical direction of ClarifAI.
 
-*   **[aclarai: Your AI for Conversational Clarity](./project/product_definition.md)**
-*   **[aclarai: Technical Overview](./project/technical_overview.md)**
-*   **[Selected User Stories for aclarai](./project/epic_1/epic.md)**
-*   **[aclarai UX Overview](./project/ux_overview.md)**
+*   **[ClarifAI: Technical Overview](https://github.com/robbiemu/aclarai/wiki/Technical-Overview)**
+*   **[Selected User Stories for ClarifAI](https://github.com/robbiemu/aclarai/wiki/Epic_1)**
 
 ### 🧩 2. Core Component Overviews (The "What")
 
-These documents provide high-level summaries of aclarai's major systems. They are the best starting point for understanding what each component does.
+These documents provide high-level summaries of ClarifAI's major systems. They are the best starting point for understanding what each component does.
 
-*   **[Block Syncing Loop](./components/block_syncing_loop.md)**
-*   **[Claimify Pipeline System](./components/claimify_pipeline_system.md)**
-*   **[Embedding System](./components/embedding_system.md)**
-*   **[Graph System (Neo4j)](./components/graph_system.md)**
-*   **[Import System](./components/import_system.md)**
-*   **[Scheduler System](./components/scheduler_system.md)**
-*   **[UI System (Gradio)](./components/ui_system.md)**
-*   **[Vault Watcher System](./components/vault_watcher_system.md)**
+*   **Block Syncing Loop**
+*   **Claimify Pipeline System**
+*   **Embedding System**
+*   **Graph System (Neo4j)**
+*   **Import System**
+*   **Scheduler System**
+*   **UI System (Gradio)**
+*   **Vault Watcher System**
 
 ### 🧱 3. Architecture & Design Principles (The "Why")
 
 These documents detail the foundational architectural choices and cross-cutting design principles that govern development.
 
-*   **[aclarai Deployment Architecture (Docker Compose Edition)](./arch/architecture.md)**
-*   **[UI Design Docs](./arch/design_config_panel.md)** (Consolidated from `design_config_panel`, `design_import_panel`, etc. or list them individually)
-*   **[Error Handling and Resilience Strategy](./arch/on-error-handling-and-resilience.md)**
-*   **[Logging Strategy](./arch/idea-logging.md)**
-*   **[LLM Interaction Strategy](./arch/on-llm_interaction_strategy.md)**
-*   **[Obsidian File Handle Conflicts](./arch/on-filehandle_conflicts.md)**
+*   **[ClarifAI Deployment Architecture (Docker Compose Edition)](https://github.com/robbiemu/aclarai/wiki/Architecture)**
+*   **[UI Design Docs](https://github.com/robbiemu/aclarai/wiki/Design-Config-Panel)**
+*   **Error Handling and Resilience Strategy**
+*   **Logging Strategy**
+*   **LLM Interaction Strategy**
+*   **Obsidian File Handle Conflicts**
 
 ### ⚙️ 4. Core Systems & Data Flow
 
 These documents specify the implementation details of core services and how data flows and is stored.
 
-*   **[aclarai Graph–Vault Sync Design](./arch/on-graph_vault_synchronization.md)**
-*   **[Pluggable Format Conversion System](./arch/on-pluggable_formats.md)**
-*   **[Vector Store Summary](./arch/on-vector_stores.md)**
-*   **[Neo4j Interaction Strategy](./arch/idea-neo4J-ineteraction.md)**
-*   **[Vault Layout and Document Type Inference](./arch/on-vault_layout_and_type_inference.md)**
+*   **[ClarifAI Graph–Vault Sync Design](https://github.com/robbiemu/aclarai/wiki/On-Graph-Vault-Synchronization)**
+*   **[Pluggable Format Conversion System](https://github.com/robbiemu/aclarai/wiki/On-Pluggable-Formats)**
+*   **Vector Store Summary**
+*   **[Neo4j Interaction Strategy](https://github.com/robbiemu/aclarai/wiki/Idea-neo4J-ineteraction)**
+*   **Vault Layout and Document Type Inference**
 
 ### 🧠 5. Agent & AI Logic (Deep Dives)
 
-These documents explain the intricate workings of aclarai's intelligent agents and their underlying AI logic.
+These documents explain the intricate workings of ClarifAI's intelligent agents and their underlying AI logic.
 
-*   **[Claim Generation Walkthrough](./arch/on-claim_generation.md)**
-*   **[Concept Creation and Drift Handling](./arch/on-concepts.md)**
-*   **[Evaluation Roles (Agents)](./arch/on-evaluation_agents.md)**
-*   **[Linking Claims to Concepts](./arch/on-linking_claims_to_concepts.md)**
-*   **[Tier 3 Concept RAG Workflow Design](./arch/on-RAG_workflow.md)**
-*   ...and other AI logic docs.
+*   **[Claim Generation Walkthrough](https://github.com/robbiemu/aclarai/wiki/On-Claim-Generation)**
+*   **[Concept Creation and Drift Handling](https://github.com/robbiemu/aclarai/wiki/On-Concepts)**
+*   **[Evaluation Roles (Agents)](https://github.com/robbiemu/aclarai/wiki/On-Evaluation-Agents)**
+*   **Linking Claims to Concepts**
+*   **Tier 3 Concept RAG Workflow Design**
 
 ### 📚 6. Guides & Tutorials (The "How")
 
-These documents provide practical instructions and comprehensive references for using, configuring, and contributing to aclarai.
+These documents provide practical instructions and comprehensive references for using, configuring, and contributing to ClarifAI.
 
 *   **Guides (Reference Manuals):**
-    *   **[Claimify Pipeline Guide](./guides/claimify_pipeline_guide.md)**
-    *   **[Embedding Models Guide](./guides/embedding_models_guide.md)**
-    *   **[Scheduler Setup Guide](./guides/scheduler_setup_guide.md)**
+    *   **Claimify Pipeline Guide**
+    *   **Embedding Models Guide**
+    *   **Scheduler Setup Guide**
 *   **Tutorials (Step-by-Step Lessons):**
-    *   **[End-to-End Claimify Tutorial](./tutorials/claimify_integration_tutorial.md)**
-    *   **[Importing Your First Conversation](./tutorials/tier1_import_tutorial.md)**
-    *   **[Working with the Neo4j Graph](./tutorials/neo4j_graph_tutorial.md)**
+    *   **End-to-End Claimify Tutorial**
+    *   **Importing Your First Conversation**
+    *   **Working with the Neo4j Graph**
 
 ### 🗓️ 7. Development & Process
 
 These documents cover our agile development process and sprint plans.
 
-*   **[Sprint Plan for POC (Epic 1)](./project/epic_1/sprint_plan.md)**
+*   **[Sprint Plan for POC (Epic 1)](https://github.com/robbiemu/aclarai/wiki/Project-History-&-Epic-1-Planning-Archive)**
 
----
+## 🔗 Additional Resources
+
+For comprehensive project documentation, visit the [ClarifAI Wiki](https://github.com/robbiemu/aclarai/wiki) where you'll find detailed technical specifications, architectural decisions, and implementation guides.
 
 ## 🤝 Contributing to Documentation
 
-This documentation is a living asset. If you find errors, omissions, or areas that could be clearer, please feel free to open an issue or submit a pull request. Your contributions help make aclarai better for everyone
+This documentation is a living asset. If you find errors, omissions, or areas that could be clearer, please feel free to open an issue or submit a pull request. Your contributions help make ClarifAI better for everyone.

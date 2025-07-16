@@ -3,15 +3,15 @@
 > 🎯 **Goal:** Break Tier 1 blocks into semantically coherent, complete-enough chunks for the Claimify pipeline, with every chunk going through Selection.
 
 
-## 🎯 Your Intent for Sentence Splitting
+## 🎯 Sentence Splitting Strategy
 
-> Split Tier 1 blocks into coherent, agent-ready **sentence units** for Claimify, with these qualities:
+This strategy splits Tier 1 blocks into coherent, agent-ready **sentence units** for the Claimify pipeline. The goal is to:
 
-* Merge incomplete lead-ins (`...I get:`) with the next line
-* Keep quoted diagnostics or phrases as standalone if meaningful
-* Avoid over-splitting around code or newline boundaries
-* Language-aware, but not rigid — we want utility, not strict grammar
-* Output should be **ready for Selection → Disambiguation → Decomposition**
+* Merge incomplete lead-ins (`...I get:`) with the next line.
+* Keep quoted diagnostics or phrases as standalone if meaningful.
+* Avoid over-splitting around code or newline boundaries.
+* Be language-aware, but not rigid, prioritizing utility over strict grammar.
+* Ensure output is **ready for Selection → Disambiguation → Decomposition**.
 
 ---
 

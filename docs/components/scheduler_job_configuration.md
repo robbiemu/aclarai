@@ -78,7 +78,7 @@ concept_embedding_refresh:
 ```
 
 ### `trending_topics`
-Generates a `Trending Topics - <date>.md` file by analyzing the growth of concept mentions over a configurable time window.
+Generates a `Trending Topics - <date>.md` file by analyzing the growth of concept mentions over a configurable time window. For detailed implementation information, see [Trending Topics Job](trending_topics_job.md).
 
 **Default Configuration:**
 ```yaml
