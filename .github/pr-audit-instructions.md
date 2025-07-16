@@ -1,119 +1,141 @@
-### **PR Audit Instructions**
+# 🕵️‍♂️ PR Audit Instructions
 
-As an expert code reviewer and AI software architect, your task is to perform a comprehensive audit of the provided pull request. Analyze the PR summary, diff, and all related files to answer the following questions. Take your time and do a deep dive into these.
+As an expert AI systems engineer and code reviewer, your task is to conduct a comprehensive audit of a submitted pull request (PR) within the context of the aclarai project. Your review must reflect deep architectural awareness, focus on quality, and weigh changes in the context of existing documentation and sprint planning.
 
-DO NOT COPY THIS ENTIRE DOCUMENT. WRITE YOUR OWN DOCUMENT USING THESE INSTRUCTIONS.
+You may assume this PR corresponds with an item in the current sprint. Begin by identifying whether the PR:
+- Introduces a brand new system or component
+- Modifies or expands an existing component
 
-You can assume that this is during that sprint in the `sprint_plan.md`. Before you begin, determine if the PR introduces a brand new, major component or adds/modifies features in an existing one. Use this context to weigh your findings and frame your reasoning in all subsequent sections.
+This distinction will shape your expectations about scope, documentation, and test coverage.
 
-#### **Section 1: Completeness**
+> ⚠️ IMPORTANT: Do not simply copy this checklist into your report. Write your own audit evaluation in your own words, incorporating the following assessments and formatting ONLY the outputs sections as specified.
 
-**Instructions:**
-Based on the PR description and associated task documents, determine if the work is complete.
+## ✅ Section 1: Completeness
 
-It may be that placeholders or mocks were used where real work was intended. If this sprint task will be followed by a later task in the `sprint_plan.md` that makes sense to complete the TODO or replace the dummy service, etc, this may be an acceptable lack of completeness. Please detail your findings in such a case.
-
-**Output Format:**
-- **Status:** [Complete | Partially Complete | Incomplete]
-- **Reasoning:** [Provide a brief explanation for your status. If partially complete, list the specific features or requirements that are intentionally left as placeholders or are missing.]
-
----
-
-#### **Section 2: Placeholders**
-
-**Instructions:**
-Scan the new and changed code for any `TODO`, `FIXME`, or other placeholder comments.
+Assess whether this PR fully implements the task’s scope as described in the sprint plan and task documents. Some items may have placeholder solutions if scheduled for completion in a future sprint (e.g., stubbed services or mock outputs).
 
 **Output Format:**
-- **Status:** [None Found | Placeholders Found]
-- **Details:** [If found, list each placeholder, its location (file and line number), and assess whether it is an acceptable placeholder for future work or an unresolved issue that should be addressed before merging.]
+- **Status:** Complete | Partially Complete | Incomplete  
+- **Reasoning:** Briefly explain your judgment. If partial, specify what’s missing and whether it’s reasonably deferrable per the sprint plan.
 
----
+## 🧱 Section 2: Placeholders
 
-#### **Section 3: Code Quality**
-
-**Instructions:**
-Review the code for quality, readability, and adherence to Pythonic principles. Be detail oriented, don't let small naming convention variances, incomplete algorithms, or unrealized methods get in the way of production code.
+Search the new code for active placeholders (e.g., `TODO`, `FIXME`, `# ---`) that indicate deferred or incomplete functionality. Use your architectural judgment to decide if the placeholder denotes deferred legit work or a gap that must be filled before merging.
 
 **Output Format:**
-- **Overall Quality:** [Excellent | Good | Fair | Poor]
-- **Specific Feedback:** [Provide a bulleted list of specific observations. Mention strong points (e.g., "Good separation of concerns in `agent.py`") and areas for improvement (e.g., "The function `xyz` could be simplified by...").]
+- **Status:** None Found | Placeholders Found  
+- **Details:** If found, list placeholders with file and line number. Include your judgment (e.g., "acceptable placeholder for follow-up scheduled task" vs. "fix required before merge").
 
----
+## 🧹 Section 3: Code Quality
 
-#### **Section 4: Comments and Internal Documentation**
-
-**Instructions:**
-Audit the code comments, docstrings, and any new documentation files for clarity and correctness. Specifically check for the following forbidden terms within the *code or any new/changed documentation files* (not PR descriptions or commit messages): `docs/project/`, `sprint`, `epic`. Also, verify that no temporary "demo" or "example" code has been left in the implementation.
+Evaluate the readability, maintainability, and structure of the new code. Focus on:
+- Separation of concerns
+- Idiomatic Python use
+- Naming conventions
+- Code duplication
+- Defensive programming and error paths
 
 **Output Format:**
-- **Forbidden Term Check:** [Pass | Fail] - *[If Fail, list the file and line number where a forbidden term was found.]*
-- **Demo Code Check:** [Pass | Fail] - *[If Fail, describe the leftover demo code.]*
-- **Overall Documentation Quality:** [Excellent | Good | Fair | Poor] - *[Provide a brief assessment of the inline comments, docstrings, and any new `.md` files.]*
+- **Overall Quality:** Excellent | Good | Fair | Poor  
+- **Specific Feedback:**
+  - Bullet point list of strengths (✓) and improvements (⚠️)
+  - For example:
+    - ✓ Class-based abstraction for vault indexing is clean and extendable.
+    - ⚠️ Function `evaluate_thresholds()` could be split into two responsibilities (parsing / evaluation logic).
 
----
+## 💬 Section 4: Comments & Internal Documentation
 
-#### **Section 5: Audit of Existing Documentation**
+Audit the clarity and correctness of inline comments, docstrings, and any new markdown files. Verify compliance with documentation rules:
 
-**Instructions:**
-You will audit the *existing* documentation to identify files that require updates due to the changes in this PR. Your analysis is strictly limited to the files within the following directories: `docs/components/`, `docs/guides/`, and `docs/tutorials/`.
+- ❌ Forbidden references:
+  - `docs/project/`, `sprint`, or `epic` in any code comment or markdown filename
+- ❌ Example/demo scripts left in production
+- ✔️ Project-style compliance: If new documentation was added, determine if it belonged in `docs/components/`, `docs/guides/`, or `docs/tutorials/`.
 
-**Constraint:** Do not mention any new documentation files added in this PR within this section. This section is *only* for auditing existing files.
+**Output Format:**
+- **Forbidden Term Check:** Pass | Fail  
+  - *[If Fail: List file and location with term used.]*  
+- **Demo Code Check:** Pass | Fail  
+  - *[If Fail: Describe demo/example code left in.]*  
+- **Overall Documentation Quality:** Excellent | Good | Fair | Poor  
+  - *[Summarize clarity of docstrings, internal documentation, and new `.md` files.]*
+
+## 📖 Section 5: Audit of Existing Documentation
+
+Determine if any documentation files within the following directories require revision due to this PR. Do not include new docs added in this PR — only assess whether existing docs are now outdated or inaccurate.
+
+Directories to audit:
+
+- `docs/components/`
+- `docs/guides/`
+- `docs/tutorials/`
 
 **Output Format:**
 
 **`docs/components/`**
-- `file_a.md`: [No change needed | Revision Required] - *[Brief reason if required]*
-- `file_b.md`: [No change needed | Revision Required] - *[Brief reason if required]*
-- ...and so on for all files in the directory.
+- `xyz.md`: No change needed | Revision Required – *brief reason*
 
 **`docs/guides/`**
-- `file_c.md`: [No change needed | Revision Required] - *[Brief reason if required]*
-- ...
+- `plugin_system_guide.md`: No change needed | Revision Required – *brief reason*
 
 **`docs/tutorials/`**
-- `file_d.md`: [No change needed | Revision Required] - *[Brief reason if required]*
-- ...
+- `tier1_import_tutorial.md`: No change needed | Revision Required – *brief reason*
 
----
+List every file in the directory. Be explicit.
 
-#### **Section 6: Overreach**
+## ❓ Section 6: Overreach
 
-**Instructions:**
-Assess whether the PR includes work that is outside its stated scope or introduces premature features that should be handled in a future task. (Consider this specifically in relation to the `sprint_plan.md`.)
-
-**Output Format:**
-- **Status:** [No Overreach | Evidence of Overreach]
-- **Reasoning:** [If overreach is detected, describe the specific code or features that go beyond the PR's scope.]
-
----
-
-#### **Section 7: Test Coverage**
-
-**Instructions:**
-Evaluate the test suite's effectiveness. The goal is not to measure code coverage percentage but to assess if the core logic and its interactions are well-tested across different levels.
+Determine whether the PR implements functionality or abstractions that are beyond its task scope. Examples:
+- Adds new APIs or agents unrelated to the current sprint
+- Adds support for formats not mentioned in the sprint plan
+- Unscoped error handling or logging refactors
 
 **Output Format:**
--   **Unit Tests:** [Sufficient | Insufficient]
-    -   **Reasoning:** *[Assess if the logic of individual functions and classes is well-tested in isolation. Mention any gaps.]*
+- **Status:** No Overreach | Evidence of Overreach  
+- **Reasoning:** Describe the feature(s) that go beyond the stated goal. Was this warranted? Could it introduce long-term architectural debt?
 
--   **Integration Tests:**
-    -   **Mock-Based Integration:** [Sufficient | Insufficient | N/A]
-        -   **Reasoning:** *[Assess if the primary workflows of the new component are tested end-to-end with **mocked external dependencies** (e.g., databases, APIs). This is a mandatory requirement for validating the orchestration of internal components without needing live services.]*
-    -   **Live Service Integration:** [Sufficient | Insufficient | N/A]
-        -   **Reasoning:** *[Assess if tests marked with the `@pytest.mark.integration` decorator exist. These tests validate the feature against live or containerized services. Note their presence or absence and whether it's a critical gap for this specific PR.]*
+## 🧪 Section 7: Test Coverage
 
--   **Overall Assessment:** [Provide a brief summary of the test suite's quality, considering all test types, weighing the concerns based on if the PR introduces a brand new component or just adds features to existing components. Conclude if the testing is adequate for merging.]
-
----
-
-#### **Section 8: Architectural Alignment**
-
-**Instructions:**
-Review the implementation against the project's architectural principles and development instructions. Your analysis must cover both the architectural patterns and the general development process.
+Evaluate the breadth and appropriateness of the test suite. You're not checking for high test "coverage" percentages—you’re evaluating whether the key logic and workflows are truly and reliably tested.
 
 **Output Format:**
-- **Status:** [Aligned | Partially Aligned | Not Aligned]
-- **Analysis:** [Provide a bulleted list explaining how the implementation aligns or misaligns with key project documents. You must check against both sources:]
-  - **Development Instructions (`.github/copilot-instructions.md`):** [Assess if the PR reflects the expected level of research and justify this view by analyzing the changes in light of doing the same prescribed research yourself, as mandated by the instructions in this file.]
-  - **Architectural Patterns (`docs/arch/`, `docs/project/*.md`):** [Assess if the code aligns with relevant documents like `on-RAG_workflow.md`, `on-filehandle_conflicts.md`, etc. Name the specific documents considered.]
+
+- **Unit Tests:** Sufficient | Insufficient  
+  - *Function-level coverage quality. Are inputs/outputs well-tested?*
+- **Integration Tests — Mocked:** Sufficient | Insufficient | N/A  
+  - *Tests that validate the orchestration of services, mocking external systems (e.g., DBs, APIs). Mandatory for most components.*
+- **Integration Tests — Live:** Sufficient | Insufficient | N/A  
+  - *Does the PR include tests using `@pytest.mark.integration`? Essential if this code touches Neo4j, file system or services like Gradio/UI.*
+- **Overall Assessment:** Is the test suite fit for merge? Justify this call relative to the scope of the PR.
+
+## ⚙️ Section 8: Architectural Alignment
+
+Evaluate whether the implementation conforms with the architectural principles and development workflow defined by the project. You must reference two documentation sources:
+
+1. ✅ Development Instructions:  
+   From [.github/copilot-instructions.md](https://github.com/robbiemu/aclarai/wiki), especially around structured logging, LlamaIndex patterns, shared component usage, and documentation style.
+
+2. ✅ Architectural Patterns:  
+   From the wiki (formerly `docs/arch/`), such as:
+   - [On Concepts](https://github.com/robbiemu/aclarai/wiki/On-Concepts)
+   - [On Claim Generation](https://github.com/robbiemu/aclarai/wiki/On-Claim-Generation)
+   - [On Evaluation Agents](https://github.com/robbiemu/aclarai/wiki/On-Evaluation-Agents)
+   - [On Writing Vault Documents](https://github.com/robbiemu/aclarai/wiki/On-Writing-Vault-Documents)
+   - [On Graph Vault Synchronization](https://github.com/robbiemu/aclarai/wiki/On-Graph-Vault-Synchronization)
+
+**Output Format:**
+- **Status:** Aligned | Partially Aligned | Not Aligned  
+- **Analysis:**
+  - Bullet list showing:
+    - Alignment or mismatch with Copilot Instructions (logging, shared code, config, etc.)
+    - Alignment or mismatch with architectural documents (concept strategy, claims, vault writing, etc.)
+    - Specifically name each supporting or conflicting document
+
+## Final Comments
+
+Conclude your audit with any additional remarks:
+- Should the PR be merged as-is?
+- Should only part of it be merged?
+- Are there specific follow-up action items (docs to update, bugs to fix, tests to write)?
+
+> Remember: The goal of the review is not just code quality—it’s long-term maintainability, clarity for future contributors, and architectural fidelity.
